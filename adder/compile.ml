@@ -51,16 +51,17 @@ exception InternalCompilerError of string
  *)
 exception SyntaxError of string
 let rec expr_of_sexp (s : pos sexp)  : pos expr = (* rec ? *)
-  let process_bindings bindings =
+  let expr_of_bindings bindings =
     List.fold_left 
-    (fun exprs sexp -> match sexp with 
-                       | Nest([Sym(x, _);expr], info) -> 
-                          let let_expr = (x, (expr_of_sexp expr)) in
-                              exprs@[let_expr]
-                       | _ -> raise (SyntaxError ("Expecting a list at " ^ (pos_to_string (sexp_info sexp) true)))
+    (fun exprs sexp -> 
+          match sexp with 
+          | Nest([Sym(x, _);expr], info) -> 
+           let let_expr = (x, (expr_of_sexp expr)) in
+                exprs@[let_expr]
+          | Nest(a, info) -> raise (SyntaxError ("Expecting (symbol, expression) at " ^ (pos_to_string info true)))
+          | _ -> raise (SyntaxError ("Expecting a list at " ^ (pos_to_string (sexp_info sexp) true)))
     )
-    []
-    bindings
+    [] bindings
   in
   match s with 
   | Sym(id, info)     -> Id (id, info)
@@ -70,11 +71,11 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr = (* rec ? *)
   | Nest(sexps, info) -> 
       match sexps with 
       | [Sym("let", info);Nest(bindings, info');b] -> 
-        if List.length bindings = 0 
-        then raise (SyntaxError ("Expecting a list of bindings at " ^ (pos_to_string info' true) ^ " but got nothing"))
-        else 
-          let exprs = process_bindings bindings in
+        if List.length bindings != 0 
+        then 
+          let exprs = expr_of_bindings bindings in
               Let (exprs, (expr_of_sexp b), info)
+        else raise (SyntaxError ("Expecting a list of bindings at " ^ (pos_to_string info' true) ^ " but got nothing"))
       | [Sym("add1", info);b] -> Prim1 (Add1, (expr_of_sexp b), info)
       | [Sym("sub1", info);b] -> Prim1 (Sub1, (expr_of_sexp b), info)
       |  Sym(id, info)::rest  -> raise (SyntaxError ("Undefined identifier " ^ id ^ " at " ^ (pos_to_string info true)))

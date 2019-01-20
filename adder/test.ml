@@ -71,7 +71,13 @@ let fail_tests = [
   te "fail_2" "(let ((x 10)) foo)" "Unbound variable foo at line 0, col 14--line 0, col 17";
   te "fail_3" "(x 10)" "Undefined identifier x at line 0, col 1--line 0, col 2";
   te "fail_4" "(let () 10)" "Expecting a list of bindings at line 0, col 5--line 0, col 7 but got nothing";
-  te "fail_5" "(let (x 10) 10)" "Expecting a list at line 0, col 6--line 0, col 7"
+  te "fail_5" "(let (x 10) 10)" "Expecting a list at line 0, col 6--line 0, col 7";
+  te "fail_6" "(let ((7 10)) x)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 12";
+  te "fail_7" "(let ((x 1 2)) x)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
+(*  te "fail_8" "(let ((x 1)) x y)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
+  te "fail_9" "(let ((x 1)) )" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
+  te "fail_10" "(let x)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
+*)
 ];;
 
 let all_tests = 
