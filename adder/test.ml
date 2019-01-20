@@ -62,12 +62,23 @@ let more_tests = [
   	      (let ((x 2) (a (add1 x)))
   	           (let ((x 3)) a)))
   |} "3";
+  t  "more_7" "(let ((let 10)) let)" "10"; (* ? *)
+  t  "more_8" "(let ((sub1 10)) (sub1 sub1))" "9"; (* ? *)
+];;
+
+let fail_tests = [
+  te "fail_1" "(x 10)" "Undefined identifier x at line 0, col 1--line 0, col 2";
+  te "fail_2" "(let ((x 10)) foo)" "Unbound variable foo at line 0, col 14--line 0, col 17";
+  te "fail_3" "(x 10)" "Undefined identifier x at line 0, col 1--line 0, col 2";
+  te "fail_4" "(let () 10)" "Expecting a list of bindings at line 0, col 5--line 0, col 7 but got nothing";
+  te "fail_5" "(let (x 10) 10)" "Expecting a list at line 0, col 6--line 0, col 7"
 ];;
 
 let all_tests = 
 	int_tests @
 	let_tests @
-	more_tests
+	more_tests @
+  fail_tests
 ;;
 
 let suite : OUnit2.test =

@@ -44,6 +44,8 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
+exception InternalCompilerError of string
+
 (* Function to convert from unknown s-expressions to Adder exprs
    Throws a SyntaxError message if there's a problem
  *)
@@ -55,7 +57,7 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr = (* rec ? *)
                        | Nest([Sym(x, _);expr], info) -> 
                           let let_expr = (x, (expr_of_sexp expr)) in
                               exprs@[let_expr]
-                       | _ -> raise (SyntaxError "unknown syntax")
+                       | _ -> raise (SyntaxError ("Expecting a list at " ^ (pos_to_string (sexp_info sexp) true)))
     )
     []
     bindings
@@ -63,19 +65,20 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr = (* rec ? *)
   match s with 
   | Sym(id, info)     -> Id (id, info)
   | Int(n, info)      -> Number (n, info)
-  | Bool(value, info) -> failwith (sprintf "Bool sexp not yet implemented at pos %s"
-                    (pos_to_string (sexp_info s) true))
+  | Bool(value, info) -> raise (InternalCompilerError ("Bool not yet implemented at pos " ^
+                                                       (pos_to_string (sexp_info s) true)))
   | Nest(sexps, info) -> 
       match sexps with 
-      | [Sym("let", info);Nest(bindings, _);b] -> 
-        let exprs = process_bindings bindings in
-          Let (exprs, (expr_of_sexp b), info)
+      | [Sym("let", info);Nest(bindings, info');b] -> 
+        if List.length bindings = 0 
+        then raise (SyntaxError ("Expecting a list of bindings at " ^ (pos_to_string info' true) ^ " but got nothing"))
+        else 
+          let exprs = process_bindings bindings in
+              Let (exprs, (expr_of_sexp b), info)
       | [Sym("add1", info);b] -> Prim1 (Add1, (expr_of_sexp b), info)
       | [Sym("sub1", info);b] -> Prim1 (Sub1, (expr_of_sexp b), info)
-      | Sym(id, info)::rest -> (match id with 
-                             |  _ -> failwith ("unknown IDENTIFIER of " ^ id))
-      | _ -> failwith (sprintf "not yet implemented at pos %s"
-                    (pos_to_string (sexp_info s) true))
+      |  Sym(id, info)::rest  -> raise (SyntaxError ("Undefined identifier " ^ id ^ " at " ^ (pos_to_string info true)))
+      | _ -> raise (SyntaxError ("Expecting a symbol but got a " ^ (Std.dump sexps)))
 
 
 (* Functions that implement the compiler *)
@@ -132,35 +135,33 @@ let rec compile_env
         : instruction list =     (* the instructions that would execute this program *)
   let compile_bindings (bindings : (string * 'a expr) list) env =
     List.fold_left 
-    (fun (env, instrs) binding -> match binding with 
-                       | (x, expr) -> 
-                          (* Compile the binding, and get the result into EAX *)
-                          let let_instrs = (compile_env expr stack_index env) in
-                          let (env', slot) = add x env in
-                              (env',  instrs
-                                    @ let_instrs
-                                    (* Copy the result in EAX into the appropriate stack slot *)
-                                    @ [ IMov (RegOffset(slot, ESP), Reg(EAX)) ])  
-                       | _ -> failwith "not implemented"
+    (fun (env, instrs) ((x, expr) : (string * 'a expr)) -> 
+      (* Compile the binding, and get the result into EAX *)
+      let let_instrs = (compile_env expr stack_index env) in
+      let (env', slot) = add x env in
+          (env',  instrs
+                @ let_instrs
+                (* Copy the result in EAX into the appropriate stack slot *)
+                @ [ IMov (RegOffset(slot, ESP), Reg(EAX)) ])  
     )
     (env, [])
     bindings
   in
   match p with
   | Number(n, _) ->
-     [ IMov(Reg(EAX), Const(n)) ]
-  | Id(id, _) ->
+      [ IMov(Reg(EAX), Const(n)) ]
+  | Id(id, info) ->
       (match (find env id) with 
-      | Some(v) -> [ IMov(Reg(EAX), RegOffset(v, ESP)) ]
-      | None    -> failwith "id not in scope...")
+       | Some(v) -> [ IMov(Reg(EAX), RegOffset(v, ESP)) ]
+       | None    -> raise (BindingError ("Unbound variable " ^ id ^ " at " ^ (pos_to_string info true))))
   | Let(bindings, body, _) -> 
       let (env', instrs) = compile_bindings bindings env in 
         (* Compile the body, given that variables are in the correct slot when it's needed *)
         instrs @ (compile_env body stack_index env')
   | Prim1(prim, arg , _) ->
-     (match prim with 
-      | Add1 -> (compile_env arg stack_index env)(* fix *) @ [ IAdd(Reg(EAX), Const(1)) ]
-      | Sub1 -> (compile_env arg stack_index env)(* fix *) @ [ IAdd(Reg(EAX), Const(-1)) ])
+      (match prim with 
+       | Add1 -> (compile_env arg stack_index env)(* fix *) @ [ IAdd(Reg(EAX), Const(1))  ]
+       | Sub1 -> (compile_env arg stack_index env)(* fix *) @ [ IAdd(Reg(EAX), Const(-1)) ])
 
 let compile (p : pos expr) : instruction list =
   compile_env p 1 [] (* Start at the first stack slot, with an empty environment *)
