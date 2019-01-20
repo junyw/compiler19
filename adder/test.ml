@@ -62,29 +62,42 @@ let more_tests = [
   	      (let ((x 2) (a (add1 x)))
   	           (let ((x 3)) a)))
   |} "3";
-  t  "more_7" "(let ((let 10)) let)" "10"; (* ? *)
-  t  "more_8" "(let ((sub1 10)) (sub1 sub1))" "9"; (* ? *)
+  t "more_7"
+  {| (let ((a 1))
+          (let ((b (sub1 a)) (c (sub1 (sub1 b))) (d c))
+               (let ((e (let ((f c)) (sub1 f))))
+                    (sub1 (let ((g (sub1 e))) g)))))
+  |} "-5";
+  t  "more_8" "(let ((let 10)) let)" "10"; (* ? *)
+  t  "more_9" "(let ((sub1 10)) (sub1 sub1))" "9"; (* ? *)
 ];;
 
-let fail_tests = [
-  te "fail_1" "(x 10)" "Undefined identifier x at line 0, col 1--line 0, col 2";
-  te "fail_2" "(let ((x 10)) foo)" "Unbound variable foo at line 0, col 14--line 0, col 17";
-  te "fail_3" "(x 10)" "Undefined identifier x at line 0, col 1--line 0, col 2";
-  te "fail_4" "(let () 10)" "Expecting a list of bindings at line 0, col 5--line 0, col 7 but got nothing";
-  te "fail_5" "(let (x 10) 10)" "Expecting a list at line 0, col 6--line 0, col 7";
-  te "fail_6" "(let ((7 10)) x)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 12";
-  te "fail_7" "(let ((x 1 2)) x)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
-(*  te "fail_8" "(let ((x 1)) x y)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
-  te "fail_9" "(let ((x 1)) )" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
-  te "fail_10" "(let x)" "Expecting (symbol, expression) at line 0, col 6--line 0, col 13";
-*)
+let scope_errors = [
+  te "scope_1" "(let ((x 10)) foo)" "Unbound variable foo";
+  te "scope_2" "(let ((x 10) (y z)) foo)" "Unbound variable z";
+
+];;
+
+let syntax_errors = [
+  te "fail_1"  "(x 1)" "Expecting let/add1/sub1 but recieved (x 1)";
+  te "fail_2"  "(1 1)" "Expecting let/add1/sub1 but recieved (1 1)";
+  te "fail_3"  "(let () 10)" "Expecting <bindings> but received nothing";
+  te "fail_4"  "(let (x 10) 10)" "Expecting (IDENTIFIER <expr>) but recived x";
+  te "fail_5"  "(let ((7 10)) x)" "Expecting (IDENTIFIER <expr>) but recived (7 10)";
+  te "fail_6"  "(let ((x 1 2)) x)" "Expecting (IDENTIFIER <expr>) but recived (x 1 2)";
+  te "fail_7"  "(let ((x 1)) x y)" "Expecting (let (<bindings>) <expr>) but received (let ((x 1)) x y)";
+  te "fail_8"  "(let ((x 1)) )" "Expecting (let (<bindings>) <expr>) but received (let ((x 1)))";
+  te "fail_9"  "(let x)" "Expecting (let (<bindings>) <expr>) but received (let x)";
+  te "fail_10" "(let 1)" "Expecting (let (<bindings>) <expr>) but received (let 1)";
+
 ];;
 
 let all_tests = 
 	int_tests @
 	let_tests @
 	more_tests @
-  fail_tests
+  scope_errors @
+  syntax_errors
 ;;
 
 let suite : OUnit2.test =

@@ -44,13 +44,22 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
-exception InternalCompilerError of string
+exception SyntaxError of string
+let rec string_of_sexp s =
+  match s with
+  | Sym (x, _) -> x
+  | Int (n, _) -> string_of_int n
+  | Bool (_, _) -> failwith "Not implemented"
+  | Nest (sexps, _) -> (List.fold_left (fun str sexp -> str ^ (if String.length str != 1 then " " else "") ^ (string_of_sexp sexp)) "(" sexps) ^ ")"
+;;
+
+let syntax_error (msg : string) info =
+    raise (SyntaxError (msg ^ " at " ^ (pos_to_string info true)))
 
 (* Function to convert from unknown s-expressions to Adder exprs
    Throws a SyntaxError message if there's a problem
- *)
-exception SyntaxError of string
-let rec expr_of_sexp (s : pos sexp)  : pos expr = (* rec ? *)
+*)
+let rec expr_of_sexp (s : pos sexp)  : pos expr = 
   let expr_of_bindings bindings =
     List.fold_left 
     (fun exprs sexp -> 
@@ -58,28 +67,27 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr = (* rec ? *)
           | Nest([Sym(x, _);expr], info) -> 
            let let_expr = (x, (expr_of_sexp expr)) in
                 exprs@[let_expr]
-          | Nest(a, info) -> raise (SyntaxError ("Expecting (symbol, expression) at " ^ (pos_to_string info true)))
-          | _ -> raise (SyntaxError ("Expecting a list at " ^ (pos_to_string (sexp_info sexp) true)))
+          | _ -> syntax_error ("Expecting (IDENTIFIER <expr>) but recived " ^ (string_of_sexp sexp)) (sexp_info sexp)
     )
     [] bindings
   in
   match s with 
   | Sym(id, info)     -> Id (id, info)
   | Int(n, info)      -> Number (n, info)
-  | Bool(value, info) -> raise (InternalCompilerError ("Bool not yet implemented at pos " ^
-                                                       (pos_to_string (sexp_info s) true)))
+  | Bool(value, info) -> failwith "Not implemented"
   | Nest(sexps, info) -> 
       match sexps with 
-      | [Sym("let", info);Nest(bindings, info');b] -> 
-        if List.length bindings != 0 
-        then 
-          let exprs = expr_of_bindings bindings in
-              Let (exprs, (expr_of_sexp b), info)
-        else raise (SyntaxError ("Expecting a list of bindings at " ^ (pos_to_string info' true) ^ " but got nothing"))
-      | [Sym("add1", info);b] -> Prim1 (Add1, (expr_of_sexp b), info)
-      | [Sym("sub1", info);b] -> Prim1 (Sub1, (expr_of_sexp b), info)
-      |  Sym(id, info)::rest  -> raise (SyntaxError ("Undefined identifier " ^ id ^ " at " ^ (pos_to_string info true)))
-      | _ -> raise (SyntaxError ("Expecting a symbol but got a " ^ (Std.dump sexps)))
+      | [Sym("let", _);Nest(bindings, info');b] -> 
+            if List.length bindings != 0 
+            then  let exprs = expr_of_bindings bindings in
+                      Let (exprs, (expr_of_sexp b), info)
+            else syntax_error "Expecting <bindings> but received nothing" info'
+      | [Sym("add1", _);b]   -> Prim1 (Add1, (expr_of_sexp b), info)
+      | [Sym("sub1", _);b]   -> Prim1 (Sub1, (expr_of_sexp b), info)
+      |  Sym("let", _)::rest  -> syntax_error ("Expecting (let (<bindings>) <expr>) but received " ^ (string_of_sexp s)) info
+      |  Sym("add1", _)::rest -> syntax_error ("Expecting (add1 <expr>) but received " ^ (string_of_sexp s)) info
+      |  Sym("sub1", _)::rest -> syntax_error ("Expecting (sub1 <expr>) but received " ^ (string_of_sexp s)) info
+      | _ -> syntax_error ("Expecting let/add1/sub1 but recieved " ^ (string_of_sexp s)) info
 
 
 (* Functions that implement the compiler *)
@@ -131,7 +139,7 @@ exception BindingError of string
    makes it easier for you to test it. *)
 let rec compile_env
           (p : pos expr)         (* the program, currently annotated with source location info *)
-          (stack_index : int)    (* the next available stack index *)
+          (stack_index : int)    (* the next available stack index, not used in current implementation *) 
           (env : (string * int) list) (* the current binding environment of names to stack slots *)
         : instruction list =     (* the instructions that would execute this program *)
   let compile_bindings (bindings : (string * 'a expr) list) env =
@@ -140,10 +148,10 @@ let rec compile_env
       (* Compile the binding, and get the result into EAX *)
       let let_instrs = (compile_env expr stack_index env) in
       let (env', slot) = add x env in
-          (env',  instrs
-                @ let_instrs
-                (* Copy the result in EAX into the appropriate stack slot *)
-                @ [ IMov (RegOffset(slot, ESP), Reg(EAX)) ])  
+          (env', instrs
+               @ let_instrs
+               (* Copy the result in EAX into the appropriate stack slot *)
+               @ [ IMov (RegOffset(slot, ESP), Reg(EAX)) ])  
     )
     (env, [])
     bindings
