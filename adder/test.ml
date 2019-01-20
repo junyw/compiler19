@@ -9,7 +9,9 @@ let te (name : string) (program : string) (expected_err : string) : OUnit2.test 
   name>::test_err program name expected_err;;
 
 let int_tests = [
-  t "forty_one" "41" "41";
+  t "int_1" "41" "41";
+  t "int_2" "2147483647" "2147483647";  
+  t "int_3" "(add1 2147483647)" "-2147483648";
   t "add1_5" "(add1 5)" "6";
   t "sub1_5" "(sub1 5)" "4";
   t "add1_neg5" "(add1 -5)" "-4";
@@ -27,9 +29,8 @@ let let_tests = [
   t "let_4" "(let ((x 5) (y 6)) y)" "6";
   t "let_5" "(let ((x 5) (y (sub1 x))) (sub1 y))" "3";
   t "let_6" "(let ((x 5) (y (sub1 x)) (z (sub1 y))) (sub1 z))" "2";
-  t "let_7" "(let ((x 5) (x 6)) x)" "6";
-  t "let_8" "(let ((x 5) (x 6) (y x)) y)" "6";
-  t "let_9" "(let ((x (let ((x 5)) (sub1 x)))) x)" "4";
+  t "let_7" "(let ((x 5) (y 6) (z y)) z)" "6";
+  t "let_8" "(let ((x (let ((x 5)) (sub1 x)))) x)" "4";
   (* More tests here *)
 ];;
 
@@ -45,8 +46,8 @@ let more_tests = [
   	           (sub1 z))) 
   |} "7";
   t "more_3"
-  {| (let ((x 1) (x 2) (x 0)) 
-  	      x)
+  {| (let ((x 1) (y 2) (z 0)) 
+  	      z)
   |} "0";
   t "more_4"
   {| (let ((x 1))
@@ -68,17 +69,27 @@ let more_tests = [
                (let ((e (let ((f c)) (sub1 f))))
                     (sub1 (let ((g (sub1 e))) g)))))
   |} "-5";
-  t  "more_8" "(let ((let 10)) let)" "10"; (* ? *)
-  t  "more_9" "(let ((sub1 10)) (sub1 sub1))" "9"; (* ? *)
+  t "more_8"
+  {| (let ((x 1))
+          (let ((x (add1 x)))
+               (let ((x (add1 x))) 
+                    (let ((x (add1 x))) x))))
+  |} "4";
+
+  t "more_9" "(let ((let 10)) let)" "10"; (* ? *)
+  t "more_10" "(let ((sub1 10)) (sub1 sub1))" "9"; (* ? *)
+
 ];;
 
 let scope_errors = [
   te "scope_1" "(let ((x 10)) foo)" "Unbound variable foo";
   te "scope_2" "(let ((x 10) (y z)) foo)" "Unbound variable z";
-
+  te "scope_3" "(let ((x 5) (x 6)) x)" "Variable x is redefined";
+  te "scope_4" "(let ((x 1) (y 2) (x 0)) y)" "Variable x is redefined"
 ];;
 
 let syntax_errors = [
+  te "fail_0"  "(1)" "Expecting let/add1/sub1 but recieved (1)";
   te "fail_1"  "(x 1)" "Expecting let/add1/sub1 but recieved (x 1)";
   te "fail_2"  "(1 1)" "Expecting let/add1/sub1 but recieved (1 1)";
   te "fail_3"  "(let () 10)" "Expecting <bindings> but received nothing";
@@ -89,7 +100,6 @@ let syntax_errors = [
   te "fail_8"  "(let ((x 1)) )" "Expecting (let (<bindings>) <expr>) but received (let ((x 1)))";
   te "fail_9"  "(let x)" "Expecting (let (<bindings>) <expr>) but received (let x)";
   te "fail_10" "(let 1)" "Expecting (let (<bindings>) <expr>) but received (let 1)";
-
 ];;
 
 let all_tests = 

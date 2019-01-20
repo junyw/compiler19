@@ -44,6 +44,10 @@ type 'a expr =
   | Let of (string * 'a expr) list * 'a expr * 'a
   | Prim1 of prim1 * 'a expr * 'a
 
+(* The exception to be thrown when some sort of problem is found with names *)
+exception BindingError of string
+
+(* The exception to be thrown when some sort of problem is found with syntax *)
 exception SyntaxError of string
 let rec string_of_sexp s =
   match s with
@@ -56,17 +60,17 @@ let rec string_of_sexp s =
 let syntax_error (msg : string) info =
     raise (SyntaxError (msg ^ " at " ^ (pos_to_string info true)))
 
-(* Function to convert from unknown s-expressions to Adder exprs
-   Throws a SyntaxError message if there's a problem
-*)
+(* Function to convert from unknown s-expressions to Adder exprs *)
 let rec expr_of_sexp (s : pos sexp)  : pos expr = 
   let expr_of_bindings bindings =
     List.fold_left 
     (fun exprs sexp -> 
           match sexp with 
-          | Nest([Sym(x, _);expr], info) -> 
-           let let_expr = (x, (expr_of_sexp expr)) in
-                exprs@[let_expr]
+          | Nest([Sym(x, info');expr], info) -> 
+              if List.exists (fun (y,_) -> x = y) exprs 
+              then raise (BindingError ("Variable " ^ x ^ " is redefined at " ^ (pos_to_string info' true)))
+              else let let_expr = (x, (expr_of_sexp expr)) in
+                       exprs @ [let_expr]
           | _ -> syntax_error ("Expecting (IDENTIFIER <expr>) but recived " ^ (string_of_sexp sexp)) (sexp_info sexp)
     )
     [] bindings
@@ -124,15 +128,12 @@ let to_asm_string (is : instruction list) : string =
 let rec find (ls : (string * 'a) list) (x : string) : 'a option =
   match ls with
   | [] -> None
-  | (y, v)::rest ->
-     if y = x then Some(v) else find rest x
+  | (y, v)::rest -> if y = x then Some(v) else find rest x
 
-let add name (env : (string * 'a) list) : ((string * 'a) list * int) =
+let add (env : (string * 'a) list) (x : string) : ((string * 'a) list * int) =
   let slot = 1 + (List.length env) in
-    ((name, slot)::env, slot)
+    ((x, slot)::env, slot)
 
-(* The exception to be thrown when some sort of problem is found with names *)
-exception BindingError of string
 (* The actual compilation process.  The `compile` function is the primary function,
    and uses `compile_env` as its helper.  In a more idiomatic OCaml program, this
    helper would likely be a local definition within `compile`, but separating it out
@@ -142,12 +143,12 @@ let rec compile_env
           (stack_index : int)    (* the next available stack index, not used in current implementation *) 
           (env : (string * int) list) (* the current binding environment of names to stack slots *)
         : instruction list =     (* the instructions that would execute this program *)
-  let compile_bindings (bindings : (string * 'a expr) list) env =
+  let compile_bindings (bindings : (string * 'a expr) list) env info =
     List.fold_left 
     (fun (env, instrs) ((x, expr) : (string * 'a expr)) -> 
       (* Compile the binding, and get the result into EAX *)
       let let_instrs = (compile_env expr stack_index env) in
-      let (env', slot) = add x env in
+      let (env', slot) = add env x in
           (env', instrs
                @ let_instrs
                (* Copy the result in EAX into the appropriate stack slot *)
@@ -163,8 +164,8 @@ let rec compile_env
       (match (find env id) with 
        | Some(v) -> [ IMov(Reg(EAX), RegOffset(v, ESP)) ]
        | None    -> raise (BindingError ("Unbound variable " ^ id ^ " at " ^ (pos_to_string info true))))
-  | Let(bindings, body, _) -> 
-      let (env', instrs) = compile_bindings bindings env in 
+  | Let(bindings, body, info) -> 
+      let (env', instrs) = compile_bindings bindings env info in 
         (* Compile the body, given that variables are in the correct slot when it's needed *)
         instrs @ (compile_env body stack_index env')
   | Prim1(prim, arg , _) ->
