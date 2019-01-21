@@ -35,6 +35,11 @@ let let_tests = [
 ];;
 
 let more_tests = [
+  t "more_0" 
+  {| (let ((x 1))
+          (let ((y (sub1 x)))
+               x))
+  |} "1";
   t "more_1" 
   {| (let ((x 1) (y (add1 x)))
   	      (let ((z (sub1 y)))
