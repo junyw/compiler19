@@ -76,16 +76,16 @@ let more_tests = [
                     (let ((x (add1 x))) x))))
   |} "4";
 
-  t "more_9" "(let ((let 10)) let)" "10"; (* ? *)
-  t "more_10" "(let ((sub1 10)) (sub1 sub1))" "9"; (* ? *)
-
 ];;
 
 let scope_errors = [
   te "scope_1" "(let ((x 10)) foo)" "Unbound variable foo";
   te "scope_2" "(let ((x 10) (y z)) foo)" "Unbound variable z";
   te "scope_3" "(let ((x 5) (x 6)) x)" "Variable x is redefined";
-  te "scope_4" "(let ((x 1) (y 2) (x 0)) y)" "Variable x is redefined"
+  te "scope_4" "(let ((x 1) (y 2) (x 0)) y)" "Variable x is redefined";
+  te "scope_5" "(let ((let 10)) let)" "Reserved keyword let is redefined";
+  te "scope_6" "(let ((sub1 10)) (sub1 sub1))" "Reserved keyword sub1 is redefined";
+
 ];;
 
 let syntax_errors = [

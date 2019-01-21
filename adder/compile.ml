@@ -67,10 +67,13 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr =
     (fun exprs sexp -> 
           match sexp with 
           | Nest([Sym(x, info');expr], info) -> 
-              if List.exists (fun (y,_) -> x = y) exprs 
-              then raise (BindingError ("Variable " ^ x ^ " is redefined at " ^ (pos_to_string info' true)))
-              else let let_expr = (x, (expr_of_sexp expr)) in
-                       exprs @ [let_expr]
+              if x = "let" || x = "add1" || x = "sub1" 
+              then raise (BindingError ("Reserved keyword " ^ x ^ " is redefined at " ^ (pos_to_string info' true)))
+              else
+                if List.exists (fun (y,_) -> x = y) exprs 
+                then raise (BindingError ("Variable " ^ x ^ " is redefined at " ^ (pos_to_string info' true)))
+                else let let_expr = (x, (expr_of_sexp expr)) in
+                         exprs @ [let_expr]
           | _ -> syntax_error ("Expecting (IDENTIFIER <expr>) but recived " ^ (string_of_sexp sexp)) (sexp_info sexp)
     )
     [] bindings
