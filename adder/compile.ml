@@ -81,11 +81,11 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr =
   | Bool(value, info) -> failwith "Not implemented"
   | Nest(sexps, info) -> 
       match sexps with 
-      | [Sym("let", _);Nest(bindings, info');b] -> 
+      | [Sym("let", _);Nest(bindings, info') as bs;b] -> 
             if List.length bindings != 0 
             then  let exprs = expr_of_bindings bindings in
                       Let (exprs, (expr_of_sexp b), info)
-            else syntax_error "Expecting <bindings> but received nothing" info'
+            else syntax_error ("Expecting <bindings> but received " ^ (string_of_sexp bs))  info'
       | [Sym("add1", _);b]   -> Prim1 (Add1, (expr_of_sexp b), info)
       | [Sym("sub1", _);b]   -> Prim1 (Sub1, (expr_of_sexp b), info)
       |  Sym("let", _)::rest  -> syntax_error ("Expecting (let (<bindings>) <expr>) but received " ^ (string_of_sexp s)) info

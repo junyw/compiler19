@@ -92,7 +92,7 @@ let syntax_errors = [
   te "fail_0"  "(1)" "Expecting let/add1/sub1 but recieved (1)";
   te "fail_1"  "(x 1)" "Expecting let/add1/sub1 but recieved (x 1)";
   te "fail_2"  "(1 1)" "Expecting let/add1/sub1 but recieved (1 1)";
-  te "fail_3"  "(let () 10)" "Expecting <bindings> but received nothing";
+  te "fail_3"  "(let () 10)" "Expecting <bindings> but received ()";
   te "fail_4"  "(let (x 10) 10)" "Expecting (IDENTIFIER <expr>) but recived x";
   te "fail_5"  "(let ((7 10)) x)" "Expecting (IDENTIFIER <expr>) but recived (7 10)";
   te "fail_6"  "(let ((x 1 2)) x)" "Expecting (IDENTIFIER <expr>) but recived (x 1 2)";
