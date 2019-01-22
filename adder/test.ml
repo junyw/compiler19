@@ -31,6 +31,9 @@ let let_tests = [
   t "let_6" "(let ((x 5) (y (sub1 x)) (z (sub1 y))) (sub1 z))" "2";
   t "let_7" "(let ((x 5) (y 6) (z y)) z)" "6";
   t "let_8" "(let ((x (let ((x 5)) (sub1 x)))) x)" "4";
+  t "let_9" "(let ((x 10)) (let ((x 1) (y x)) y))" "1";
+  t "let_10" "(let ((x 10)) (let ((x (sub1 x)) (y x)) x))" "9";
+  t "let_11" "(let ((x 10)) (let ((x (sub1 x)) (y x)) y))" "9";
   (* More tests here *)
 ];;
 
