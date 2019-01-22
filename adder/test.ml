@@ -80,7 +80,10 @@ let more_tests = [
                (let ((x (add1 x))) 
                     (let ((x (add1 x))) x))))
   |} "4";
-
+  t "more_9" 
+  {| (let ((x 1)) 
+          (let ((x x) (y x)) (sub1 y))) |}
+  "0";
 ];;
 
 let scope_errors = [
@@ -94,13 +97,13 @@ let scope_errors = [
 ];;
 
 let syntax_errors = [
-  te "fail_0"  "(1)" "Expecting let/add1/sub1 but recieved (1)";
-  te "fail_1"  "(x 1)" "Expecting let/add1/sub1 but recieved (x 1)";
-  te "fail_2"  "(1 1)" "Expecting let/add1/sub1 but recieved (1 1)";
+  te "fail_0"  "(1)" "Expecting let/add1/sub1 but received (1)";
+  te "fail_1"  "(x 1)" "Expecting let/add1/sub1 but received (x 1)";
+  te "fail_2"  "(1 1)" "Expecting let/add1/sub1 but received (1 1)";
   te "fail_3"  "(let () 10)" "Expecting <bindings> but received ()";
-  te "fail_4"  "(let (x 10) 10)" "Expecting (IDENTIFIER <expr>) but recived x";
-  te "fail_5"  "(let ((7 10)) x)" "Expecting (IDENTIFIER <expr>) but recived (7 10)";
-  te "fail_6"  "(let ((x 1 2)) x)" "Expecting (IDENTIFIER <expr>) but recived (x 1 2)";
+  te "fail_4"  "(let (x 10) 10)" "Expecting (IDENTIFIER <expr>) but received x";
+  te "fail_5"  "(let ((7 10)) x)" "Expecting (IDENTIFIER <expr>) but received (7 10)";
+  te "fail_6"  "(let ((x 1 2)) x)" "Expecting (IDENTIFIER <expr>) but received (x 1 2)";
   te "fail_7"  "(let ((x 1)) x y)" "Expecting (let (<bindings>) <expr>) but received (let ((x 1)) x y)";
   te "fail_8"  "(let ((x 1)) )" "Expecting (let (<bindings>) <expr>) but received (let ((x 1)))";
   te "fail_9"  "(let x)" "Expecting (let (<bindings>) <expr>) but received (let x)";

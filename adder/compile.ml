@@ -74,7 +74,7 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr =
                 then raise (BindingError ("Variable " ^ x ^ " is redefined at " ^ (pos_to_string info' true)))
                 else let let_expr = (x, (expr_of_sexp expr)) in
                          exprs @ [let_expr]
-          | _ -> syntax_error ("Expecting (IDENTIFIER <expr>) but recived " ^ (string_of_sexp sexp)) (sexp_info sexp)
+          | _ -> syntax_error ("Expecting (IDENTIFIER <expr>) but received " ^ (string_of_sexp sexp)) (sexp_info sexp)
     )
     [] bindings
   in
@@ -94,7 +94,7 @@ let rec expr_of_sexp (s : pos sexp)  : pos expr =
       |  Sym("let", _)::rest  -> syntax_error ("Expecting (let (<bindings>) <expr>) but received " ^ (string_of_sexp s)) info
       |  Sym("add1", _)::rest -> syntax_error ("Expecting (add1 <expr>) but received " ^ (string_of_sexp s)) info
       |  Sym("sub1", _)::rest -> syntax_error ("Expecting (sub1 <expr>) but received " ^ (string_of_sexp s)) info
-      | _ -> syntax_error ("Expecting let/add1/sub1 but recieved " ^ (string_of_sexp s)) info
+      | _ -> syntax_error ("Expecting let/add1/sub1 but received " ^ (string_of_sexp s)) info
 
 
 (* Functions that implement the compiler *)
@@ -173,8 +173,8 @@ let rec compile_env
         instrs @ (compile_env body stack_index env')
   | Prim1(prim, arg , _) ->
       (match prim with 
-       | Add1 -> (compile_env arg stack_index env)(* fix *) @ [ IAdd(Reg(EAX), Const(1))  ]
-       | Sub1 -> (compile_env arg stack_index env)(* fix *) @ [ IAdd(Reg(EAX), Const(-1)) ])
+       | Add1 -> (compile_env arg stack_index env) @ [ IAdd(Reg(EAX), Const(1))  ]
+       | Sub1 -> (compile_env arg stack_index env) @ [ IAdd(Reg(EAX), Const(-1)) ])
 
 let compile (p : pos expr) : instruction list =
   compile_env p 1 [] (* Start at the first stack slot, with an empty environment *)
