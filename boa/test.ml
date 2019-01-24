@@ -28,7 +28,8 @@ let forty_one = "41";;
 
 let forty_one_a = (ENumber(41, ()))
 
-let basic_tests =  [
+(* testing generation of A-Normal Form *)
+let anf_tests =  [
 
   tanf "forty_one_anf"
        (ENumber(41, ()))
@@ -48,7 +49,7 @@ let basic_tests =  [
 
   ta "forty_one_run_anf" (tag forty_one_a) "41";
  
-    (*  tprog "test1.boa" "3";*)      
+  (*  tprog "test1.boa" "3";*)      
 ];;
 
 let arithmetic_tests = [
@@ -73,7 +74,22 @@ let arithmetic_tests = [
   t "arith_13" "(1 + (2 * 3) - 4) * (2 - 4)" "-6";
   (* More tests here *)
 ];;
-
+let let_tests = [
+  t "let_1" "let x = 1 in x" "1";
+  t "let_2" "let x = 2, y = 3 in y" "3";
+  t "let_3" {| let x = 2 in 
+                 let y = x in y |}
+  "2";
+  t "let_4" {| let x = 2 in 
+                 let y = 3 in x |}
+  "2";
+  t "let_5" {| let x = 2, y = 3 in 
+                 let z = 4 in x |}
+  "2";
+(*  t "let_6" {| let x = 2 in x + 3 |}
+  "5";
+*)
+];;
 let if_tests = [
   t "if_1" "if 5: 4 else: 2" "4";  
   t "if_2" "if 0: 4 else: 2" "2"; 
@@ -82,9 +98,10 @@ let if_tests = [
 ];;
 
 let all_tests = 
+  anf_tests @
   arithmetic_tests @
-  if_tests @
-  basic_tests
+  let_tests @
+  if_tests
 ;;
 
 let suite =
