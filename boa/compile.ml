@@ -22,7 +22,8 @@ and is_imm e =
 (* This function should encapsulate the binding-error checking from Adder *)
 exception BindingError of string
 let rec check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
-  failwith "check_scope: Implement this"
+  (* TODO: implement me *)
+  ()
   
 type tag = int
 (* PROBLEM 2 *)
@@ -81,22 +82,31 @@ let anf (e : tag expr) : unit expr =
     | EId(x, _)          -> (EId(x, ()), [])
     | ENumber(n, _)      -> (ENumber(n, ()), [])
     | EPrim1(op, e, tag) -> let (e_anf, e_ctxt) = helper e in
-                            let temp = sprintf "$eprim1_%d" tag in
+                            let temp = sprintf "$prim1_%d" tag in
                               (EId(temp, ()), 
                                e_ctxt @ (* the context needed for the expression *)
                                [(temp, EPrim1(op, e_anf, ()), ())]) (* definition of the answer *)
     | EPrim2(op, e1, e2, tag) ->  let (e1_anf, e1_ctxt) = helper e1 in
                                   let (e2_anf, e2_ctxt) = helper e2 in
-                                  let temp = sprintf "$eprim2_%d" tag in
+                                  let temp = sprintf "$prim2_%d" tag in
                                   (EId(temp, ()), 
                                    e1_ctxt @ (* the context needed for the left expression *)
                                    e2_ctxt @ (* the context needed for the right expression *)
                                    [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
-    | ELet(binds, body, _)   -> failwith "anf let not implemented"   
-    | EIf(cond, thn, els, _) -> failwith "anf if not implemented"
+    | ELet(binds, body, tag)   -> failwith "anf let not implemented"   
+    | EIf(cond, thn, els, tag) -> let (cond_anf, cond_ctxt) = helper cond in
+                                let (thn_anf, thn_ctxt) = helper thn in
+                                let (els_anf, els_ctxt) = helper els in
+                                let temp = sprintf "$if_%d" tag in
+                                  (EId(temp, ()), 
+                                   cond_ctxt @ 
+                                   thn_ctxt @ 
+                                   els_ctxt @ 
+                                   [(temp, EIf(cond_anf, thn_anf, els_anf, ()), ())])
   in
   let (e_tag, bindings_tag) = helper e in
-    ELet(bindings_tag, e_tag, ())
+    if List.length bindings_tag = 0 then e_tag 
+    else ELet(bindings_tag, e_tag, ())
 ;;
 
 (* Helper functions *)
@@ -119,11 +129,24 @@ let i_to_asm (i : instruction) : string =
   match i with
   | IMov(dest, value) ->
      sprintf "  mov %s, %s" (arg_to_asm dest) (arg_to_asm value)
-  | IAdd(dest, to_add) ->
-     sprintf "  add %s, %s" (arg_to_asm dest) (arg_to_asm to_add)
+  | IAdd(dest, value) ->
+     sprintf "  add %s, %s" (arg_to_asm dest) (arg_to_asm value)
+  | ISub(dest, value) ->
+     sprintf "  sub %s, %s" (arg_to_asm dest) (arg_to_asm value)
+  | IMul(dest, value) ->
+     sprintf "  imul %s, %s" (arg_to_asm dest) (arg_to_asm value)
+  | ILabel(label)     -> 
+     sprintf "%s:" label
+  | ICmp(val1, val2)  -> 
+     sprintf "  cmp %s, %s" (arg_to_asm val1) (arg_to_asm val2)
+  | IJne(label) -> 
+     sprintf "  jne %s" label
+  | IJe(label)  -> 
+     sprintf "  je %s" label
+  | IJmp(label) -> 
+     sprintf "  jmp %s" label
   | IRet ->
      "  ret"
-  | _ -> failwith "i_to_asm: Implement this"
 
 let to_asm (is : instruction list) : string =
   List.fold_left (fun s i -> sprintf "%s\n%s" s (i_to_asm i)) "" is
@@ -134,11 +157,35 @@ let rec find ls x =
   | (y,v)::rest ->
      if y = x then v else find rest x
 
+let add (env : (string * 'a) list) (x : string) : ((string * 'a) list * int) =
+  let slot = 1 + (List.length env) in
+    ((x, slot)::env, slot)
+
 (* PROBLEM 5 *)
 (* This function actually compiles the tagged ANF expression into assembly *)
 (* The si parameter should be used to indicate the next available stack index for use by Lets *)
 (* The env parameter associates identifier names to stack indices *)
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
+  let compile_imm e env : arg =
+    match e with
+    | ENumber(n, _) -> Const(n)
+    | EId(x, _) -> RegOffset(~-(find env x), ESP)
+    | _ -> failwith "Impossible: not an immediate"
+  in
+  let compile_bindings (bindings : (string * 'a expr * 'a) list) env =
+    List.fold_left 
+    (fun (env, instrs) ((x, expr, _) : (string * 'a expr * 'a)) -> 
+      (* Compile the binding, and get the result into EAX *)
+      let let_instrs = (compile_expr expr si env) in
+      let (env', slot) = add env x in
+          (env', instrs
+               @ let_instrs
+               (* Copy the result in EAX into the appropriate stack slot *)
+               @ [ IMov (RegOffset(~-slot, ESP), Reg(EAX)) ])  
+    )
+    (env, [])
+    bindings
+  in  
   match e with
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EId(x, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
@@ -157,16 +204,18 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      | Times -> [ IMov(Reg(EAX), e1_reg); IMul(Reg(EAX), e2_reg) ]
      end
   | EIf(cond, thn, els, tag) ->
-     failwith "compile_expr:eif: Implement this"
-  | ELet([id, e, _], body, _) ->
-     failwith "compile_expr:elet: Implement this"
-  | _ -> failwith "Impossible: Not in ANF"
-and compile_imm e env =
-  match e with
-  | ENumber(n, _) -> Const(n)
-  | EId(x, _) -> RegOffset(~-(find env x), ESP)
-  | _ -> failwith "Impossible: not an immediate"
-
+    let else_label = sprintf "if_false_%d" tag in
+    let done_label = sprintf "done_%d" tag in
+      ( compile_expr cond si env )
+      @ [ ICmp(Reg(EAX), Const(0)); IJe(else_label) ]
+      @ ( compile_expr thn si env )
+      @ [ IJmp(done_label); ILabel(else_label) ]
+      @ ( compile_expr els si env )
+      @ [ ILabel(done_label) ]
+  | ELet(bindings, body, _) -> 
+      let (env', instrs) = compile_bindings bindings env in 
+        (* Compile the body, given that variables are in the correct slot when it's needed *)
+        instrs @ (compile_expr body si env')
 
 let compile_anf_to_string anfed =
   let prelude =
