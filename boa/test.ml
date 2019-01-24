@@ -73,9 +73,11 @@ let arithmetic_tests = [
   t "arith_13" "(1 + (2 * 3) - 4) * (2 - 4)" "-6";
   t "arith_14" "sub1(1 * 2 + 3)" "4";
   t "arith_15" "sub1(1 * add1(2) + 3)" "5";
-
+  t "arith_16" "3 + 2 * 3" "9";
+  t "arith_17" "3 + sub1(3) * add1(2)" "9";
   (* More tests here *)
 ];;
+
 let let_tests = [
   t "let_1" "let x = 1 in x" "1";
   t "let_2" "let x = 2, y = 3 in y" "3";
@@ -97,6 +99,17 @@ let let_tests = [
                    let z = 4 in
                        (x + z) * (y - z) |}
   "-6";
+  t "let_9" {| let x = 2, y = 3 in 
+                       sub1(x) * add1(y) |}
+  "4";
+  t "let_10" {| let x = 2 in 
+                  let y = 3 in 
+                      sub1(x) * add1(y) |}
+  "4";
+  t "let_11" {| let x = 2 in 
+                  let y = 3 in 
+                      x + sub1(x) * add1(y) |}
+  "6";
 ];;
 let if_tests = [
   t "if_1" "if 5: 4 else: 2" "4";  
@@ -111,11 +124,16 @@ let if_tests = [
 
 ];;
 
+let binding_errors = [
+
+];;
+
 let all_tests = 
   anf_tests @
   arithmetic_tests @
   let_tests @
-  if_tests
+  if_tests @
+  binding_errors
 ;;
 
 let suite =

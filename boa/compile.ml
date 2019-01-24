@@ -102,8 +102,13 @@ let anf (e : tag expr) : unit expr =
                                       ([], []) binds (* WRONG ?? *) 
                                   in
                                   let (body_anf, body_ctxt) = helper body in
-                                  (ELet(binds_anf, ELet(body_ctxt, body_anf, ()), ()),  (* NEEDS TO BE FIXED !!! *)
-                                    binds_ctxt)
+                                  if List.length body_ctxt = 0 then
+                                    (ELet(binds_anf, body_anf, ()), 
+                                      binds_ctxt)  
+                                  else                                   
+                                    (* If the context for body is not empty, create let expressions for the body evaluaton *)
+                                    (ELet(binds_anf, ELet(body_ctxt, body_anf, ()), ()),  (* NEEDS TO BE FIXED !!! *)
+                                      binds_ctxt)
     | EIf(cond, thn, els, tag) -> let (cond_anf, cond_ctxt) = helper cond in
                                   let (thn_anf, thn_ctxt) = helper thn in
                                   let (els_anf, els_ctxt) = helper els in
@@ -244,6 +249,7 @@ let compile_to_string prog =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
-  (* printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
+   printf "; Program after tagging: %s\n" (string_of_expr tagged); 
+   printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
   compile_anf_to_string anfed
 
