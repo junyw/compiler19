@@ -32,7 +32,7 @@ let tag (e : 'a expr) : tag expr =
   let rec help (e : 'a expr) (cur : tag) : (tag expr * tag) =
     match e with
     | ENumber(n, _) -> (ENumber(n, cur), cur + 1)
-    | EId(x, _)     -> (EId(x, cur), cur + 1)
+    | EId(x, _)     -> (EId(x, cur), cur + 1) (* This is not right ???? *)
     | EPrim1(op, e, _)      -> let (tag_e, next_tag) = help e (cur + 1) in
                                    (EPrim1(op, tag_e, cur), next_tag)
     | EPrim2(op, e1, e2, _) -> let (tag_e1, next_tag) = help e1 (cur + 1) in
@@ -77,6 +77,7 @@ let anf (e : tag expr) : unit expr =
   (* The result is a pair of an answer and a context.
      The answer must be an immediate, and the context must be a list of bindings
      that are all in ANF. *)
+  (* TODO: Don't transform if expression already in ANF *)
   let rec helper (e : tag expr) : (unit expr * (string * unit expr * unit) list) =
     match e with
     | EId(x, _)          -> (EId(x, ()), [])
@@ -98,12 +99,11 @@ let anf (e : tag expr) : unit expr =
                                       (fun (b_anfs, b_ctxts) (x, expr, _) -> 
                                            let (b_anf, b_ctxt) = helper expr in
                                                (b_anfs @ [(x, b_anf, ())], b_ctxts @ b_ctxt))
-                                      ([], []) binds 
+                                      ([], []) binds (* WRONG ?? *) 
                                   in
                                   let (body_anf, body_ctxt) = helper body in
-                                  (ELet(binds_anf, body_anf, ()), 
-                                    binds_ctxt
-                                    @ body_ctxt)
+                                  (ELet(binds_anf, ELet(body_ctxt, body_anf, ()), ()),  (* NEEDS TO BE FIXED !!! *)
+                                    binds_ctxt)
     | EIf(cond, thn, els, tag) -> let (cond_anf, cond_ctxt) = helper cond in
                                   let (thn_anf, thn_ctxt) = helper thn in
                                   let (els_anf, els_ctxt) = helper els in
@@ -199,7 +199,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
   match e with
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EId(x, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
-  | EPrim1(op, e, _) ->
+  | EPrim1(op, e, _) -> 
      let e_reg = compile_imm e env in
      begin match op with
      | Add1 -> [ IMov(Reg(EAX), e_reg); IAdd(Reg(EAX), Const(1))   ]
@@ -213,7 +213,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      | Minus -> [ IMov(Reg(EAX), e1_reg); ISub(Reg(EAX), e2_reg) ]
      | Times -> [ IMov(Reg(EAX), e1_reg); IMul(Reg(EAX), e2_reg) ]
      end
-  | EIf(cond, thn, els, tag) ->
+  | EIf(cond, thn, els, tag) -> 
     let else_label = sprintf "if_false_%d" tag in
     let done_label = sprintf "done_%d" tag in
       ( compile_expr cond si env )
@@ -244,5 +244,6 @@ let compile_to_string prog =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
+  (* printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
   compile_anf_to_string anfed
 

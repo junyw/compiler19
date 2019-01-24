@@ -54,8 +54,7 @@ let anf_tests =  [
 
 let arithmetic_tests = [
   t "int_1" "41" "41";
-  t "int_2" "-41" "-41";
-  t "int_3" "(41)" "41";
+  t "int_2" "(41)" "41";
   t "unary_1" "sub1(3)" "2";
   t "unary_2" "add1(3)" "4";
   t "unary_3" "add1(sub1(add1(sub1(3))))" "3";
@@ -72,6 +71,9 @@ let arithmetic_tests = [
   t "arith_11" "(1 + 2) * 3" "9";
   t "arith_12" "(1 + 2) * (2 - 4)" "-6";
   t "arith_13" "(1 + (2 * 3) - 4) * (2 - 4)" "-6";
+  t "arith_14" "sub1(1 * 2 + 3)" "4";
+  t "arith_15" "sub1(1 * add1(2) + 3)" "5";
+
   (* More tests here *)
 ];;
 let let_tests = [
@@ -86,15 +88,27 @@ let let_tests = [
   t "let_5" {| let x = 2, y = 3 in 
                  let z = 4 in x |}
   "2";
-(*  t "let_6" {| let x = 2 in x + 3 |}
+  t "let_6" {| let x = 2 in x + 3 |}
   "5";
-*)
+  t "let_7" {| let x = 2, y = 3 in 
+                   x * y + x |}
+  "8";
+  t "let_8" {| let x = 2, y = 3 in 
+                   let z = 4 in
+                       (x + z) * (y - z) |}
+  "-6";
 ];;
 let if_tests = [
   t "if_1" "if 5: 4 else: 2" "4";  
   t "if_2" "if 0: 4 else: 2" "2"; 
   t "if_3" "if (1 - 1): 4 else: 2" "2";
   t "if_4" "if (1 - 1): 4 else: 2 * (3 - 2)" "2";
+  t "if_5" {| let x = 2, y = 2 in
+                  if y - x: 4 else: 2 |} "2";
+  t "if_6" {| let x = 2, y = 2 in
+                  if y - x: 4 
+                  else: y * x |} "4";
+
 ];;
 
 let all_tests = 
