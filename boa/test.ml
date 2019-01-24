@@ -121,11 +121,13 @@ let if_tests = [
   t "if_6" {| let x = 2, y = 2 in
                   if y - x: 4 
                   else: y * x |} "4";
-
 ];;
 
 let binding_errors = [
-
+  te "unbound_1" "let x = 1 in y" "Unbound variable y";
+  te "unbound_2" "let x = 1, y = z in x" "Unbound variable z";
+  te "redefined_1" "let x = 1, x = 2 in x" "Variable x is redefined";
+  te "redefined_2" "let x = 1 in let x = 2 in x" "Variable x is redefined";
 ];;
 
 let all_tests = 

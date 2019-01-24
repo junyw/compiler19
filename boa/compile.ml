@@ -21,10 +21,44 @@ and is_imm e =
 (* PROBLEM 1 *)
 (* This function should encapsulate the binding-error checking from Adder *)
 exception BindingError of string
+let binding_error (msg : string) info =
+    raise (BindingError (msg ^ " at " ^ (string_of_pos info)))
+
 let rec check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
-  (* TODO: implement me *)
-  ()
-  
+  let rec check_scope' e env =
+    match e with
+    | ENumber(n, _) -> ()
+    | EId(x, info)     -> if List.exists (fun y -> x = y) env then () 
+                          else binding_error ("Unbound variable " ^ x) info
+    | EPrim1(op, e, _)       -> check_scope' e env
+    | EPrim2(op, e1, e2, _)  -> check_scope' e1 env; check_scope' e2 env
+    | ELet(binds, body, _)   -> let env' = check_bindings binds env in 
+                                check_scope' body env'
+    | EIf(cond, thn, els, _) -> check_scope' cond env; check_scope' thn env; check_scope' els env
+  and check_bindings bindings env =
+    List.fold_left 
+    (fun env (x, expr, info) -> 
+          if List.exists (fun y -> x = y) env 
+          then binding_error ("Variable " ^ x ^ " is redefined") info
+          else check_scope' expr env; x::env
+    )
+    env bindings
+  in
+    check_scope' e []
+(*  | Nest(sexps, info) -> 
+      match sexps with 
+      | [Sym("let", _);Nest(bindings, info') as bs;b] -> 
+            if List.length bindings != 0 
+            then  let exprs = expr_of_bindings bindings in
+                      Let (exprs, (expr_of_sexp b), info)
+            else syntax_error ("Expecting <bindings> but received " ^ (string_of_sexp bs))  info'
+      | [Sym("add1", _);b]   -> Prim1 (Add1, (expr_of_sexp b), info)
+      | [Sym("sub1", _);b]   -> Prim1 (Sub1, (expr_of_sexp b), info)
+      |  Sym("let", _)::rest  -> syntax_error ("Expecting (let (<bindings>) <expr>) but received " ^ (string_of_sexp s)) info
+      |  Sym("add1", _)::rest -> syntax_error ("Expecting (add1 <expr>) but received " ^ (string_of_sexp s)) info
+      |  Sym("sub1", _)::rest -> syntax_error ("Expecting (sub1 <expr>) but received " ^ (string_of_sexp s)) info
+      | _ -> syntax_error ("Expecting let/add1/sub1 but received " ^ (string_of_sexp s)) info
+*)
 type tag = int
 (* PROBLEM 2 *)
 (* This function assigns a unique tag to every subexpression and let binding *)
