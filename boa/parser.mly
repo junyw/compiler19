@@ -10,8 +10,6 @@ open Types
 %left PLUS MINUS 
 %left TIMES
 
-
-
 %type <(Lexing.position * Lexing.position) Types.expr> program
 
 %start program

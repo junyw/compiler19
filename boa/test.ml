@@ -110,6 +110,14 @@ let let_tests = [
                   let y = 3 in 
                       x + sub1(x) * add1(y) |}
   "6";
+  t "let_12" {| let x = 2 * (3 + 2) in 
+                  let y = sub1(x) in 
+                      x + 3 * y |}
+  "37";
+  t "let_13" {| let x = 2 * (3 + 2) in 
+                  let y = sub1(x) * 2 in 
+                      x + 3 * y |}
+  "64";
 ];;
 let if_tests = [
   t "if_1" "if 5: 4 else: 2" "4";  
@@ -121,6 +129,16 @@ let if_tests = [
   t "if_6" {| let x = 2, y = 2 in
                   if y - x: 4 
                   else: y * x |} "4";
+  t "if_7" {| let x = if 1: 2 else: 3 in
+                  x |} "2";
+  t "if_8" {| let x = 1, y = 3 in
+                  if x: y else: x |} "3";
+  t "if_9" {| let x = 1, y = if x: x else: 2 in
+                  y |} "1";
+  t "if_10" {| let x = 0, y = if x: x else: 2 in
+                  y |} "2";
+  t "if_11" {| let x = 2 * 2 + 1, y = x * 2, z = y - (x * y) in z |} "-40";
+  t "if_12" {| let x = add1(4), y = x * add1(1), z = y - (x * y) in z |} "-40";
 ];;
 
 let binding_errors = [

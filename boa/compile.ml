@@ -128,21 +128,22 @@ let anf (e : tag expr) : unit expr =
                                    e1_ctxt (* the context needed for the left expression *)
                                    @ e2_ctxt (* the context needed for the right expression *)
                                    @ [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
-    | ELet(binds, body, tag)   -> let (binds_anf, binds_ctxt) =
+    | ELet(binds, body, tag)   -> let binds_anf =
                                       List.fold_left 
-                                      (fun (b_anfs, b_ctxts) (x, expr, _) -> 
+                                      (fun b_anfs (x, expr, _) -> 
                                            let (b_anf, b_ctxt) = helper expr in
-                                               (b_anfs @ [(x, b_anf, ())], b_ctxts @ b_ctxt))
-                                      ([], []) binds (* WRONG ?? *) 
+                                                b_anfs @ b_ctxt @ [(x, b_anf, ())]
+                                      )
+                                      [] binds 
                                   in
                                   let (body_anf, body_ctxt) = helper body in
-                                  if List.length body_ctxt = 0 then
-                                    (ELet(binds_anf, body_anf, ()), 
-                                      binds_ctxt)  
-                                  else                                   
-                                    (* If the context for body is not empty, create let expressions for the body evaluaton *)
-                                    (ELet(binds_anf, ELet(body_ctxt, body_anf, ()), ()),  (* NEEDS TO BE FIXED !!! *)
-                                      binds_ctxt)
+                                    if List.length body_ctxt = 0 
+                                    then
+                                      (ELet(binds_anf, body_anf, ()), [])  
+                                    else                                   
+                                      (* If the context for body is not empty, 
+                                           create let expressions for the body evaluaton *)
+                                      (ELet(binds_anf, ELet(body_ctxt, body_anf, ()), ()), [])
     | EIf(cond, thn, els, tag) -> let (cond_anf, cond_ctxt) = helper cond in
                                   let (thn_anf, thn_ctxt) = helper thn in
                                   let (els_anf, els_ctxt) = helper els in
@@ -284,6 +285,6 @@ let compile_to_string prog =
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
    printf "; Program after tagging: %s\n" (string_of_expr tagged); 
-   printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
-  compile_anf_to_string anfed
+     printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
+    compile_anf_to_string anfed
 
