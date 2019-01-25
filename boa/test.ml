@@ -147,8 +147,8 @@ let if_tests = [
   t "if_12" {| let x = add1(4), y = x * add1(1), z = y - (x * y) in z |} "-40";
   t "if_13" {| let c1 = 1 in
                 let c2 = 2 in
-                  let x = (if c1: 5 + 5 else 6 * 2) in
-                    let y = (if c2: x * 3 else x + 5) in
+                  let x = (if c1: 5 + 5 else: 6 * 2) in
+                    let y = (if c2: x * 3 else: x + 5) in
                       x + y |} "40";
 ];;
 

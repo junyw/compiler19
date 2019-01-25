@@ -98,12 +98,6 @@ let anf (e : tag expr) : unit expr =
   (* The result is a pair of an answer and a context.
      The answer must be an immediate, and the context must be a list of bindings
      that are all in ANF. *)
-  let rec helpI (e : tag expr) : unit expr = 
-    match e with
-    | EId(x, _) -> EId(x, ())
-    | ENumber(n, _) -> ENumber(n, ())
-    | _ -> failwith "Error in helpI"
-  in
   let rec helper (e : tag expr) : (unit expr * (string * unit expr * unit) list) =
     match e with
     | EId(x, _)          -> (EId(x, ()), [])
