@@ -13,9 +13,12 @@ let ta name program expected = name>::test_run_anf program name expected;;
 
 let te name program expected_err = name>::test_err program name expected_err;;
 
-(* test the tag and anf function *)
+(* test A-Normal Form generation *)
 let tanf name program expected = name>::fun _ ->
   assert_equal expected (anf (tag program)) ~printer:string_of_expr;;
+  
+(* helper function to test anf generation *)
+let tanf' name program expected = name>::test_run_anf' program name expected;;
 
 let teq name actual expected = name>::fun _ ->
   assert_equal expected actual ~printer:(fun s -> s);;
@@ -30,7 +33,8 @@ let forty_one_a = (ENumber(41, ()))
 
 (* testing generation of A-Normal Form *)
 let anf_tests =  [
-
+  
+  tprog "test1.boa" "3";      
   tanf "forty_one_anf"
        (ENumber(41, ()))
        forty_one_a;
@@ -46,10 +50,10 @@ let anf_tests =  [
        (ELet(["$prim2_1", EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()), ()],
              EId("$prim2_1", ()),
              ()));
-
   ta "forty_one_run_anf" (tag forty_one_a) "41";
  
-  (*  tprog "test1.boa" "3";*)      
+  (* tests that anf generates as few as let-bindings as possible *)  
+  tanf' "anf_1" "1 + 2" "1 + 2";
 ];;
 
 let arithmetic_tests = [

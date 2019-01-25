@@ -284,7 +284,7 @@ let compile_to_string prog =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
-   printf "; Program after tagging: %s\n" (string_of_expr tagged); 
-     printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
+  (* printf "; Program after tagging: %s\n" (string_of_expr tagged); *)
+  (* printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
     compile_anf_to_string anfed
 
