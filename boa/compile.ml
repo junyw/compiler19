@@ -45,20 +45,7 @@ let rec check_scope (e : (Lexing.position * Lexing.position) expr) : unit =
     env bindings
   in
     check_scope' e []
-(*  | Nest(sexps, info) -> 
-      match sexps with 
-      | [Sym("let", _);Nest(bindings, info') as bs;b] -> 
-            if List.length bindings != 0 
-            then  let exprs = expr_of_bindings bindings in
-                      Let (exprs, (expr_of_sexp b), info)
-            else syntax_error ("Expecting <bindings> but received " ^ (string_of_sexp bs))  info'
-      | [Sym("add1", _);b]   -> Prim1 (Add1, (expr_of_sexp b), info)
-      | [Sym("sub1", _);b]   -> Prim1 (Sub1, (expr_of_sexp b), info)
-      |  Sym("let", _)::rest  -> syntax_error ("Expecting (let (<bindings>) <expr>) but received " ^ (string_of_sexp s)) info
-      |  Sym("add1", _)::rest -> syntax_error ("Expecting (add1 <expr>) but received " ^ (string_of_sexp s)) info
-      |  Sym("sub1", _)::rest -> syntax_error ("Expecting (sub1 <expr>) but received " ^ (string_of_sexp s)) info
-      | _ -> syntax_error ("Expecting let/add1/sub1 but received " ^ (string_of_sexp s)) info
-*)
+
 type tag = int
 (* PROBLEM 2 *)
 (* This function assigns a unique tag to every subexpression and let binding *)
@@ -111,7 +98,12 @@ let anf (e : tag expr) : unit expr =
   (* The result is a pair of an answer and a context.
      The answer must be an immediate, and the context must be a list of bindings
      that are all in ANF. *)
-  (* TODO: Don't transform if expression already in ANF *)
+  let rec helpI (e : tag expr) : unit expr = 
+    match e with
+    | EId(x, _) -> EId(x, ())
+    | ENumber(n, _) -> ENumber(n, ())
+    | _ -> failwith "Error in helpI"
+  in
   let rec helper (e : tag expr) : (unit expr * (string * unit expr * unit) list) =
     match e with
     | EId(x, _)          -> (EId(x, ()), [])
@@ -284,7 +276,7 @@ let compile_to_string prog =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
-  (* printf "; Program after tagging: %s\n" (string_of_expr tagged); *)
-  (* printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
+   printf "; Program after tagging: %s\n" (string_of_expr tagged); 
+   printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
     compile_anf_to_string anfed
 

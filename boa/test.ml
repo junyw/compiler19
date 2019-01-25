@@ -16,8 +16,8 @@ let te name program expected_err = name>::test_err program name expected_err;;
 (* test A-Normal Form generation *)
 let tanf name program expected = name>::fun _ ->
   assert_equal expected (anf (tag program)) ~printer:string_of_expr;;
-  
-(* helper function to test anf generation *)
+
+(* helper function that converts generated ANF to string *)
 let tanf' name program expected = name>::test_run_anf' program name expected;;
 
 let teq name actual expected = name>::fun _ ->
@@ -34,7 +34,6 @@ let forty_one_a = (ENumber(41, ()))
 (* testing generation of A-Normal Form *)
 let anf_tests =  [
   
-  tprog "test1.boa" "3";      
   tanf "forty_one_anf"
        (ENumber(41, ()))
        forty_one_a;
@@ -53,10 +52,11 @@ let anf_tests =  [
   ta "forty_one_run_anf" (tag forty_one_a) "41";
  
   (* tests that anf generates as few as let-bindings as possible *)  
-  tanf' "anf_1" "1 + 2" "1 + 2";
+  (* tanf' "anf_1" "1 + 2" "1 + 2"; *)
 ];;
 
 let arithmetic_tests = [
+  (* tprog "test1.boa" "3"; *)
   t "int_1" "41" "41";
   t "int_2" "(41)" "41";
   t "unary_1" "sub1(3)" "2";
@@ -79,6 +79,8 @@ let arithmetic_tests = [
   t "arith_15" "sub1(1 * add1(2) + 3)" "5";
   t "arith_16" "3 + 2 * 3" "9";
   t "arith_17" "3 + sub1(3) * add1(2)" "9";
+  t "arith_18" "(add1(1) + add1(2)) - add1(3)" "1";
+
   (* More tests here *)
 ];;
 
@@ -143,6 +145,11 @@ let if_tests = [
                   y |} "2";
   t "if_11" {| let x = 2 * 2 + 1, y = x * 2, z = y - (x * y) in z |} "-40";
   t "if_12" {| let x = add1(4), y = x * add1(1), z = y - (x * y) in z |} "-40";
+  t "if_13" {| let c1 = 1 in
+                let c2 = 2 in
+                  let x = (if c1: 5 + 5 else 6 * 2) in
+                    let y = (if c2: x * 3 else x + 5) in
+                      x + y |} "40";
 ];;
 
 let binding_errors = [

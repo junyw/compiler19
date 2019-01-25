@@ -1,0 +1,5 @@
+let c1 = 1 in
+	let c2 = 2 in
+		let x = (if c1: 5 + 5 else: 6 * 2) in
+  			let y = (if c2: x * 3 else: x + 5) in
+    			y
