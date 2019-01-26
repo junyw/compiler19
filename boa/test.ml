@@ -34,7 +34,7 @@ let forty_one_a = (ENumber(41, ()))
 (* testing generation of A-Normal Form *)
 let anf_tests =  [
   
-  tanf "forty_one_anf"
+(*  tanf "forty_one_anf"
        (ENumber(41, ()))
        forty_one_a;
 
@@ -50,9 +50,16 @@ let anf_tests =  [
              EId("$prim2_1", ()),
              ()));
   ta "forty_one_run_anf" (tag forty_one_a) "41";
- 
+*) 
   (* tests that anf generates as few as let-bindings as possible *)  
-  (* tanf' "anf_1" "1 + 2" "1 + 2"; *)
+   tanf' "anf_1" "1 + 2" "(1 + 2)"; 
+   tanf' "anf_2" "let x = 1, y = 2 in x" "(let x = 1, y = 2 in x)";
+   tanf' "anf_3" "let x = 1, y = 2 in x + y" "(let x = 1, y = 2 in (x + y))";
+   tanf' "anf_4" "if 3 + 4: 1 else: 2" "(let $if_1 = (if (3 + 4): 1 else: 2) in $if_1)";
+   tanf' "anf_5" "if 3 + 4: 1 + 2 else: 2" "(let $if_1 = (if (3 + 4): (1 + 2) else: 2) in $if_1)";
+   tanf' "anf_6" "add1(1)" "add1(1)";
+   tanf' "anf_7" "let x = 1 in add1(x)" "(let x = 1 in add1(x))";
+
 ];;
 
 let arithmetic_tests = [
@@ -150,6 +157,8 @@ let if_tests = [
                   let x = (if c1: 5 + 5 else: 6 * 2) in
                     let y = (if c2: x * 3 else: x + 5) in
                       x + y |} "40";
+  (* let within if *)
+  t "if_14" {| if (let x = 0 in x + 1): 1 else: 2 |} "1"; 
 ];;
 
 let binding_errors = [

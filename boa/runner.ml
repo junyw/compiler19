@@ -145,7 +145,7 @@ let test_run_anf' program_str outfile expected test_ctxt =
       | Failure s -> Left("Compile error: " ^ s)
       | err -> Left("Unexpected compile error: " ^ Printexc.to_string err)
   in 
-  assert_equal (Right(expected ^ "\n")) result ~printer:either_printer
+  assert_equal (Right(expected)) result ~printer:either_printer
 
 let test_run_input filename expected test_ctxt =
   test_run (string_of_file ("input/" ^ filename)) filename expected test_ctxt
