@@ -93,36 +93,33 @@ let rec untag (e : 'a expr) : unit expr =
      EIf(untag cond, untag thn, untag els, ())
 
 (* PROBLEM 3 & 4 *)
-(* This function converts a tagged expression into an untagged expression in A-normal form *)
+(* This function converts a tagged expression into an untagged expression in A-normal form
+    The result is a pair of an answer and a context.
+    The answer must be an immediate, and the context must be a list of bindings
+    that are all in ANF. *)
 let anf (e : tag expr) : unit expr =
-  (* The result is a pair of an answer and a context.
-     The answer must be an immediate, and the context must be a list of bindings
-     that are all in ANF. *)
-  let rec helpI' (e : tag expr) : unit expr = 
-    match e with
-    | EId(x, _)          -> EId(x, ())
-    | ENumber(n, _)      -> ENumber(n, ())
-    | _ -> failwith "helpI failure"
-
-  and helper (e : tag expr) (makeId : bool) : (unit expr * (string * unit expr * unit) list) =
-    match e with
-    | EId(x, _)          -> (EId(x, ()), [])
-    | ENumber(n, _)      -> (ENumber(n, ()), [])
-    | EPrim1(op, e, tag) -> if not makeId && is_imm e
-                            then 
-                                (EPrim1(op, helpI' e, ()), [])
-                            else
-                            let (e_anf, e_ctxt) = helper e true in
+  (* helpI tries to generate anf without introducing new bindings. 
+       if new bindings are necessary, it calls helpC *)
+  let rec helpI (expr : tag expr) : (unit expr * (string * unit expr * unit) list) = 
+    match expr with
+    | EId(_, _) | ENumber(_, _)        ->  (untag expr, [])
+    | EPrim1(_, e, _) when is_imm e    ->  (untag expr, [])
+    | EPrim2(_, e1, e2, _) 
+      when is_imm e1 && is_imm e2      ->  (untag expr, [])
+    | _ ->  let (expr_anf, expr_ctxt) = helpC expr in
+            if List.length expr_ctxt = 0 then (expr_anf, [])
+            else (ELet(expr_ctxt, expr_anf, ()), [])
+  and helpC (expr : tag expr) : (unit expr * (string * unit expr * unit) list) =
+    match expr with
+    | EId(x, _)          -> (untag expr, [])
+    | ENumber(n, _)      -> (untag expr, [])
+    | EPrim1(op, e, tag) -> let (e_anf, e_ctxt) = helpC e in
                             let temp = sprintf "$prim1_%d" tag in
                               (EId(temp, ()), 
                                e_ctxt (* the context needed for the expression *)
                                @ [(temp, EPrim1(op, e_anf, ()), ())]) (* definition of the answer *)
-    | EPrim2(op, e1, e2, tag) ->  if not makeId && is_imm e1 && is_imm e2 
-                                  then 
-                                       (EPrim2(op, helpI' e1, helpI' e2, ()), [])
-                                  else
-                                  let (e1_anf, e1_ctxt) = helper e1 true in
-                                  let (e2_anf, e2_ctxt) = helper e2 true in
+    | EPrim2(op, e1, e2, tag) ->  let (e1_anf, e1_ctxt) = helpC e1 in
+                                  let (e2_anf, e2_ctxt) = helpC e2 in
                                   let temp = sprintf "$prim2_%d" tag in
                                   (EId(temp, ()), 
                                    e1_ctxt (* the context needed for the left expression *)
@@ -131,12 +128,12 @@ let anf (e : tag expr) : unit expr =
     | ELet(binds, body, tag)   -> let binds_anf =
                                       List.fold_left 
                                       (fun b_anfs (x, expr, _) -> 
-                                           let (b_anf, b_ctxt) = helper expr true in
+                                           let (b_anf, b_ctxt) = helpC expr in
                                                 b_anfs @ b_ctxt @ [(x, b_anf, ())]
                                       )
                                       [] binds 
                                   in
-                                  let (body_anf, body_ctxt) = helper body false in
+                                  let (body_anf, body_ctxt) = helpI body in
                                     if List.length body_ctxt = 0 
                                     then
                                       (ELet(binds_anf, body_anf, ()), [])  
@@ -144,20 +141,20 @@ let anf (e : tag expr) : unit expr =
                                       (* If the context for body is not empty, 
                                            create let expressions for the body evaluaton *)
                                       (ELet(binds_anf, ELet(body_ctxt, body_anf, ()), ()), [])
-    | EIf(cond, thn, els, tag) -> let (cond_anf, cond_ctxt) = helper cond false in
-                                  let (thn_anf, thn_ctxt) = helper thn false in
-                                  let (els_anf, els_ctxt) = helper els false in
+    | EIf(cond, thn, els, tag) -> let (cond_anf, cond_ctxt) = helpI cond in
+                                  let (thn_anf, thn_ctxt) = helpI thn in
+                                  let (els_anf, els_ctxt) = helpI els in
                                   let temp = sprintf "$if_%d" tag in
                                     (EId(temp, ()), 
                                      cond_ctxt
                                      @ thn_ctxt 
                                      @ els_ctxt 
                                      @ [(temp, EIf(cond_anf, thn_anf, els_anf, ()), ())])
-  in 
-  let (e_tag, bindings_tag) = helper e false in
-    if List.length bindings_tag = 0 then e_tag 
-    else ELet(bindings_tag, e_tag, ())
-;;
+  in let (e_anf, _) = helpI e in e_anf
+(*    let (e_tag, bindings_tag) = helpI' e in
+                              if List.length bindings_tag = 0 then e_tag 
+                              else ELet(bindings_tag, e_tag, ())
+*);;
 
 (* Helper functions *)
 let r_to_asm (r : reg) : string =
