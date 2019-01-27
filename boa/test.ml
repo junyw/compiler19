@@ -34,11 +34,11 @@ let forty_one_a = (ENumber(41, ()))
 (* testing generation of A-Normal Form *)
 let anf_tests =  [
   
-(*  tanf "forty_one_anf"
+  tanf "forty_one_anf"
        (ENumber(41, ()))
        forty_one_a;
 
-  tanf "prim1_anf"
+  (* tanf "prim1_anf"
        (EPrim1(Sub1, ENumber(55, ()), ()))
        (ELet(["$prim1_1", EPrim1(Sub1, ENumber(55, ()), ()), ()],
              EId("$prim1_1", ()),
@@ -48,9 +48,9 @@ let anf_tests =  [
        (EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()))
        (ELet(["$prim2_1", EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()), ()],
              EId("$prim2_1", ()),
-             ()));
-  ta "forty_one_run_anf" (tag forty_one_a) "41";
-*) 
+             ())); *)  
+  (*  ta "forty_one_run_anf" (tag forty_one_a) "41";*)
+ 
   (* tests that anf generates as few as let-bindings as possible *)  
    tanf' "anf_1" "1 + 2" "(1 + 2)"; 
    tanf' "anf_2" "let x = 1, y = 2 in x" "(let x = 1, y = 2 in x)";

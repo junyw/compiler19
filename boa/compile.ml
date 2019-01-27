@@ -235,7 +235,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
   in  
   match e with
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
-  | EId(x, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
+  | EId(x, _)     -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EPrim1(op, e, _) -> 
      let e_reg = compile_imm e env in
      begin match op with
@@ -278,10 +278,10 @@ let compile_to_string prog =
   check_scope prog;
   let tagged : tag expr = tag prog in
   let anfed : tag expr = tag (anf tagged) in
-(*   printf "Prog:\n%s\n" (ast_of_expr prog); 
-   printf "Tagged:\n%s\n" (format_expr tagged string_of_int); 
-   printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); 
-*)   printf "; Program after tagging: %s\n" (string_of_expr tagged); 
-   printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
+   (*printf "Prog:\n%s\n" (ast_of_expr prog); *)
+   (*printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
+   (*printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
+   (*printf "; Program after tagging: %s\n" (string_of_expr tagged); *)
+   (*printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
     compile_anf_to_string anfed
 
