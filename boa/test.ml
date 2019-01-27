@@ -159,6 +159,12 @@ let if_tests = [
                       x + y |} "40";
   (* let within if *)
   t "if_14" {| if (let x = 0 in x + 1): 1 else: 2 |} "1"; 
+  t "if_15" {| if 1: (let x = 0 in x + 1) else: 2 |} "1"; 
+  t "if_16" {| if 0: 0 else: (let x = 0 in x + 1) |} "1"; 
+  t "if_17" {| if (let x = 0, y = 1 in x + y): (let x = 1, y = 2 in x * y) else: 1 |} "2";
+  t "if_18" {| if (let x = 0 in let y = 1 in x + y): 1 else: 2 |} "1"; 
+  t "if_19" {| if 1: (let x = 0 in let y = 1 in x + y) else: 2 |} "1"; 
+
 ];;
 
 let binding_errors = [
