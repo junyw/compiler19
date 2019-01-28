@@ -38,28 +38,32 @@ let anf_tests =  [
        (ENumber(41, ()))
        forty_one_a;
 
-  (* tanf "prim1_anf"
+  tanf "prim1_anf"
        (EPrim1(Sub1, ENumber(55, ()), ()))
-       (ELet(["$prim1_1", EPrim1(Sub1, ENumber(55, ()), ()), ()],
-             EId("$prim1_1", ()),
-             ()));
+       (EPrim1(Sub1, ENumber(55, ()), ()));
   
   tanf "prim2_anf"
        (EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()))
-       (ELet(["$prim2_1", EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()), ()],
-             EId("$prim2_1", ()),
-             ())); *)  
-  (*  ta "forty_one_run_anf" (tag forty_one_a) "41";*)
+       (EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()));   
  
-  (* tests that anf generates as few as let-bindings as possible *)  
-   tanf' "anf_1" "1 + 2" "(1 + 2)"; 
-   tanf' "anf_2" "let x = 1, y = 2 in x" "(let x = 1, y = 2 in x)";
-   tanf' "anf_3" "let x = 1, y = 2 in x + y" "(let x = 1, y = 2 in (x + y))";
-   tanf' "anf_4" "if 3 + 4: 1 else: 2" "(let $if_1 = (if (3 + 4): 1 else: 2) in $if_1)";
-   tanf' "anf_5" "if 3 + 4: 1 + 2 else: 2" "(let $if_1 = (if (3 + 4): (1 + 2) else: 2) in $if_1)";
-   tanf' "anf_6" "add1(1)" "add1(1)";
-   tanf' "anf_7" "let x = 1 in add1(x)" "(let x = 1 in add1(x))";
-
+  tanf' "anf_1" "1 + 2" 
+                "(1 + 2)"; 
+  tanf' "anf_2" "let x = 1, y = 2 in x" 
+                "(let x = 1, y = 2 in x)";
+  tanf' "anf_3" "let x = 1, y = 2 in x + y" 
+                "(let x = 1, y = 2 in (x + y))";
+  tanf' "anf_4" "if 3 + 4: 1 else: 2" 
+                "(let $if_1 = (if (3 + 4): 1 else: 2) in $if_1)"; (* ? *)
+  tanf' "anf_5" "if 3 + 4: 1 + 2 else: 2" 
+                "(let $if_1 = (if (3 + 4): (1 + 2) else: 2) in $if_1)";
+  tanf' "anf_6" "add1(1)" 
+                "add1(1)";
+  tanf' "anf_7" "let x = 1 in add1(x)" 
+                "(let x = 1 in add1(x))";
+  tanf' "anf_8" "(4 - 3) * (1 + 2)" 
+                "(let $prim2_2 = (4 - 3), $prim2_5 = (1 + 2), $prim2_1 = ($prim2_2 * $prim2_5) in $prim2_1)";
+  tanf' "anf_9" "let x = 1 + 2 in x" 
+                "let $prim2_3 = (1 + 2), x = $prim2_3 in x"; (* ? *)
 ];;
 
 let arithmetic_tests = [
@@ -131,6 +135,11 @@ let let_tests = [
                   let y = sub1(x) * 2 in 
                       x + 3 * y |}
   "64";
+  t "let_14" {| let x = 1 in
+                  let y = if sub1(x): 0 else: x in x |} "1";
+  t "let_15" {| let x = 2 in
+                  let y = if sub1(x): x else: 0 in x |} "2";
+  t "let_16" {| let x = 1, y = 2, z = if x: 3 else: 4 in z |} "3";
 ];;
 let if_tests = [
   t "if_1" "if 5: 4 else: 2" "4";  
@@ -157,14 +166,14 @@ let if_tests = [
                   let x = (if c1: 5 + 5 else: 6 * 2) in
                     let y = (if c2: x * 3 else: x + 5) in
                       x + y |} "40";
-  (* let within if *)
   t "if_14" {| if (let x = 0 in x + 1): 1 else: 2 |} "1"; 
   t "if_15" {| if 1: (let x = 0 in x + 1) else: 2 |} "1"; 
   t "if_16" {| if 0: 0 else: (let x = 0 in x + 1) |} "1"; 
   t "if_17" {| if (let x = 0, y = 1 in x + y): (let x = 1, y = 2 in x * y) else: 1 |} "2";
   t "if_18" {| if (let x = 0 in let y = 1 in x + y): 1 else: 2 |} "1"; 
   t "if_19" {| if 1: (let x = 0 in let y = 1 in x + y) else: 2 |} "1"; 
-
+  t "if_20" {| if (let x = 1 in x): (let x = 2 in x) else: 0 |} "2";
+  t "if_21" {| if 1 + 3 * 2: (4 - 3) * (1 + 2) else: 0 |} "3"; 
 ];;
 
 let binding_errors = [
