@@ -46,26 +46,29 @@ let anf_tests =  [
        (EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()))
        (EPrim2(Plus, ENumber(55, ()), ENumber(32, ()), ()));   
  
-  tanf' "anf_1" "1 + 2" 
+  tanf' "prim_1" "1 + 2" 
                 "(1 + 2)"; 
+  tanf' "prim_2" "1 + 2 + 3"
+                 "(let $prim2_2 = (1 + 2), $prim2_1 = ($prim2_2 + 3) in $prim2_1)";
   tanf' "anf_2" "let x = 1, y = 2 in x" 
                 "(let x = 1, y = 2 in x)";
   tanf' "anf_3" "let x = 1, y = 2 in x + y" 
                 "(let x = 1, y = 2 in (x + y))";
-  tanf' "anf_4" "if 3 + 4: 1 else: 2" 
-                "(let $if_1 = (if (3 + 4): 1 else: 2) in $if_1)"; (* ? *)
-  tanf' "anf_5" "if 3 + 4: 1 + 2 else: 2" 
-                "(let $if_1 = (if (3 + 4): (1 + 2) else: 2) in $if_1)";
-  tanf' "anf_6" "add1(1)" 
+  tanf' "anf_4" "add1(1)" 
                 "add1(1)";
-  tanf' "anf_7" "let x = 1 in add1(x)" 
+  tanf' "anf_5" "let x = 1 in add1(x)" 
                 "(let x = 1 in add1(x))";
-  tanf' "anf_8" "(4 - 3) * (1 + 2)" 
+  tanf' "anf_6" "(4 - 3) * (1 + 2)" 
                 "(let $prim2_2 = (4 - 3), $prim2_5 = (1 + 2), $prim2_1 = ($prim2_2 * $prim2_5) in $prim2_1)";
-  tanf' "anf_9" "let x = 1 + 2 in x" 
-                "(let $prim2_3 = (1 + 2), x = $prim2_3 in x)"; (* ? *)
-  tanf' "anf_10" "if 3 + (1 * 2): 1 else: 2" 
-                 "(let $if_1 = (if (let $prim2_4 = (1 * 2), $prim2_2 = (3 + $prim2_4) in $prim2_2): 1 else: 2) in $if_1)";
+  tanf' "anf_7" "let x = 1 + 2 in x" 
+                "(let x = (1 + 2) in x)"; 
+  tanf' "anf_if_1" "if 3 + 4: 1 else: 2" 
+                "(if (3 + 4): 1 else: 2)";
+  tanf' "anf_if_2" "if 3 + 4: 1 + 2 else: 2" 
+                "(if (3 + 4): (1 + 2) else: 2)";
+  tanf' "anf_if_3" "if 3 + (1 * 2): 1 else: 2" 
+                 "(if (let $prim2_4 = (1 * 2), $prim2_2 = (3 + $prim2_4) in $prim2_2): 1 else: 2)";
+  tanf' "anf_if_4" "if 3: 1 else: 2" "(if 3: 1 else: 2)";
 ];;
 
 let arithmetic_tests = [
@@ -93,7 +96,7 @@ let arithmetic_tests = [
   t "arith_16" "3 + 2 * 3" "9";
   t "arith_17" "3 + sub1(3) * add1(2)" "9";
   t "arith_18" "(add1(1) + add1(2)) - add1(3)" "1";
-
+  t "arith_19" "(let x = 1 in x) + 1" "2";
   (* More tests here *)
 ];;
 
