@@ -54,24 +54,28 @@ let tag (e : 'a expr) : tag expr =
     match e with
     | ENumber(n, _) -> (ENumber(n, cur), cur + 1)
     | EId(x, _)     -> (EId(x, cur), cur + 1) (* This is not right ???? *)
-    | EPrim1(op, e, _)      -> let (tag_e, next_tag) = help e (cur + 1) in
-                                   (EPrim1(op, tag_e, cur), next_tag)
-    | EPrim2(op, e1, e2, _) -> let (tag_e1, next_tag) = help e1 (cur + 1) in
-                               let (tag_e2, next_tag') = help e2 next_tag in
-                                   (EPrim2(op, tag_e1, tag_e2, cur), next_tag')
-    | ELet(binds, body, _)  -> let (tag_binds, next_tag) = 
-                                   List.fold_left 
-                                   (fun (tag_binds, cur) (x, expr, _) -> 
-                                        let (tag_expr, next_tag) = help expr (cur + 1) in
-                                            (tag_binds @ [(x, tag_expr, cur)], next_tag))
-                                    ([], cur + 1) binds
-                               in 
-                               let (tag_body, next_tag') = help body next_tag in
-                                   (ELet(tag_binds, tag_body, cur), next_tag')
-    | EIf(cond, thn, els, _) -> let (tag_cond, next_tag) = help cond (cur + 1) in
-                                let (tag_thn, next_tag') = help thn next_tag in
-                                let (tag_els, next_tag'') = help els next_tag' in
-                                    (EIf(tag_cond, tag_thn, tag_els, cur), next_tag'')
+    | EPrim1(op, e, _)      -> 
+              let (tag_e, next_tag) = help e (cur + 1) in
+                  (EPrim1(op, tag_e, cur), next_tag)
+    | EPrim2(op, e1, e2, _) -> 
+              let (tag_e1, next_tag) = help e1 (cur + 1) in
+              let (tag_e2, next_tag') = help e2 next_tag in
+                  (EPrim2(op, tag_e1, tag_e2, cur), next_tag')
+    | ELet(binds, body, _)  -> 
+              let (tag_binds, next_tag) = 
+                  List.fold_left 
+                  (fun (tag_binds, cur) (x, expr, _) -> 
+                       let (tag_expr, next_tag) = help expr (cur + 1) in
+                           (tag_binds @ [(x, tag_expr, cur)], next_tag))
+                  ([], cur + 1) binds
+              in 
+              let (tag_body, next_tag') = help body next_tag in
+                   (ELet(tag_binds, tag_body, cur), next_tag')
+    | EIf(cond, thn, els, _) -> 
+              let (tag_cond, next_tag) = help cond (cur + 1) in
+              let (tag_thn, next_tag') = help thn next_tag in
+              let (tag_els, next_tag'') = help els next_tag' in
+                  (EIf(tag_cond, tag_thn, tag_els, cur), next_tag'')
   in
   let (tagged, _) = help e 1 in tagged
 ;;
@@ -116,8 +120,8 @@ let anf (e : tag expr) : unit expr =
     | ELet(binds, body, tag)           ->  ELet(anf_bindings binds, helpI body, ())
     | EIf(cond, thn, els, _)           ->  EIf(helpI cond, helpI thn, helpI els, ())
     | _ ->    let (expr_anf, expr_ctxt) = helpC expr in
-                if List.length expr_ctxt = 0 then expr_anf
-                else ELet(expr_ctxt, expr_anf, ())
+              if List.length expr_ctxt = 0 then expr_anf
+              else ELet(expr_ctxt, expr_anf, ())
   (* helpC: the result is a pair of an answer and a context.
       The answer must be an immediate, and the context must be a list of bindings
       that are all in ANF. *)

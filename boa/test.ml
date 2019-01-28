@@ -188,6 +188,10 @@ let if_tests = [
   t "if_19" {| if 1: (let x = 0 in let y = 1 in x + y) else: 2 |} "1"; 
   t "if_20" {| if (let x = 1 in x): (let x = 2 in x) else: 0 |} "2";
   t "if_21" {| if 1 + 3 * 2: (4 - 3) * (1 + 2) else: 0 |} "3"; 
+  t "if_22" {| if (let x = 2 in x) - 2: 0 
+               else: (if (let y = 2 in y * 2) - 4: 0 else: 10) |} "10"; 
+  t "if_23" {| (if (let x = 2 in x) - 2: 0 
+                else: (if (let y = 2 in y * 2) - 4: 0 else: 10)) * 2 - 8 |} "12";
 ];;
 
 let binding_errors = [
