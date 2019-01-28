@@ -63,7 +63,9 @@ let anf_tests =  [
   tanf' "anf_8" "(4 - 3) * (1 + 2)" 
                 "(let $prim2_2 = (4 - 3), $prim2_5 = (1 + 2), $prim2_1 = ($prim2_2 * $prim2_5) in $prim2_1)";
   tanf' "anf_9" "let x = 1 + 2 in x" 
-                "let $prim2_3 = (1 + 2), x = $prim2_3 in x"; (* ? *)
+                "(let $prim2_3 = (1 + 2), x = $prim2_3 in x)"; (* ? *)
+  tanf' "anf_10" "if 3 + (1 * 2): 1 else: 2" 
+                 "(let $if_1 = (if (let $prim2_4 = (1 * 2), $prim2_2 = (3 + $prim2_4) in $prim2_2): 1 else: 2) in $if_1)";
 ];;
 
 let arithmetic_tests = [

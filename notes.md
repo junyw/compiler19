@@ -80,12 +80,58 @@ Handle the body of if expressions. To avoid code duplication, split ANF into thr
 immediates, let-able, complex expressions.
 Allow if to be let-ables. 
 
+ANF is equivalent to SSA and CPS. 
+
+## Add booleans to the language
+
+```ocaml
+type expr = 
+| Num of int
+| Bool of bool
+| Prim1 ...
+| Prim2 ...
+| Let 
+| If 
+```
+32 bits, reserve 1 bit to distinguish bool and int. 
+use the least significant bit, 0 for int and 1 for bool.
+
+### Representation of int
+translate(n1 + n2) = translate(n1) + translate(n2)
+use translate function to convert number to tagged value.
+1 -> 2
+5 -> 10
+6 -> 12
+...
+translate: left-shift by 1 bit (lsl)
+addition
+multiplication can be implemented by mul and shift to the right
+shr
+sar: shift arithmeticaly, perserves sign.
+
+comparing numbers: =, !=, >, <, ... still works
+but needs to produce a boolean value.
 
 
+### Representation of bool
+Use the most significant bit, 1 for true and 0 for false.
+true: 0x80000001
+false: 0x00000001
+Operators on boolean can be implemented:
+and -> bitwise and, the tag is preserved
+or  -> bitwise or, the tag is preserved
+not -> xor with 0x80000000
 
+### type checking
 
+1. static time: adding a new phase to check types
+should be done after scope check and before anf.
 
+2. run time: should print a error message.
+run time function to handle errors: can be called with an error code. 
 
+Next steps: 
+tagging values, calling functions, run-time function.
 
 
 
