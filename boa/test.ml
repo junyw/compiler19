@@ -96,7 +96,16 @@ let arithmetic_tests = [
   t "arith_16" "3 + 2 * 3" "9";
   t "arith_17" "3 + sub1(3) * add1(2)" "9";
   t "arith_18" "(add1(1) + add1(2)) - add1(3)" "1";
-  t "arith_19" "(let x = 1 in x) + 1" "2";
+  t "arith_let_1" "(let x = 1 in x) + 1" "2";
+  t "arith_let_2" "(let x = 1 in x) + (let x = 2 in x)" "3";
+  t "arith_let_3" "(let x = 2 in x) * (let x = 2 in x)" "4";
+  t "arith_let_4" "(let x = 1 in x * 2) - (let x = 2, y = 2 in x * y)" "-2";
+  t "arith_let_5" "add1(let x = 1 in x * 2)" "3";
+  t "arith_if_1" "(if 1: 1 else: 2) * (if 0: 1 else: 2)" "2";
+  t "arith_if_2" "add1(if 1: 1 else: 2)" "2";
+  t "arith_if_3" "add1(let x = 1 in if x: 2 else: 3)" "3";
+  t "arith_if_4" "add1(let x = 0 in if x: 2 else: 3)" "4";
+
   (* More tests here *)
 ];;
 

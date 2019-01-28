@@ -98,14 +98,22 @@ let rec untag (e : 'a expr) : unit expr =
     The answer must be an immediate, and the context must be a list of bindings
     that are all in ANF. *)
 let anf (e : tag expr) : unit expr =
+  let rec anf_bindings bindings =                   
+    List.fold_left 
+    (fun b_anfs (x, expr, _) -> 
+         let b_anf = helpI expr in
+            b_anfs @ [(x, b_anf, ())]
+    )
+    [] bindings 
   (* helpI: first try to generate ANF without introducing new bindings. 
        if new bindings are necessary, it calls helpC *)
-  let rec helpI (expr : tag expr) : unit expr = 
+  and helpI (expr : tag expr) : unit expr = 
     match expr with
     | EId(_, _) | ENumber(_, _)        ->  untag expr
     | EPrim1(_, e, _) when is_imm e    ->  untag expr
     | EPrim2(_, e1, e2, _) 
       when is_imm e1 && is_imm e2      ->  untag expr
+    | ELet(binds, body, tag)           ->  ELet(anf_bindings binds, helpI body, ())
     | EIf(cond, thn, els, _)           ->  EIf(helpI cond, helpI thn, helpI els, ())
     | _ ->    let (expr_anf, expr_ctxt) = helpC expr in
                 if List.length expr_ctxt = 0 then expr_anf
@@ -127,20 +135,13 @@ let anf (e : tag expr) : unit expr =
               let (e1_anf, e1_ctxt) = helpC e1 in
               let (e2_anf, e2_ctxt) = helpC e2 in
               let temp = sprintf "$prim2_%d" tag in
-              (EId(temp, ()), 
-               e1_ctxt (* the context needed for the left expression *)
-               @ e2_ctxt (* the context needed for the right expression *)
-               @ [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
+                (EId(temp, ()), 
+                 e1_ctxt (* the context needed for the left expression *)
+                 @ e2_ctxt (* the context needed for the right expression *)
+                 @ [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
     | ELet(binds, body, tag)   ->  
-              let binds_anf =
-                  List.fold_left 
-                  (fun b_anfs (x, expr, _) -> 
-                       let b_anf = helpI expr in
-                          b_anfs @ [(x, b_anf, ())]
-                  )
-                  [] binds 
-              in
-                (ELet(binds_anf, helpI body, ()), [])  
+              let temp = sprintf "$let_%d" tag in
+                (EId(temp, ()), [(temp, ELet(anf_bindings binds, helpI body, ()), ())]) 
     | EIf(cond, thn, els, tag) -> 
               let temp = sprintf "$if_%d" tag in
                 (EId(temp, ()), [(temp, EIf(helpI cond, helpI thn, helpI els, ()), ())])
@@ -273,7 +274,7 @@ let compile_to_string prog =
    (*printf "Prog:\n%s\n" (ast_of_expr prog); *)
    (*printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
    (*printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
-   printf "; Program after tagging: %s\n" (string_of_expr tagged); 
-   printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
+   (*printf "; Program after tagging: %s\n" (string_of_expr tagged); *)
+   (*printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
     compile_anf_to_string anfed
 
