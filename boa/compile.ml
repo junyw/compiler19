@@ -103,14 +103,10 @@ let rec untag (e : 'a expr) : unit expr =
     that are all in ANF. *)
 let anf (e : tag expr) : unit expr =
   let rec anf_bindings bindings =                   
-    List.fold_left 
-    (fun b_anfs (x, expr, _) -> 
-         let b_anf = helpI expr in
-            b_anfs @ [(x, b_anf, ())]
-    )
-    [] bindings 
+    List.map (fun (x, expr, _) -> (x, helpI expr, ())) bindings 
   (* helpI: try to generate ANF without introducing new bindings. 
-       if new bindings are necessary, it calls helpC *)
+       if new bindings are necessary, it calls helpC and 
+       wraps the result of helpC in a new expression *)
   and helpI (expr : tag expr) : unit expr = 
     match expr with
     | EId(_, _) | ENumber(_, _)        ->  untag expr
@@ -132,16 +128,16 @@ let anf (e : tag expr) : unit expr =
         let (e_anf, e_ctxt) = helpC e in
         let temp = sprintf "$prim1_%d" tag in
           (EId(temp, ()), 
-           e_ctxt (* the context needed for the expression *)
+             e_ctxt (* the context needed for the expression *)
            @ [(temp, EPrim1(op, e_anf, ()), ())]) (* definition of the answer *)
     | EPrim2(op, e1, e2, tag)   ->  
         let (e1_anf, e1_ctxt) = helpC e1 in
         let (e2_anf, e2_ctxt) = helpC e2 in
         let temp = sprintf "$prim2_%d" tag in
           (EId(temp, ()), 
-           e1_ctxt (* the context needed for the left expression *)
+             e1_ctxt (* the context needed for the left expression *)
            @ e2_ctxt (* the context needed for the right expression *)
-                 @ [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
+           @ [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
     | ELet(binds, body, tag)    ->  
         let temp = sprintf "$let_%d" tag in
           (EId(temp, ()), [(temp, ELet(anf_bindings binds, helpI body, ()), ())]) 
