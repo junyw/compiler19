@@ -127,15 +127,14 @@ let anf (e : tag expr) : unit expr =
       that are all in ANF. *)
   and helpC (expr : tag expr) : (unit expr * (string * unit expr * unit) list) =
     match expr with
-    | EId(x, _)          -> (untag expr, [])
-    | ENumber(n, _)      -> (untag expr, [])
-    | EPrim1(op, e, tag) -> 
+    | EId(_, _) | ENumber(_, _) -> (untag expr, [])
+    | EPrim1(op, e, tag)        -> 
         let (e_anf, e_ctxt) = helpC e in
         let temp = sprintf "$prim1_%d" tag in
           (EId(temp, ()), 
            e_ctxt (* the context needed for the expression *)
            @ [(temp, EPrim1(op, e_anf, ()), ())]) (* definition of the answer *)
-    | EPrim2(op, e1, e2, tag) ->  
+    | EPrim2(op, e1, e2, tag)   ->  
         let (e1_anf, e1_ctxt) = helpC e1 in
         let (e2_anf, e2_ctxt) = helpC e2 in
         let temp = sprintf "$prim2_%d" tag in
@@ -143,10 +142,10 @@ let anf (e : tag expr) : unit expr =
            e1_ctxt (* the context needed for the left expression *)
            @ e2_ctxt (* the context needed for the right expression *)
                  @ [(temp, EPrim2(op, e1_anf, e2_anf, ()), ())]) (* definition of the answer *)
-    | ELet(binds, body, tag)   ->  
+    | ELet(binds, body, tag)    ->  
         let temp = sprintf "$let_%d" tag in
           (EId(temp, ()), [(temp, ELet(anf_bindings binds, helpI body, ()), ())]) 
-    | EIf(cond, thn, els, tag) -> 
+    | EIf(cond, thn, els, tag)  -> 
         let temp = sprintf "$if_%d" tag in
           (EId(temp, ()), [(temp, EIf(helpI cond, helpI thn, helpI els, ()), ())])
   in 
