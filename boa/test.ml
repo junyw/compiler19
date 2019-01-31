@@ -154,6 +154,7 @@ let let_tests = [
   t "let_15" {| let x = 2 in
                   let y = if sub1(x): x else: 0 in x |} "2";
   t "let_16" {| let x = 1, y = 2, z = if x: 3 else: 4 in z |} "3";
+  t "let_17" {| let x = (let y = 2 in y) in x |} "2";
 ];;
 let if_tests = [
   t "if_1" "if 5: 4 else: 2" "4";  
@@ -192,6 +193,7 @@ let if_tests = [
                else: (if (let y = 2 in y * 2) - 4: 0 else: 10) |} "10"; 
   t "if_23" {| (if (let x = 2 in x) - 2: 0 
                 else: (if (let y = 2 in y * 2) - 4: 0 else: 10)) * 2 - 8 |} "12";
+  t "if_24" {| if (let x = 1 in x): (let x = 2 in x) else: (let x = 3 in x) |} "2";
 ];;
 
 let binding_errors = [
