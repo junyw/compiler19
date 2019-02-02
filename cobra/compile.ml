@@ -269,7 +269,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      | Sub1  -> [ IMov(Reg(EAX), e_reg); 
                   IAdd(Reg(EAX), Const(~-1 lsl 1));
                 ] (* TODO: FIX *)
-     | Print -> [ IPush(e_reg); 
+     | Print -> [ IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
                   IAdd(Reg(ESP), Const(1 * 4));
                 ]
@@ -292,14 +292,32 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
   | EPrim2(op, e1, e2, _) ->     
      let e1_reg = compile_imm e1 env in
      let e2_reg = compile_imm e2 env in
-     begin match op with
+     begin match op with (* TODO *)
      | Plus  -> [ IMov(Reg(EAX), e1_reg); IAdd(Reg(EAX), e2_reg) ]
      | Minus -> [ IMov(Reg(EAX), e1_reg); ISub(Reg(EAX), e2_reg) ]
-     | Times -> [ IMov(Reg(EAX), e1_reg); IMul(Reg(EAX), e2_reg) ]
+     | Times -> 
+        [ IMov(Reg(EAX), e1_reg); 
+          IMul(Reg(EAX), e2_reg);
+          ISar(Reg(EAX), Const(1));
+        ]
      | And   -> [ IMov(Reg(EAX), e1_reg); IAnd(Reg(EAX), e2_reg) ]
      | Or    -> [ IMov(Reg(EAX), e1_reg); IOr(Reg(EAX),  e2_reg) ]
-     | Greater
-     | GreaterEq -> failwith "prim2 not implemented"
+     | Greater ->
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), Const(0xFFFFFFFF));
+          IJg("done");
+          IMov(Reg(EAX), Const(0x7FFFFFFF));
+          ILabel("done");
+        ]
+     | GreaterEq ->
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), Const(0xFFFFFFFF));
+          IJge("done");
+          IMov(Reg(EAX), Const(0x7FFFFFFF));
+          ILabel("done");
+        ]
      | Less  -> 
         [ IMov(Reg(EAX), e1_reg);
           ICmp(Reg(EAX), e2_reg);
@@ -308,10 +326,32 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           IMov(Reg(EAX), Const(0x7FFFFFFF));
           ILabel("done");
         ]
-     | LessEq
-     | Eq   -> failwith "prim2 not implemented"
+     | LessEq ->
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), Const(0xFFFFFFFF));
+          IJle("done");
+          IMov(Reg(EAX), Const(0x7FFFFFFF));
+          ILabel("done");
+        ]
+     | Eq   -> 
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), Const(0xFFFFFFFF));
+          IJe("done");
+          IMov(Reg(EAX), Const(0x7FFFFFFF));
+          ILabel("done");
+        ]
      end
-  | EIf _ -> failwith "Fill in here"
+  | EIf(cond, thn, els, tag) -> (* TODO *)
+    let else_label = sprintf "if_false_%d" tag in
+    let done_label = sprintf "done_%d" tag in
+      ( compile_expr cond si env )
+      @ [ ICmp(Reg(EAX), Const(0)); IJe(else_label) ]
+      @ ( compile_expr thn si env )
+      @ [ IJmp(done_label); ILabel(else_label) ]
+      @ ( compile_expr els si env )
+      @ [ ILabel(done_label) ]
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EBool(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EId(x, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
@@ -330,6 +370,7 @@ and compile_imm (e : tag expr) (env : (string * int) list) : arg =
 ;;
 
 let compile_anf_to_string (anfed : tag expr) : string =
+  let n = (count_vars anfed) + 1 in
   let prelude =
     "section .text
 extern error
@@ -339,13 +380,12 @@ global our_code_starts_here" in
       (* instructions for setting up stack here *)
       (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
          where N is the greatest number of variables we need at once*)
-      (*IPush(Reg(EBP));*)
       ILabel("our_code_starts_here");
       IMov(Reg(EBP), Reg(ESP));
-      ISub(Reg(ESP), Const(10*4));
+      ISub(Reg(ESP), Const(4*n));
     ] in
   let postlude = [
-      IAdd(Reg(ESP), Const(10*4));
+      IAdd(Reg(ESP), Const(4*n));
       IRet
       (* FILL: insert instructions for cleaning up stack, and maybe
        some labels for jumping to errors, here *) ] in
@@ -361,5 +401,6 @@ let compile_to_string (prog : 'a expr) =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
+  (* printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
   compile_anf_to_string anfed
 

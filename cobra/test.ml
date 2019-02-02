@@ -23,8 +23,14 @@ let number_tests = [
   t "number_1" "41" "41";
   t "number_2" "0" "0";
   t "number_3" "-41" "-41";
-
   (* More tests here *)
+];;
+let arithmetic_tests = [
+  t "arith_1" "1 + 2" "3";
+  t "arith_2" "1 - 2" "-1";
+  t "arith_3" "1 * 2" "2";
+  t "arith_4" "-1 * 2" "-2";
+  t "arith_5" "12 * 34" "408";
 ];;
 let boolean_tests = [
   t "boolean_1" "false" "false";
@@ -51,23 +57,47 @@ let prim2_tests = [
 	t "or_2" "true || false" "true";
 	t "or_3" "false || true" "true";
 	t "or_4" "false || false" "false";
+    t "greater_1" "2 > 1" "true";
+    t "greater_2" "2 > 3" "false";
+    t "greaterEq_1" "2 >= 1" "true";
+    t "greaterEq_2" "0 >= 1" "false";
+    t "greaterEq_3" "1 >= 1" "true";
+    t "greaterEq_4" "-1 >= -1" "true";
     t "less_1" "1 < 2" "true";
     t "less_2" "1 < 0" "false";
-
+    t "lessEq_1" "1 <= 2" "true";
+    t "lessEq_2" "1 <= 0" "false";
+    t "lessEq_3" "1 <= 1" "true";
+    t "lessEq_4" "-1 <= -1" "true";
+    t "eq_1" "1 == 1" "true";
+    t "eq_2" "1 == 0" "false";
+    t "eq_3" "-1 == -1" "true";
 ];;
 
 let print_tests = [
 	t "print_1" "print(41)" "41\n41";
 	t "print_2" "print(true)" "true\ntrue";
+	t "print_3" {| let x = 1 in
+                       let y = print(x + 1) in
+                           print(y + 2) |}
+    "2\n4\n4";
+
+];;
+
+let if_tests = [
+	t "if_1" "if true: 1 else: 2" "1";
+	t "if_error_1" "if 54: true else: false" "should be error";
 
 ];;
 
 let all_tests = 
   number_tests @
+  arithmetic_tests @
   boolean_tests @
   prim1_tests @
   prim2_tests @
-  print_tests
+  print_tests @
+  if_tests
 ;;
 
 let suite =
