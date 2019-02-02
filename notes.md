@@ -204,6 +204,7 @@ Calling steps:
 Caller: 
 - set up arguments (use `push` instruction, `push EAX`)
 - set up the return address (`call` instruction does this)
+
 Callee: 
 - push the value of EBP to stack (save the EBP value the caller is using)
 - save ESP to EBP
@@ -223,6 +224,7 @@ callee:
 - restore ESP from EBP
 - pop saved EBP from stack
 - return
+
 caller:
 - pop off arguments (use the `add` instruction, e.g. `add ESP 4`)
 

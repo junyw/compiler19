@@ -260,8 +260,57 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      prelude
      @ [ IMov(RegOffset(~-si, EBP), Reg(EAX)) ]
      @ body
-  | EPrim1 _ -> failwith "Fill in here"
-  | EPrim2 _ -> failwith "Fill in here"
+  | EPrim1(op, e, _) -> 
+     let e_reg = compile_imm e env in
+     begin match op with
+     | Add1  -> [ IMov(Reg(EAX), e_reg); 
+                 IAdd(Reg(EAX), Const(1 lsl 1));  
+                ] (* TODO: FIX *)
+     | Sub1  -> [ IMov(Reg(EAX), e_reg); 
+                  IAdd(Reg(EAX), Const(~-1 lsl 1));
+                ] (* TODO: FIX *)
+     | Print -> [ IPush(e_reg); 
+                  ICall("print");
+                  IAdd(Reg(ESP), Const(1 * 4));
+                ]
+     | IsBool(* -> [ IMov(Reg(EAX), e_reg); ICmp(Reg(EAX))]*)
+     | IsNum -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), Const(0x00000001)); 
+          ICmp(Reg(EAX), Const(0));
+          IMov(Reg(EAX), Const(0xFFFFFFFF));
+          IJe("done");
+          IMov(Reg(EAX), Const(0x7FFFFFFF));
+          ILabel("done");
+        ];
+      | Not  ->
+        [ IMov(Reg(EAX), e_reg);
+          IXor(Reg(EAX), Const(0x80000000));
+        ]
+     | PrintStack -> failwith "eprim1 not implemented"
+     end
+  | EPrim2(op, e1, e2, _) ->     
+     let e1_reg = compile_imm e1 env in
+     let e2_reg = compile_imm e2 env in
+     begin match op with
+     | Plus  -> [ IMov(Reg(EAX), e1_reg); IAdd(Reg(EAX), e2_reg) ]
+     | Minus -> [ IMov(Reg(EAX), e1_reg); ISub(Reg(EAX), e2_reg) ]
+     | Times -> [ IMov(Reg(EAX), e1_reg); IMul(Reg(EAX), e2_reg) ]
+     | And   -> [ IMov(Reg(EAX), e1_reg); IAnd(Reg(EAX), e2_reg) ]
+     | Or    -> [ IMov(Reg(EAX), e1_reg); IOr(Reg(EAX),  e2_reg) ]
+     | Greater
+     | GreaterEq -> failwith "prim2 not implemented"
+     | Less  -> 
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), Const(0xFFFFFFFF));
+          IJl("done");
+          IMov(Reg(EAX), Const(0x7FFFFFFF));
+          ILabel("done");
+        ]
+     | LessEq
+     | Eq   -> failwith "prim2 not implemented"
+     end
   | EIf _ -> failwith "Fill in here"
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EBool(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
@@ -273,9 +322,9 @@ and compile_imm (e : tag expr) (env : (string * int) list) : arg =
      if n > 1073741823 || n < -1073741824 then
        failwith ("Compile-time integer overflow: " ^ (string_of_int n))
      else
-       failwith "Fill in here"
-  | EBool(true, _) -> failwith "Fill in here"
-  | EBool(false, _) -> failwith "Fill in here"
+       Const(n lsl 1)
+  | EBool(true, _) -> Const(0xFFFFFFFF)
+  | EBool(false, _) -> Const(0x7FFFFFFF)
   | EId(x, _) -> RegOffset(~-(find env x), EBP)
   | _ -> failwith "Impossible: not an immediate"
 ;;
@@ -287,9 +336,16 @@ extern error
 extern print
 global our_code_starts_here" in
   let stack_setup = [
-      (* FILL: insert instructions for setting up stack here *)
+      (* instructions for setting up stack here *)
+      (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
+         where N is the greatest number of variables we need at once*)
+      (*IPush(Reg(EBP));*)
+      ILabel("our_code_starts_here");
+      IMov(Reg(EBP), Reg(ESP));
+      ISub(Reg(ESP), Const(10*4));
     ] in
   let postlude = [
+      IAdd(Reg(ESP), Const(10*4));
       IRet
       (* FILL: insert instructions for cleaning up stack, and maybe
        some labels for jumping to errors, here *) ] in
