@@ -1,0 +1,38 @@
+UNAME := $(shell uname)
+ifeq ($(UNAME), Linux)
+  FORMAT=aout
+else
+ifeq ($(UNAME), Darwin)
+  FORMAT=macho
+endif
+endif
+
+PKGS=oUnit,extlib,unix
+BUILD=ocamlbuild -r -use-ocamlfind
+
+main: *.ml parser.mly lexer.mll
+	$(BUILD) -package $(PKGS) main.native
+	mv main.native main
+
+test: *.ml parser.mly lexer.mll
+	$(BUILD) -package $(PKGS) test.native
+	mv test.native test
+
+.INTERMEDIATE: main.o
+main.o: main.c
+	clang -g -m32 -c main.c
+
+output/%.run: output/%.o main.o
+	clang -g -m32 -o $@ main.o $<
+
+output/%.o: output/%.s
+	nasm -f $(FORMAT) -o $@ $<
+
+.PRECIOUS: output/%.s
+output/%.s: input/%.cobra main
+	./main $< > $@
+
+clean:
+	rm -rf output/*.o output/*.s output/*.dSYM output/*.run *.log
+	rm -rf _build/
+	rm -f main test main.o
