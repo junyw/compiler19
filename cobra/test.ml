@@ -26,11 +26,18 @@ let number_tests = [
   (* More tests here *)
 ];;
 let arithmetic_tests = [
-  t "arith_1" "1 + 2" "3";
-  t "arith_2" "1 - 2" "-1";
+  t "plus_1" "1 + 2" "3";
+  t "plus_2" "11 + 23" "34";
+  t "minus_2" "1 - 2" "-1";
   t "arith_3" "1 * 2" "2";
   t "arith_4" "-1 * 2" "-2";
   t "arith_5" "12 * 34" "408";
+  (* errors *)
+  te "plus_error_1" "true + 1" "Error: arithmetic expected a number";
+  te "plus_error_2" "1 + true" "Error: arithmetic expected a number";
+  te "minus_error_1" "false - 1" "Error: arithmetic expected a number";
+  te "minus_error_2" "1 - false" "Error: arithmetic expected a number";
+
 ];;
 let boolean_tests = [
   t "boolean_1" "false" "false";
@@ -46,6 +53,9 @@ let prim1_tests = [
 	t "isnum_2" "isnum(true)" "false";
 	t "not_1" "!(true)" "false";
 	t "not_2" "!(false)" "true";
+	(* errors *)
+	te "add1_error" "add1(true)" "Error: arithmetic expected a number";
+	te "sub1_error" "sub1(false)" "Error: arithmetic expected a number";
 
 ];;
 let prim2_tests = [
@@ -70,8 +80,12 @@ let prim2_tests = [
     t "lessEq_3" "1 <= 1" "true";
     t "lessEq_4" "-1 <= -1" "true";
     t "eq_1" "1 == 1" "true";
-    t "eq_2" "1 == 0" "false";
+    t "eq_2" "1 == 0" "false";  
     t "eq_3" "-1 == -1" "true";
+	(* errors *)
+	te "greater_error_1" "true > 1" "Error: comparison expected a number";
+	te "greater_error_2" "1 > false" "Error: comparison expected a number";
+
 ];;
 
 let print_tests = [
@@ -86,7 +100,7 @@ let print_tests = [
 
 let if_tests = [
 	t "if_1" "if true: 1 else: 2" "1";
-	t "if_error_1" "if 54: true else: false" "should be error";
+	(*t "if_error_1" "if 54: true else: false" "should be error";*)
 
 ];;
 
