@@ -227,7 +227,7 @@ let rec i_to_asm (i : instruction) : string =
   | ITest(arg, comp) ->
      sprintf "  test %s, %s" (arg_to_asm arg) (arg_to_asm comp)
   | ILineComment(str) ->
-     sprintf "  ;; %s" str
+     sprintf "  ;;%s" str
   | IInstrComment(instr, str) ->
      sprintf "%s ; %s" (i_to_asm instr) str
 
@@ -257,7 +257,8 @@ let const_false = Const(0x7FFFFFFF);;
 
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
   let assert_num (e_reg : arg) (error : string) =
-    [ IMov(Reg(EAX), e_reg);
+    [ ILineComment("assert_num");
+      IMov(Reg(EAX), e_reg);
       ITest(Reg(EAX), Const(0x00000001));
       IJnz(error);
     ]
@@ -408,14 +409,14 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
   | EIf(cond, thn, els, tag) -> 
     let else_label = sprintf "if_false_%d" tag in
     let done_label = sprintf "done_%d" tag in
-        compile_expr cond (si + 1) env
+        compile_expr cond si env
       @ assert_bool' "err_if_not_boolean"
       @ [ ICmp(Reg(EAX), const_false); 
           IJe(else_label) ]
-      @ compile_expr thn (si + 1) env
+      @ compile_expr thn si env
       @ [ IJmp(done_label); 
           ILabel(else_label) ]
-      @ compile_expr els (si + 1) env
+      @ compile_expr els si env
       @ [ ILabel(done_label) ]
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
   | EBool(n, _)   -> [ IMov(Reg(EAX), compile_imm e env) ]
@@ -453,21 +454,31 @@ global our_code_starts_here" in
       IAdd(Reg(ESP), Const(4*n));
       IRet;
       (* error handling *)
+      ILineComment("error handling");
+
       ILabel("err_arith_not_num");
       IPush(Const(1)); (* push error code *)
       ICall("error");
-      
+      IAdd(Reg(ESP), Const(1*4));
+      IRet;
+
       ILabel("err_comparison_not_num");
       IPush(Const(2));
       ICall("error");
-      
+      IAdd(Reg(ESP), Const(1*4));
+      IRet;
+
       ILabel("err_if_not_boolean");
-      IPush(Const(3)); (* push error code *)
+      IPush(Const(3));
       ICall("error");
+      IAdd(Reg(ESP), Const(1*4));
+      IRet;
 
       ILabel("logic_if_not_boolean");
-      IPush(Const(4)); (* push error code *)
+      IPush(Const(4)); 
       ICall("error");
+      IAdd(Reg(ESP), Const(1*4));
+      IRet;
 
     ] in
   let body = (compile_expr anfed 1 []) in

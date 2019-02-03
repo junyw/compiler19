@@ -101,7 +101,7 @@ let print_tests = [
                        let y = print(x + 1) in
                            print(y + 2) |}
     "2\n4\n4";
-    (*t "print_4" "let x = (1 == 2) in print(x)" "false";*)
+    t "print_4" "let x = (1 == 2) in print(x)" "false";
     (*t "print_5" "print(1 == 2)" "false";*)
 ];;
 
@@ -115,7 +115,7 @@ let if_tests = [
    	(* errors *)
 	te "if_error_1" "if 54: true else: false" "Error: if expected a boolean";
     (*te "if_error_2" "let x = 1 in (if x: true else: false)" "Error: if expected a boolean";*)
-	(*te "if_error_2" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";*)
+	(*te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";*)
 ];;
 
 let all_tests = 
