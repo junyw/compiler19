@@ -12,6 +12,8 @@ const int BOOL_FALSE = 0x7FFFFFFF; // as chosen in compile.ml
 
 const int E_ARITH_NOT_INT = 1;
 const int E_COMPARISON_NOT_INT = 2;
+const int E_IF_NOT_BOOL = 3;
+const int E_LOGIC_NOT_BOOL = 4;
 
 int print(int val) {
   if ((val & BOOL_TAG) == 0) { // val is even ==> number
@@ -31,6 +33,12 @@ void error(int errCode) {
     exit(1);
   } else if(errCode == E_COMPARISON_NOT_INT) {
     fprintf(stderr, "Error: comparison expected a number");
+    exit(1);
+  } else if(errCode == E_IF_NOT_BOOL) {
+    fprintf(stderr, "Error: if expected a boolean");
+    exit(1);
+  } else if(errCode == E_LOGIC_NOT_BOOL) {
+    fprintf(stderr, "Error: logic expected a boolean");
     exit(1);
   } else {
     fprintf(stderr, "Error: unknown error");

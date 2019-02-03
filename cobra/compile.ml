@@ -261,6 +261,17 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
       ITest(Reg(EAX), Const(0x00000001));
       IJnz(error);
     ]
+  (* check the value in EAX is boolean *)
+  and assert_bool' (error : string) =
+    [ IXor(Reg(EAX), Const(0x7FFFFFFF));
+      ITest(Reg(EAX), Const(0x7FFFFFFF));
+      IJnz(error);
+      IXor(Reg(EAX), Const(0x7FFFFFFF));
+    ]
+  in 
+  let assert_bool (e_reg : arg) (error : string) =
+      [ IMov(Reg(EAX), e_reg); ]
+    @ assert_bool' error
   in
   match e with
   | ELet([id, e, _], body, _) ->
@@ -283,10 +294,18 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
                 ] 
      | Print -> [ IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
-                  IAdd(Reg(ESP), Const(1 * 4));
+                  IAdd(Reg(ESP), Const(1*4));
                 ]
-     | IsBool(* -> [ IMov(Reg(EAX), e_reg); ICmp(Reg(EAX))]*)
-     | IsNum -> 
+     | IsBool -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), Const(0x7FFFFFFF));
+          ICmp(Reg(EAX), Const(0x7FFFFFFF));
+          IMov(Reg(EAX), const_true);
+          IJe(done_label);
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ]
+     | IsNum  -> 
         [ IMov(Reg(EAX), e_reg); 
           IAnd(Reg(EAX), Const(0x00000001)); 
           ICmp(Reg(EAX), Const(0));
@@ -313,58 +332,70 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           IAdd(Reg(EAX), e2_reg);
         ]
      | Minus -> 
-        assert_num e1_reg "err_arith_not_num" @
-        assert_num e2_reg "err_arith_not_num" @
-        [ IMov(Reg(EAX), e1_reg); 
-          ISub(Reg(EAX), e2_reg);
-        ]
+          assert_num e1_reg "err_arith_not_num"
+        @ assert_num e2_reg "err_arith_not_num"
+        @ [ IMov(Reg(EAX), e1_reg); 
+            ISub(Reg(EAX), e2_reg);
+          ]
      | Times -> 
-        [ IMov(Reg(EAX), e1_reg); 
-          IMul(Reg(EAX), e2_reg);
-          ISar(Reg(EAX), Const(1));
-        ]
+          assert_num e1_reg "err_arith_not_num"
+        @ assert_num e2_reg "err_arith_not_num"
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IMul(Reg(EAX), e2_reg);
+            ISar(Reg(EAX), Const(1));
+          ]
      | And   -> 
-        [ IMov(Reg(EAX), e1_reg); 
-          IAnd(Reg(EAX), e2_reg); 
-        ]
+          assert_bool e1_reg "logic_if_not_boolean" 
+        @ assert_bool e2_reg "logic_if_not_boolean" 
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IAnd(Reg(EAX), e2_reg); 
+          ]
      | Or    -> 
-        [ IMov(Reg(EAX), e1_reg); 
-          IOr(Reg(EAX),  e2_reg);
-        ]
+          assert_bool e1_reg "logic_if_not_boolean" 
+        @ assert_bool e2_reg "logic_if_not_boolean" 
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IOr(Reg(EAX),  e2_reg);
+          ]
      | Greater ->
-        assert_num e1_reg "err_comparison_not_num" @
-        assert_num e2_reg "err_comparison_not_num" @
-        [ IMov(Reg(EAX), e1_reg);
-          ICmp(Reg(EAX), e2_reg);
-          IMov(Reg(EAX), const_true);
-          IJg(done_label);
-          IMov(Reg(EAX), const_false);
-          ILabel(done_label);
-        ]
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJg(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
      | GreaterEq ->
-        [ IMov(Reg(EAX), e1_reg);
-          ICmp(Reg(EAX), e2_reg);
-          IMov(Reg(EAX), const_true);
-          IJge(done_label);
-          IMov(Reg(EAX), const_false);
-          ILabel(done_label);
-        ]
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJge(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
      | Less  -> 
-        [ IMov(Reg(EAX), e1_reg);
-          ICmp(Reg(EAX), e2_reg);
-          IMov(Reg(EAX), const_true);
-          IJl(done_label);
-          IMov(Reg(EAX), const_false);
-          ILabel(done_label);
-        ]
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJl(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
      | LessEq ->
-        [ IMov(Reg(EAX), e1_reg);
-          ICmp(Reg(EAX), e2_reg);
-          IMov(Reg(EAX), const_true);
-          IJle(done_label);
-          IMov(Reg(EAX), const_false);
-          ILabel(done_label);
-        ]
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJle(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
      | Eq   -> 
         [ IMov(Reg(EAX), e1_reg);
           ICmp(Reg(EAX), e2_reg);
@@ -374,18 +405,21 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           ILabel(done_label);
         ]
      end
-  | EIf(cond, thn, els, tag) -> (* TODO *)
+  | EIf(cond, thn, els, tag) -> 
     let else_label = sprintf "if_false_%d" tag in
     let done_label = sprintf "done_%d" tag in
-      ( compile_expr cond si env )
-      @ [ ICmp(Reg(EAX), Const(0)); IJe(else_label) ]
-      @ ( compile_expr thn si env )
-      @ [ IJmp(done_label); ILabel(else_label) ]
-      @ ( compile_expr els si env )
+        compile_expr cond (si + 1) env
+      @ assert_bool' "err_if_not_boolean"
+      @ [ ICmp(Reg(EAX), const_false); 
+          IJe(else_label) ]
+      @ compile_expr thn (si + 1) env
+      @ [ IJmp(done_label); 
+          ILabel(else_label) ]
+      @ compile_expr els (si + 1) env
       @ [ ILabel(done_label) ]
   | ENumber(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
-  | EBool(n, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
-  | EId(x, _) -> [ IMov(Reg(EAX), compile_imm e env) ]
+  | EBool(n, _)   -> [ IMov(Reg(EAX), compile_imm e env) ]
+  | EId(x, _)     -> [ IMov(Reg(EAX), compile_imm e env) ]
   | _ -> failwith "Impossible: Not in ANF"
 and compile_imm (e : tag expr) (env : (string * int) list) : arg =
   match e with
@@ -426,6 +460,15 @@ global our_code_starts_here" in
       ILabel("err_comparison_not_num");
       IPush(Const(2));
       ICall("error");
+      
+      ILabel("err_if_not_boolean");
+      IPush(Const(3)); (* push error code *)
+      ICall("error");
+
+      ILabel("logic_if_not_boolean");
+      IPush(Const(4)); (* push error code *)
+      ICall("error");
+
     ] in
   let body = (compile_expr anfed 1 []) in
   let as_assembly_string = (to_asm (stack_setup @ body @ postlude)) in
