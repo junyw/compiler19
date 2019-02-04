@@ -256,21 +256,22 @@ let const_true = HexConst(0xFFFFFFFF) ;;
 let const_false = HexConst(0x7FFFFFFF);;
 
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
-  let assert_num (e_reg : arg) (error : string) =
+  let assert_num (e_reg : arg) (error : string) = 
     [ ILineComment("assert_num");
       IMov(Reg(EAX), e_reg);
-      ITest(Reg(EAX), Const(0x00000001));
+      ITest(Reg(EAX), HexConst(0x00000001));
       IJnz(error);
     ]
   (* check the value in EAX is boolean *)
   and assert_bool' (error : string) =
-    [ IXor(Reg(EAX), Const(0x7FFFFFFF));
-      ITest(Reg(EAX), Const(0x7FFFFFFF));
+    [ ILineComment("assert_bool");
+      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
       IJnz(error);
-      IXor(Reg(EAX), Const(0x7FFFFFFF));
+      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
     ]
   in 
-  let assert_bool (e_reg : arg) (error : string) =
+  let assert_bool (e_reg : arg) (error : string) = 
       [ IMov(Reg(EAX), e_reg); ]
     @ assert_bool' error
   in
@@ -293,7 +294,8 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
                 [ IMov(Reg(EAX), e_reg); 
                   IAdd(Reg(EAX), Const(~-1 lsl 1));
                 ] 
-     | Print -> [ IPush(Sized(DWORD_PTR, e_reg)); 
+     | Print -> [ ILineComment("calling c function");
+                  IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
                   IAdd(Reg(ESP), Const(1*4));
                 ]
@@ -436,7 +438,7 @@ and compile_imm (e : tag expr) (env : (string * int) list) : arg =
 ;;
 
 let compile_anf_to_string (anfed : tag expr) : string =
-  let n = (count_vars anfed) + 1 in
+  let n = (count_vars anfed) in (* TODO: fix *)
   let prelude =
     "section .text
 extern error
@@ -448,20 +450,23 @@ global our_code_starts_here" in
          where N is the greatest number of variables we need at once*)
       ILabel("our_code_starts_here");
       ILineComment("-----stack setup-----");
+      
+      IPush(Reg(EBP)); 
+      IMov(Reg(EBP), Reg(ESP)); 
+      ISub(Reg(ESP), Const(4*n)); (* TODO: 16-alignment *)
 
-      IMov(Reg(EBP), Reg(ESP));
-      ISub(Reg(ESP), Const(4*n));
       ILineComment("-----compiled code-----");
     ] in
   let postlude = [
       ILineComment("-----postlude-----");
 
-      IAdd(Reg(ESP), Const(4*n));
+      IMov(Reg(ESP), Reg(EBP)); 
+      IPop(Reg(EBP)); 
       IRet;
+      
       (* error handling *)
-
       ILabel("err_arith_not_num");
-      IPush(Const(1)); (* push error code *)
+      IPush(Const(1)); 
       IJmp("raise_error");
 
       ILabel("err_comparison_not_num");
@@ -478,6 +483,9 @@ global our_code_starts_here" in
       ILabel("raise_error");
       ICall("error");
       IAdd(Reg(ESP), Const(1*4));
+
+      IMov(Reg(ESP), Reg(EBP)); 
+      IPop(Reg(EBP)); 
       IRet;
 
     ] in
