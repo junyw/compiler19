@@ -95,14 +95,18 @@ let prim2_tests = [
 ];;
 
 let print_tests = [
-	t "print_1" "print(41)" "41\n41";
+(*	t "print_1" "print(41)" "41\n41";
 	t "print_2" "print(true)" "true\ntrue";
 	t "print_3" {| let x = 1 in
                        let y = print(x + 1) in
                            print(y + 2) |}
-    "2\n4\n4";
+    "2\n4\n4";*)
     t "print_4" "let x = (1 == 2) in print(x)" "false";
     (*t "print_5" "print(1 == 2)" "false";*)
+];;
+let let_tests = [
+	t "let_1" "let x = 1 in x" "1";
+	t "let_2" "let x = (1 == 2) in x" "false";
 ];;
 
 let if_tests = [
@@ -119,13 +123,17 @@ let if_tests = [
 ];;
 
 let all_tests = 
-  number_tests @
+(*  number_tests @
   arithmetic_tests @
   boolean_tests @
   prim1_tests @
   prim2_tests @
   print_tests @
+  let_tests @
   if_tests
+*)
+  let_tests @
+  print_tests
 ;;
 
 let suite =

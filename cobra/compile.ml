@@ -252,8 +252,8 @@ let rec replicate (x : 'a) (i : int) : 'a list =
   if i = 0 then []
   else x :: (replicate x (i - 1))
 
-let const_true = Const(0xFFFFFFFF) ;;
-let const_false = Const(0x7FFFFFFF);;
+let const_true = HexConst(0xFFFFFFFF) ;;
+let const_false = HexConst(0x7FFFFFFF);;
 
 let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : instruction list =
   let assert_num (e_reg : arg) (error : string) =
@@ -447,35 +447,35 @@ global our_code_starts_here" in
       (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
          where N is the greatest number of variables we need at once*)
       ILabel("our_code_starts_here");
+      ILineComment("-----stack setup-----");
+
       IMov(Reg(EBP), Reg(ESP));
       ISub(Reg(ESP), Const(4*n));
+      ILineComment("-----compiled code-----");
     ] in
   let postlude = [
+      ILineComment("-----postlude-----");
+
       IAdd(Reg(ESP), Const(4*n));
       IRet;
       (* error handling *)
-      ILineComment("error handling");
 
       ILabel("err_arith_not_num");
       IPush(Const(1)); (* push error code *)
-      ICall("error");
-      IAdd(Reg(ESP), Const(1*4));
-      IRet;
+      IJmp("raise_error");
 
       ILabel("err_comparison_not_num");
       IPush(Const(2));
-      ICall("error");
-      IAdd(Reg(ESP), Const(1*4));
-      IRet;
+      IJmp("raise_error");
 
       ILabel("err_if_not_boolean");
       IPush(Const(3));
-      ICall("error");
-      IAdd(Reg(ESP), Const(1*4));
-      IRet;
+      IJmp("raise_error");
 
       ILabel("logic_if_not_boolean");
       IPush(Const(4)); 
+      
+      ILabel("raise_error");
       ICall("error");
       IAdd(Reg(ESP), Const(1*4));
       IRet;
@@ -493,6 +493,6 @@ let compile_to_string (prog : 'a expr) =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
-  (* printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
+  printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
   compile_anf_to_string anfed
 
