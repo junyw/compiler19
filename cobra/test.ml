@@ -121,6 +121,17 @@ let print_tests = [
 let let_tests = [
 	t "let_1" "let x = 1 in x" "1";
 	t "let_2" "let x = (1 == 2) in x" "false";
+    t "let_3"  
+    {| let x = true in
+           let y = !(x) && x in
+               y
+    |} "false";
+    t "let_4" 
+    {| let x = 10 in
+           let y = (if x >= (5 + 4): x + 3 else: false) in 
+               isnum(x) && isnum(y)
+    |} "true";
+
 ];;
 
 let if_tests = [
