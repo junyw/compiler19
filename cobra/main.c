@@ -4,7 +4,7 @@
 
 extern int our_code_starts_here() asm("our_code_starts_here");
 extern int print(int val) asm("print");
-extern void error(int errCode) asm("error");
+extern void error(int errCode, int val) asm("error");
 
 const int BOOL_TAG   = 0x00000001;
 const int BOOL_TRUE  = 0xFFFFFFFF; // These must be the same values
@@ -14,6 +14,7 @@ const int E_ARITH_NOT_INT = 1;
 const int E_COMPARISON_NOT_INT = 2;
 const int E_IF_NOT_BOOL = 3;
 const int E_LOGIC_NOT_BOOL = 4;
+const int E_ARITH_OVERFLOW = 5;
 
 int print(int val) {
   if ((val & BOOL_TAG) == 0) { // val is even ==> number
@@ -27,20 +28,23 @@ int print(int val) {
   }
   return val;
 }
-void error(int errCode) {
+void error(int errCode, int val) {
   if(errCode == E_ARITH_NOT_INT) {
-    fprintf(stderr, "Error: arithmetic expected a number");
+    fprintf(stderr, "Error: arithmetic expected a number, but got %010x\n", val);
     exit(1);
   } else if(errCode == E_COMPARISON_NOT_INT) {
-    fprintf(stderr, "Error: comparison expected a number");
+    fprintf(stderr, "Error: comparison expected a number, but got %010x\n", val);
     exit(1);
   } else if(errCode == E_IF_NOT_BOOL) {
-    fprintf(stderr, "Error: if expected a boolean");
+    fprintf(stderr, "Error: if expected a boolean, but got %d\n", val >> 1);
     exit(1);
   } else if(errCode == E_LOGIC_NOT_BOOL) {
-    fprintf(stderr, "Error: logic expected a boolean");
+    fprintf(stderr, "Error: logic expected a boolean, but got %d\n", val >> 1);
     exit(1);
-  } else {
+  } else if(errCode == E_ARITH_OVERFLOW) {
+    fprintf(stderr, "Error: Integer overflow\n");
+    exit(1);
+  }else {
     fprintf(stderr, "Error: unknown error");
     exit(1);
   }

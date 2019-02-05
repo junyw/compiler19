@@ -264,7 +264,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
     ]
   (* check the value in EAX is boolean *)
   and assert_bool' (error : string) =
-    [ ILineComment("assert_bool");
+    [ ILineComment("assert_bool'");
       IXor(Reg(EAX), HexConst(0x7FFFFFFF));
       ITest(Reg(EAX), HexConst(0x7FFFFFFF));
       IJnz(error);
@@ -272,8 +272,13 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
     ]
   in 
   let assert_bool (e_reg : arg) (error : string) = 
-      [ IMov(Reg(EAX), e_reg); ]
-    @ assert_bool' error
+    [ ILineComment("assert_bool");
+      IMov(Reg(EAX), e_reg); 
+      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
+      IMov(Reg(EAX), e_reg); 
+      IJnz(error);
+    ]
   in
   match e with
   | ELet([id, e, _], body, _) ->
@@ -288,17 +293,22 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
      begin match op with
      | Add1  -> assert_num e_reg "err_arith_not_num" @
                 [ IMov(Reg(EAX), e_reg);
-                  IAdd(Reg(EAX), Const(1 lsl 1));  
+                  IAdd(Reg(EAX), Const(1 lsl 1)); 
+                  (* check overflow *) 
+                  IJo("err_arith_overflow");
                 ] 
      | Sub1  -> assert_num e_reg "err_arith_not_num" @
                 [ IMov(Reg(EAX), e_reg); 
                   IAdd(Reg(EAX), Const(~-1 lsl 1));
+                  (* check overflow *) 
+                  IJo("err_arith_overflow");
                 ] 
      | Print -> [ ILineComment("calling c function");
-                  IPush(Sized(DWORD_PTR, Const(0))); (* ? *)
+                  IPush(Sized(DWORD_PTR, Const(0)));
+                  IPush(Sized(DWORD_PTR, Const(0)));
                   IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
-                  IAdd(Reg(ESP), Const(2*4));
+                  IAdd(Reg(ESP), Const(3*4));
                 ]
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
@@ -334,19 +344,26 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
         assert_num e2_reg "err_arith_not_num" @
         [ IMov(Reg(EAX), e1_reg); 
           IAdd(Reg(EAX), e2_reg);
+          (* check overflow *) 
+          IJo("err_arith_overflow");
+
         ]
      | Minus -> 
           assert_num e1_reg "err_arith_not_num"
         @ assert_num e2_reg "err_arith_not_num"
         @ [ IMov(Reg(EAX), e1_reg); 
             ISub(Reg(EAX), e2_reg);
+            (* check overflow *) 
+            IJo("err_arith_overflow");
           ]
      | Times -> 
           assert_num e1_reg "err_arith_not_num"
         @ assert_num e2_reg "err_arith_not_num"
         @ [ IMov(Reg(EAX), e1_reg); 
-            IMul(Reg(EAX), e2_reg);
             ISar(Reg(EAX), Const(1));
+            IMul(Reg(EAX), e2_reg);
+            (* check overflow *) 
+            IJo("err_arith_overflow");
           ]
      | And   -> 
           assert_bool e1_reg "logic_if_not_boolean" 
@@ -452,9 +469,8 @@ global our_code_starts_here" in
       ILabel("our_code_starts_here");
       ILineComment("-----stack setup-----");
       
-      IPush(Reg(EBP)); 
       IMov(Reg(EBP), Reg(ESP)); 
-      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* TODO: 16-alignment *)
+      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
 
       ILineComment("-----compiled code-----");
     ] in
@@ -462,37 +478,44 @@ global our_code_starts_here" in
       ILineComment("-----postlude-----");
 
       IMov(Reg(ESP), Reg(EBP)); 
-      IPop(Reg(EBP)); 
       IRet;
       
       (* error handling *)
       ILabel("err_arith_not_num");
       IPush(Const(0));
+      IPush(Reg(EAX));
       IPush(Const(1)); 
       IJmp("raise_error");
 
       ILabel("err_comparison_not_num");
       IPush(Const(0));
+      IPush(Reg(EAX));
       IPush(Const(2));
       IJmp("raise_error");
 
       ILabel("err_if_not_boolean");
       IPush(Const(0));
-
+      IPush(Reg(EAX));
       IPush(Const(3));
       IJmp("raise_error");
 
       ILabel("logic_if_not_boolean");
       IPush(Const(0));
-
+      IPush(Reg(EAX));
       IPush(Const(4)); 
-      
+      IJmp("raise_error");
+
+      ILabel("err_arith_overflow");
+      IPush(Const(0));
+      IPush(Reg(EAX));
+      IPush(Const(5)); 
+      IJmp("raise_error");
+
       ILabel("raise_error");
       ICall("error");
-      IAdd(Reg(ESP), Const(1*4));
+      IAdd(Reg(ESP), Const(3*4));
 
       IMov(Reg(ESP), Reg(EBP)); 
-      IPop(Reg(EBP)); 
       IRet;
 
     ] in
@@ -508,6 +531,6 @@ let compile_to_string (prog : 'a expr) =
   (* printf "Prog:\n%s\n" (ast_of_expr prog); *)
   (* printf "Tagged:\n%s\n" (format_expr tagged string_of_int); *)
   (* printf "ANFed/tagged:\n%s\n" (format_expr anfed string_of_int); *)
-  printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); 
+  (*printf "; Program in A-Normal Form: %s\n" (string_of_expr anfed); *)
   compile_anf_to_string anfed
 
