@@ -295,9 +295,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
                   IAdd(Reg(EAX), Const(~-1 lsl 1));
                 ] 
      | Print -> [ ILineComment("calling c function");
+                  IPush(Sized(DWORD_PTR, Const(0))); (* ? *)
                   IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
-                  IAdd(Reg(ESP), Const(1*4));
+                  IAdd(Reg(ESP), Const(2*4));
                 ]
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
@@ -453,7 +454,7 @@ global our_code_starts_here" in
       
       IPush(Reg(EBP)); 
       IMov(Reg(EBP), Reg(ESP)); 
-      ISub(Reg(ESP), Const(4*n)); (* TODO: 16-alignment *)
+      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* TODO: 16-alignment *)
 
       ILineComment("-----compiled code-----");
     ] in
@@ -466,18 +467,24 @@ global our_code_starts_here" in
       
       (* error handling *)
       ILabel("err_arith_not_num");
+      IPush(Const(0));
       IPush(Const(1)); 
       IJmp("raise_error");
 
       ILabel("err_comparison_not_num");
+      IPush(Const(0));
       IPush(Const(2));
       IJmp("raise_error");
 
       ILabel("err_if_not_boolean");
+      IPush(Const(0));
+
       IPush(Const(3));
       IJmp("raise_error");
 
       ILabel("logic_if_not_boolean");
+      IPush(Const(0));
+
       IPush(Const(4)); 
       
       ILabel("raise_error");
