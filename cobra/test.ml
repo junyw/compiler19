@@ -93,6 +93,7 @@ let prim2_tests = [
     t "eq_6" "true == 1" "false";
     t "eq_7" "let x = 1 in x == 1" "true";
     t "eq_8" "let x = true in x == (1 >= 1)" "true";
+    	
  	(* errors *)
 	te "logic_error_1" "1 && true" "Error: logic expected a boolean, but got 1";
 	te "logic_error_2" "false && 1" "Error: logic expected a boolean, but got 1";

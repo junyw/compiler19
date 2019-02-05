@@ -304,8 +304,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
                   IJo("err_arith_overflow");
                 ] 
      | Print -> [ ILineComment("calling c function");
-                  IPush(Sized(DWORD_PTR, Const(0)));
-                  IPush(Sized(DWORD_PTR, Const(0)));
+                  ISub(Reg(ESP), Const(8)); (* stack padding *)
                   IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
                   IAdd(Reg(ESP), Const(3*4));
@@ -366,14 +365,14 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
             IJo("err_arith_overflow");
           ]
      | And   -> 
-          assert_bool e1_reg "logic_if_not_boolean" 
-        @ assert_bool e2_reg "logic_if_not_boolean" 
+          assert_bool e1_reg "err_logic_not_boolean" 
+        @ assert_bool e2_reg "err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e1_reg); 
             IAnd(Reg(EAX), e2_reg); 
           ]
      | Or    -> 
-          assert_bool e1_reg "logic_if_not_boolean" 
-        @ assert_bool e2_reg "logic_if_not_boolean" 
+          assert_bool e1_reg "err_logic_not_boolean" 
+        @ assert_bool e2_reg "err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e1_reg); 
             IOr(Reg(EAX),  e2_reg);
           ]
@@ -499,7 +498,7 @@ global our_code_starts_here" in
       IPush(Const(3));
       IJmp("raise_error");
 
-      ILabel("logic_if_not_boolean");
+      ILabel("err_logic_not_boolean");
       IPush(Const(0));
       IPush(Reg(EAX));
       IPush(Const(4)); 
@@ -517,7 +516,6 @@ global our_code_starts_here" in
 
       IMov(Reg(ESP), Reg(EBP)); 
       IRet;
-
     ] in
   let body = (compile_expr anfed 1 []) in
   let as_assembly_string = (to_asm (stack_setup @ body @ postlude)) in
