@@ -150,6 +150,13 @@ let if_tests = [
   te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
 ];;
 
+let binding_errors = [
+  te "unbound_1" "let x = 1 in y" "Binding error";
+  te "unbound_2" "let x = 1, y = z in x" "Binding error";
+  te "redefined_1" "let x = 1, x = 2 in x" "Binding error";
+  te "redefined_2" "let x = 1 in let x = 2 in x" "Binding error";
+];;
+
 let all_tests = 
   number_tests @
   arithmetic_tests @
@@ -159,7 +166,8 @@ let all_tests =
   prim2_tests @
   print_tests @
   let_tests @
-  if_tests
+  if_tests @
+  binding_errors
 ;;
 
 let suite =
