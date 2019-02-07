@@ -328,9 +328,10 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
           ILabel(done_label);
         ];
       | Not  ->
-        [ IMov(Reg(EAX), e_reg);
-          IXor(Reg(EAX), Const(0x80000000));
-        ]
+          assert_bool e_reg "err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e_reg);
+            IXor(Reg(EAX), Const(0x80000000));
+          ]
      | PrintStack -> failwith "eprim1 not implemented"
      end
   | EPrim2(op, e1, e2, tag) ->     

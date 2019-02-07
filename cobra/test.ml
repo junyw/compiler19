@@ -61,6 +61,7 @@ let prim1_tests = [
   t "prim1_2" "let x = if 1 + 3 > 4: 10 else: false in isbool(x)" "true";
 
   (* errors *)
+  te "not_error_1" "!(3)" "Error: logic expected a boolean, but got 3";
   te "add1_error" "add1(true)" "Error: arithmetic expected a number";
   te "sub1_error" "sub1(false)" "Error: arithmetic expected a number";
 ];;
@@ -100,6 +101,7 @@ let prim2_tests = [
   te "logic_error_3" "10 || true" "Error: logic expected a boolean, but got 10";
   te "logic_error_4" "true || 0" "Error: logic expected a boolean, but got 0";
   te "logic_error_5" "1 || 2" "Error: logic expected a boolean, but got 1";
+
   te "compare_error_1" "true > 1" "Error: comparison expected a number";
   te "compare_error_2" "1 > false" "Error: comparison expected a number";
   te "compare_error_3" "1 >= false" "Error: comparison expected a number";
