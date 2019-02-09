@@ -1,5 +1,10 @@
 # compiler-sp19
 
+- [x] neonate
+- [x] adder
+- [x] boa
+- [x] cobra
+- [ ] diamond-back
 
 To run all tests
 ```bash
