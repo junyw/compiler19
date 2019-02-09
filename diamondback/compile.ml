@@ -353,14 +353,12 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     (* the label of the function declaration *)
     let tmp = sprintf "fun_dec_%s" fun_name in
     let num_of_args = List.length immexprs in
-    let stack_padding = match num_of_args with (* TODO *)
+    let stack_padding = match (num_of_args mod 4) with (* TODO *)
       | 0 -> 0
       | 1 -> 2
       | 2 -> 1
       | 3 -> 0
-      | 4 -> 0
-      | 5 -> 2
-      | _ -> failwith "stack_padding: to be calculated"
+      | _ -> failwith "stack_padding: impossible value"
     in
     let push_args = List.fold_right (fun imm_reg instrs -> 
         [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs

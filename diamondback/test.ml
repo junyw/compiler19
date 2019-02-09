@@ -92,58 +92,72 @@ let expr_tests = [
   te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
 ];;
 let function_tests = [
+t "fun_1" {|
+	def Max(x, y):
+	    if(x > y): x else: y
+	Max(1, 2) * Max(2, 1)
+|} "4";
 
+t "fun_2" {|
+	def NAND(a, b):
+		!(a && b)
+	def XOR(a, b):
+		NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
+	let a = print(XOR(true, true)) in 
+	let b = print(XOR(true, false)) in
+	let c = print(XOR(false, true)) in
+		print(XOR(false, false))
+|} "false\ntrue\ntrue\nfalse\nfalse";
+
+t "fun_3" {|
+	def q(x):
+		let a = 1, b = -1, c = -2 in
+			(a * x * x) + (b * x) + c
+	(q(0) == -2) && (q(-1) == 0) && (q(2) == 0)
+|} "true";
+
+];;
+
+let recursive_tests = [
+t "recursive_1" {| 
+    def factorial(n):
+		if (n == 0): 1 else: n * factorial(n - 1)
+	factorial(6) |} "720";
+t "recursive_2" {|
+	def fib(n):
+		if(n == 1): 1 
+	    else: 
+	    	if(n == 2): 1 
+	        else: fib(n - 1) + fib(n - 2)
+	fib(6) |} "8";
 ];;
 
 let arity_tests = [
 t "arity_0" {| def f():
                  10
                  f() |} "10";
-t "arity_1" {| def f(x):
-                 x
-             f(1)|} "1";
-t "arity_2" {| def f(x):
-                 x
-             f(1) + 1|} "2";
-t "arity_3" {| def f(x, y):
-                 x + y
-             f(1, 2)|} "3";
-t "arity_4" {| def f(x, y):
-                 x * x + y
-             f(1, 2)|} "3";
-t "arity_5" {| def f(x, y, z):
-                 x
-             f(1, 2, 3)|} "1";
-t "arity_6" {| def f(x, y, z):
-                 y
-             f(1, 2, 3)|} "2";
-t "arity_7" {| def f(x, y, z):
-                 z
-             f(1, 2, 3)|} "3";
-t "arity_8" {| def f(x, y, z):
+t "arity_1" {| def f(x, y, z):
                  (x * x) + (y * y) + (z * z)
              f(1, 2, 3)|} "14";
-t "arity_9" {| def f(a, b, c, d):
-                 a
-             f(1, 2, 3, 4)|} "1";
-t "arity_10" {| def f(a, b, c, d):
-                 b
-             f(1, 2, 3, 4)|} "2";
-t "arity_11" {| def f(a, b, c, d):
-                 c
-             f(1, 2, 3, 4)|} "3";
-t "arity_12" {| def f(a, b, c, d):
-                 d
-             f(1, 2, 3, 4)|} "4";
-t "arity_13" {| def f(a, b, c, d, e):
+t "arity_2" {| def f(a, b, c, d):
+                 (a * c) - (b * d) 
+             f(1, 2, 3, 4)|} "-5";
+t "arity_3" {| def f(a, b, c, d, e):
                  e
              f(1, 2, 3, 4, 5)|} "5";
+t "arity_4" {| def f(a, b, c, d, e, f):
+                 f
+             f(1, 2, 3, 4, 5, 6)|} "6";
+t "arity_5" {| def f(a, b, c, d, e, f, g):
+                 g
+             f(1, 2, 3, 4, 5, 6, 7)|} "7";
 
 ];;
 let all_tests = 
   (*expr_tests @*)
-  arity_tests @
-  function_tests
+  function_tests @
+  recursive_tests @
+  arity_tests
 ;;
 
 let suite =
