@@ -110,7 +110,15 @@ let anf (p : tag program) : unit aprogram =
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup)
     | EApp(funname, args, _) ->
-       raise (NotYetImplemented "Implement ANF conversion for function calls")
+       let (args_imm, args_setup) = 
+          List.fold_left
+          (fun (args_imm, args_setup) arg -> 
+            let (arg_imm, arg_setup) = helpI arg in 
+                (arg_imm::args_imm, arg_setup @ args_setup)
+          )
+          ([], []) args
+       in
+       (CApp(funname, args_imm, ()), args_setup)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * (string * unit cexpr) list) =
@@ -131,8 +139,17 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
-    | EApp(funname, args, tag) ->
-       raise (NotYetImplemented "Implement ANF conversion for function calls")
+    | EApp(funname, args, tag) -> 
+       let tmp = sprintf "app_%d" tag in
+       let (args_imm, args_setup) = 
+          List.fold_left
+          (fun (args_imm, args_setup) arg -> 
+            let (arg_imm, arg_setup) = helpI arg in 
+                (arg_imm::args_imm, arg_setup @ args_setup)
+          )
+          ([], []) args
+       in
+       (ImmId(tmp, ()), args_setup @ [(tmp, CApp(funname, args_imm, ()))])
     | ELet([], body, _) -> helpI body
     | ELet((bind, exp, _)::rest, body, pos) ->
        let (exp_ans, exp_setup) = helpC exp in
@@ -355,7 +372,17 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ILabel(done_label);
         ]
      end
-  | CApp(id, immexprs, _) -> failwith "compile_cexpr: not implemented yet"
+  | CApp(fun_name, immexprs, tag) ->  (* TODO: handle functions of different arities *)
+    let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
+    (* the label of the function declaration *)
+    let tmp = sprintf "fun_dec_%s" fun_name 
+    in
+      [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
+        ISub(Reg(ESP), Const(8)); (* stack padding *)
+        IPush(Sized(DWORD_PTR, List.hd imm_regs)); (* TODO: fix *) 
+        ICall(tmp);
+        IAdd(Reg(ESP), Const(3*4));
+      ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
 and compile_imm e env : arg =
   match e with
@@ -371,7 +398,7 @@ and compile_imm e env : arg =
 and compile_decl (d : tag adecl) : instruction list =
   match d with 
   | ADFun(name, args, aexpr, tag) ->
-    let tmp = sprintf "fun_dec_%s_%d" name tag in
+    let tmp = sprintf "fun_dec_%s" name in
     let n = (count_vars aexpr) in
     let prelude = [
       (* save (previous, caller's) EBP on stack *)
@@ -397,9 +424,9 @@ and compile_decl (d : tag adecl) : instruction list =
     ] in
     let (env, i) = List.fold_left 
       (fun (env, i) arg -> 
-        let arg_reg = RegOffset(~-(word_size * i), EBP) in
+        let arg_reg = RegOffset((word_size * i), EBP) in
           ((arg, arg_reg)::env, i+1)
-      ) ([], 1) args 
+      ) ([], 2) args 
     in
     let body = compile_aexpr aexpr 0 env (List.length args) false in
           [ ILineComment(("declaration of function " ^ name));

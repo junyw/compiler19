@@ -95,7 +95,7 @@ let expr_tests = [
 let function_tests = [
 t "fun_1" {| def f(x):
                  x
-                 1|} "";
+                 f(1)|} "1";
 
 (*t "test_1" {| def f(x, y):
                   x + y
@@ -104,7 +104,7 @@ t "fun_1" {| def f(x):
 
 ];;
 let all_tests = 
-  (*expr_tests @*)
+  expr_tests @
   function_tests
 ;;
 
