@@ -372,9 +372,36 @@ and compile_decl (d : tag adecl) : instruction list =
   match d with 
   | ADFun(name, args, aexpr, tag) ->
     let tmp = sprintf "fun_dec_%s_%d" name tag in
-    let prelude = [] in
-    let postlude = [] in
-    let body = compile_aexpr aexpr 0 [] (List.length args) false in
+    let n = (count_vars aexpr) in
+    let prelude = [
+      (* save (previous, caller's) EBP on stack *)
+      IPush(Reg(EBP));
+      (* make current ESP the new EBP *)
+      IMov(Reg(EBP), Reg(ESP));
+      (* "allocate space" for N local variables *)
+      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
+
+      ILineComment("-----start of function body-----");
+
+    ] in
+    let postlude = [
+      ILineComment("-----end of function body-----");
+
+      (* restore value of ESP to that just before call *)
+      IMov(Reg(ESP), Reg(EBP));
+      (* now, value at [ESP] is caller's (saved) EBP
+          so: restore caller's EBP from stack [ESP] *)
+      IPop(Reg(EBP));
+      (* return to caller *)
+      IRet;
+    ] in
+    let (env, i) = List.fold_left 
+      (fun (env, i) arg -> 
+        let arg_reg = RegOffset(~-(word_size * i), EBP) in
+          ((arg, arg_reg)::env, i+1)
+      ) ([], 1) args 
+    in
+    let body = compile_aexpr aexpr 0 env (List.length args) false in
           [ ILineComment(("declaration of function " ^ name));
             ILabel(tmp); ] 
         @ prelude 
