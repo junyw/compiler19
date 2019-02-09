@@ -460,12 +460,13 @@ global our_code_starts_here" in
           IRet;
         ]
     in
-    let postlude = [
-        ILineComment("-----postlude-----");
-        IMov(Reg(ESP), Reg(EBP)); 
-        IRet; ]
-        (* error handling *)
-        @ (err_handling "err_arith_not_num" 1)
+    let postlude = 
+          [ ILineComment("-----postlude-----");
+            IMov(Reg(ESP), Reg(EBP)); 
+            IRet; 
+            ILineComment("-----error handling code-----")
+          ]
+        @ err_handling "err_arith_not_num" 1
         @ err_handling "err_comparison_not_num" 2
         @ err_handling "err_if_not_boolean" 3
         @ err_handling "err_logic_not_boolean" 4
