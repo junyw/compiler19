@@ -154,20 +154,214 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     Error([NotYetImplemented "Implement well-formedness checking for definitions"])
   in
   match p with
-  | Program(decls, body, _) ->
-     Error([NotYetImplemented "Implement well-formedness checking for programs"])
+  | Program(decls, body, _) -> Ok(p)
+     (*Error([NotYetImplemented "Implement well-formedness checking for programs"])*)
 ;;
 
 
 let rec compile_fun (fun_name : string) args env : instruction list =
   raise (NotYetImplemented "Compile funs not yet implemented")
 and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
-  raise (NotYetImplemented "Compile aexpr not yet implemented")
-and compile_cexpr (e : tag cexpr) si env num_args is_tail =
-  raise (NotYetImplemented "Compile cexpr not yet implemented")
-and compile_imm e env =
   match e with
-  | ImmNum(n, _) -> Const((n lsl 1))
+  | ALet(id, cexpr, aexpr, _) -> 
+     let prelude = compile_cexpr cexpr (si + 1) env num_args is_tail in
+     (* id_reg: position of the binding in memory *)
+     let id_reg = RegOffset(~-(word_size * si), EBP) in 
+     let body = compile_aexpr aexpr (si + 1) ((id, id_reg)::env) num_args is_tail in
+     prelude
+     @ [ IMov(id_reg, Reg(EAX)) ]
+     @ body
+  | ACExpr(cexpr) -> compile_cexpr cexpr si env num_args is_tail
+
+and compile_cexpr (e : tag cexpr) si env num_args is_tail =
+  let assert_num (e_reg : arg) (error : string) = 
+    [ ILineComment("assert_num");
+      IMov(Reg(EAX), e_reg);
+      ITest(Reg(EAX), HexConst(0x00000001));
+      IJnz(error);
+    ]
+  (* check the value in EAX is boolean *)
+  and assert_bool' (error : string) =
+    [ ILineComment("assert_bool");
+      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
+      IJnz(error);
+      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
+    ]
+  in 
+  let assert_bool (e_reg : arg) (error : string) = 
+    [ ILineComment("assert_bool");
+      IMov(Reg(EAX), e_reg); 
+      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
+      IMov(Reg(EAX), e_reg); 
+      IJnz(error);
+    ]
+  in
+  match e with 
+  | CIf(immexpr, aexpr, aexpr2, tag) -> 
+    let else_label = sprintf "if_false_%d" tag in
+    let done_label = sprintf "done_%d" tag in
+        [ IMov(Reg(EAX), compile_imm immexpr env) ]
+      @ assert_bool' "err_if_not_boolean"
+      @ [ ICmp(Reg(EAX), const_false); 
+          IJe(else_label) ]
+      @ compile_aexpr aexpr si env 0 false
+      @ [ IJmp(done_label); 
+          ILabel(else_label) ]
+      @ compile_aexpr aexpr2 si env 0 false
+      @ [ ILabel(done_label) ]
+  | CPrim1(op, immexpr, tag) -> 
+     let e = immexpr in
+     let e_reg = compile_imm e env in
+     let done_label = sprintf "eprim1_done_%d" tag in
+     begin match op with
+     | Add1  -> assert_num e_reg "err_arith_not_num" @
+                [ IMov(Reg(EAX), e_reg);
+                  IAdd(Reg(EAX), Const(1 lsl 1)); 
+                  (* check overflow *) 
+                  IJo("err_arith_overflow");
+                ] 
+     | Sub1  -> assert_num e_reg "err_arith_not_num" @
+                [ IMov(Reg(EAX), e_reg); 
+                  IAdd(Reg(EAX), Const(~-1 lsl 1));
+                  (* check overflow *) 
+                  IJo("err_arith_overflow");
+                ] 
+     | Print -> [ ILineComment("calling c function");
+                  ISub(Reg(ESP), Const(8)); (* stack padding *)
+                  IPush(Sized(DWORD_PTR, e_reg)); 
+                  ICall("print");
+                  IAdd(Reg(ESP), Const(3*4));
+                ]
+     | IsBool -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), Const(0x7FFFFFFF));
+          ICmp(Reg(EAX), Const(0x7FFFFFFF));
+          IMov(Reg(EAX), const_true);
+          IJe(done_label);
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ]
+     | IsNum  -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), Const(0x00000001)); 
+          ICmp(Reg(EAX), Const(0));
+          IMov(Reg(EAX), const_true);
+          IJe(done_label);
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ];
+      | Not  ->
+          assert_bool e_reg "err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e_reg);
+            IXor(Reg(EAX), Const(0x80000000));
+          ]
+     | PrintStack -> failwith "eprim1 not implemented"
+     end
+  | CPrim2(op, imme1, imme2, tag) -> 
+     let e1 = imme1 in
+     let e2 = imme2 in (* TODO: rename variables *)
+     let e1_reg = compile_imm e1 env in
+     let e2_reg = compile_imm e2 env in
+     let done_label = sprintf "eprim2_done_%d" tag in
+     begin match op with 
+     | Plus  -> 
+        assert_num e1_reg "err_arith_not_num" @
+        assert_num e2_reg "err_arith_not_num" @
+        [ IMov(Reg(EAX), e1_reg); 
+          IAdd(Reg(EAX), e2_reg);
+          (* check overflow *) 
+          IJo("err_arith_overflow");
+
+        ]
+     | Minus -> 
+          assert_num e1_reg "err_arith_not_num"
+        @ assert_num e2_reg "err_arith_not_num"
+        @ [ IMov(Reg(EAX), e1_reg); 
+            ISub(Reg(EAX), e2_reg);
+            (* check overflow *) 
+            IJo("err_arith_overflow");
+          ]
+     | Times -> 
+          assert_num e1_reg "err_arith_not_num"
+        @ assert_num e2_reg "err_arith_not_num"
+        @ [ IMov(Reg(EAX), e1_reg); 
+            ISar(Reg(EAX), Const(1));
+            IMul(Reg(EAX), e2_reg);
+            (* check overflow *) 
+            IJo("err_arith_overflow");
+          ]
+     | And   -> 
+          assert_bool e1_reg "err_logic_not_boolean" 
+        @ assert_bool e2_reg "err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IAnd(Reg(EAX), e2_reg); 
+          ]
+     | Or    -> 
+          assert_bool e1_reg "err_logic_not_boolean" 
+        @ assert_bool e2_reg "err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IOr(Reg(EAX),  e2_reg);
+          ]
+     | Greater ->
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJg(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
+     | GreaterEq ->
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJge(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
+     | Less  -> 
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJl(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
+     | LessEq ->
+          assert_num e1_reg "err_comparison_not_num"
+        @ assert_num e2_reg "err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+            IJle(done_label);
+            IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
+     | Eq   -> 
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), const_true);
+          IJe(done_label);
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ]
+     end
+  | CApp(id, immexprs, _) -> failwith "compile_cexpr: not implemented yet"
+  | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
+and compile_imm e env : arg =
+  match e with
+  | ImmNum(n, _) -> 
+       if n > 1073741823 || n < -1073741824 then
+       failwith ("Compile-time integer overflow: " ^ (string_of_int n))
+     else
+       Const(n lsl 1)
   | ImmBool(true, _) -> const_true
   | ImmBool(false, _) -> const_false
   | ImmId(x, _) -> (find env x)
@@ -175,8 +369,76 @@ and compile_imm e env =
 let compile_decl (d : tag adecl) : instruction list =
   raise (NotYetImplemented "Compile decl not yet implemented")
 
-let compile_prog (anfed : tag aprogram) : string =
-  raise (NotYetImplemented "Compiling programs not implemented yet")
+let rec compile_prog (anfed : tag aprogram) : string =
+  match anfed with
+  | AProgram (adecls, aexpr, tag) -> compile_prog' aexpr
+
+and compile_prog' (anfed : tag aexpr) : string = 
+  let n = (count_vars anfed) in
+  let prelude =
+    "section .text
+extern error
+extern print
+global our_code_starts_here" in
+  let stack_setup = [
+      (* instructions for setting up stack here *)
+      (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
+         where N is the greatest number of variables we need at once*)
+      ILabel("our_code_starts_here");
+      ILineComment("-----stack setup-----");
+      
+      IMov(Reg(EBP), Reg(ESP)); 
+      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
+
+      ILineComment("-----compiled code-----");
+    ] in
+  let postlude = [
+      ILineComment("-----postlude-----");
+
+      IMov(Reg(ESP), Reg(EBP)); 
+      IRet;
+      
+      (* error handling *)
+      ILabel("err_arith_not_num");
+      IPush(Const(0));
+      IPush(Reg(EAX));
+      IPush(Const(1)); 
+      IJmp("raise_error");
+
+      ILabel("err_comparison_not_num");
+      IPush(Const(0));
+      IPush(Reg(EAX));
+      IPush(Const(2));
+      IJmp("raise_error");
+
+      ILabel("err_if_not_boolean");
+      IPush(Const(0));
+      IPush(Reg(EAX));
+      IPush(Const(3));
+      IJmp("raise_error");
+
+      ILabel("err_logic_not_boolean");
+      IPush(Const(0));
+      IPush(Reg(EAX));
+      IPush(Const(4)); 
+      IJmp("raise_error");
+
+      ILabel("err_arith_overflow");
+      IPush(Const(0));
+      IPush(Reg(EAX));
+      IPush(Const(5)); 
+      IJmp("raise_error");
+
+      ILabel("raise_error");
+      ICall("error");
+      IAdd(Reg(ESP), Const(3*4));
+
+      IMov(Reg(ESP), Reg(EBP)); 
+      IRet;
+    ] in
+  let body = (compile_aexpr anfed 1 [] 0 false) in
+  let as_assembly_string = (to_asm (stack_setup @ body @ postlude)) in
+  sprintf "%s%s\n" prelude as_assembly_string
 
 (* Feel free to add additional phases to your pipeline.
    The final pipeline phase needs to return a string,

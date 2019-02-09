@@ -456,7 +456,7 @@ and compile_imm (e : tag expr) (env : (string * int) list) : arg =
 ;;
 
 let compile_anf_to_string (anfed : tag expr) : string =
-  let n = (count_vars anfed) in (* TODO: fix *)
+  let n = (count_vars anfed) in 
   let prelude =
     "section .text
 extern error

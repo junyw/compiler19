@@ -134,7 +134,7 @@ let rec i_to_asm (i : instruction) : string =
   | ITest(arg, comp) ->
      sprintf "  test %s, %s" (arg_to_asm arg) (arg_to_asm comp)
   | ILineComment(str) ->
-     sprintf "  ;; %s" str
+     sprintf "  ;;%s" str
   | IInstrComment(instr, str) ->
      sprintf "%s ; %s" (i_to_asm instr) str
 

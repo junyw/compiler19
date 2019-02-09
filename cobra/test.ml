@@ -6,6 +6,9 @@ open OUnit2
 let t name program expected = name>::test_run program name expected;;
 let te name program expected = name>::test_err program name expected;;
 
+let asm_tests = [
+  t "asm_1" "3" "3";
+];;
 let number_tests = [
   t "number_1" "41" "41";
   t "number_2" "0" "0";
@@ -158,6 +161,7 @@ let binding_errors = [
 ];;
 
 let all_tests = 
+  asm_tests @
   number_tests @
   arithmetic_tests @
   overflow_tests @
