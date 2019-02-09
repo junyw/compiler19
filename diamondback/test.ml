@@ -61,6 +61,10 @@ let expr_tests = [
   te "logic_error_2" "false && 1" "Error: logic expected a boolean, but got 1";
   te "compare_error_1" "true > 1" "Error: comparison expected a number";
   
+  (* print tests *)
+  t "print_1" "print(41)" "41\n41";
+  t "print_2" "print(true)" "true\ntrue";
+
   (* let tests *)
   t "let_1" "let x = 1 in x" "1";
   t "let_2" "let x = (1 == 2) in x" "false";
@@ -86,16 +90,22 @@ let expr_tests = [
   te "if_error_1" "if 54: true else: false" "Error: if expected a boolean";
   te "if_error_2" "let x = 1 in (if x: true else: false)" "Error: if expected a boolean";
   te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
+];;
 
-(*  t "expr_3" "if (3 >= 1): true else: false" "true";
-*)];;
+let function_tests = [
+t "fun_1" {| def f(x):
+                 x
+                 1|} "";
 
 (*t "test_1" {| def f(x, y):
                   x + y
               f(1, 2) |}
               "3";*)
+
+];;
 let all_tests = 
-  expr_tests
+  (*expr_tests @*)
+  function_tests
 ;;
 
 let suite =

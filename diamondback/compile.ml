@@ -15,6 +15,7 @@ let rec is_anf (e : 'a expr) : bool =
      List.for_all (fun (_, e, _) -> is_anf e) binds
      && is_anf body
   | EIf(cond, thn, els, _) -> is_imm cond && is_anf thn && is_anf els
+  | EApp(f, args, _) -> List.for_all is_imm args
   | _ -> is_imm e
 and is_imm e =
   match e with
@@ -117,7 +118,6 @@ let anf (p : tag program) : unit aprogram =
     | ENumber(n, _) -> (ImmNum(n, ()), [])
     | EBool(b, _) -> (ImmBool(b, ()), [])
     | EId(name, _) -> (ImmId(name, ()), [])
-
     | EPrim1(op, arg, tag) ->
        let tmp = sprintf "unary_%d" tag in
        let (arg_imm, arg_setup) = helpI arg in
@@ -160,7 +160,9 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
 
 
 let rec compile_fun (fun_name : string) args env : instruction list =
-  raise (NotYetImplemented "Compile funs not yet implemented")
+    failwith "compile_fun not yet implemented"
+
+
 and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
   | ALet(id, cexpr, aexpr, _) -> 
@@ -366,79 +368,66 @@ and compile_imm e env : arg =
   | ImmBool(false, _) -> const_false
   | ImmId(x, _) -> (find env x)
 
-let compile_decl (d : tag adecl) : instruction list =
-  raise (NotYetImplemented "Compile decl not yet implemented")
+and compile_decl (d : tag adecl) : instruction list =
+  match d with 
+  | ADFun(name, args, aexpr, tag) ->
+    let tmp = sprintf "fun_dec_%s_%d" name tag in
+    let prelude = [] in
+    let postlude = [] in
+    let body = compile_aexpr aexpr 0 [] (List.length args) false in
+          [ ILineComment(("declaration of function " ^ name));
+            ILabel(tmp); ] 
+        @ prelude 
+        @ body 
+        @ postlude
 
 let rec compile_prog (anfed : tag aprogram) : string =
   match anfed with
-  | AProgram (adecls, aexpr, tag) -> compile_prog' aexpr
-
-and compile_prog' (anfed : tag aexpr) : string = 
-  let n = (count_vars anfed) in
-  let prelude =
+  | AProgram (adecls, aexpr, tag) -> 
+    let fun_decs = List.flatten(List.map compile_decl adecls) in
+    let n = (count_vars aexpr) in
+    let prelude =
     "section .text
 extern error
 extern print
 global our_code_starts_here" in
-  let stack_setup = [
-      (* instructions for setting up stack here *)
-      (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
-         where N is the greatest number of variables we need at once*)
-      ILabel("our_code_starts_here");
-      ILineComment("-----stack setup-----");
-      
-      IMov(Reg(EBP), Reg(ESP)); 
-      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
+    let stack_setup = [
+        (* instructions for setting up stack here *)
+        (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
+           where N is the greatest number of variables we need at once*)
+        ILabel("our_code_starts_here");
+        ILineComment("-----stack setup-----");
+        
+        IMov(Reg(EBP), Reg(ESP)); 
+        ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
 
-      ILineComment("-----compiled code-----");
-    ] in
-  let postlude = [
-      ILineComment("-----postlude-----");
-
-      IMov(Reg(ESP), Reg(EBP)); 
-      IRet;
-      
-      (* error handling *)
-      ILabel("err_arith_not_num");
-      IPush(Const(0));
-      IPush(Reg(EAX));
-      IPush(Const(1)); 
-      IJmp("raise_error");
-
-      ILabel("err_comparison_not_num");
-      IPush(Const(0));
-      IPush(Reg(EAX));
-      IPush(Const(2));
-      IJmp("raise_error");
-
-      ILabel("err_if_not_boolean");
-      IPush(Const(0));
-      IPush(Reg(EAX));
-      IPush(Const(3));
-      IJmp("raise_error");
-
-      ILabel("err_logic_not_boolean");
-      IPush(Const(0));
-      IPush(Reg(EAX));
-      IPush(Const(4)); 
-      IJmp("raise_error");
-
-      ILabel("err_arith_overflow");
-      IPush(Const(0));
-      IPush(Reg(EAX));
-      IPush(Const(5)); 
-      IJmp("raise_error");
-
-      ILabel("raise_error");
-      ICall("error");
-      IAdd(Reg(ESP), Const(3*4));
-
-      IMov(Reg(ESP), Reg(EBP)); 
-      IRet;
-    ] in
-  let body = (compile_aexpr anfed 1 [] 0 false) in
-  let as_assembly_string = (to_asm (stack_setup @ body @ postlude)) in
-  sprintf "%s%s\n" prelude as_assembly_string
+        ILineComment("-----compiled code-----");
+      ] in
+    let err_handling (err_type : string) (err_code : int) : instruction list = 
+        [ ILabel(err_type);
+          IPush(Const(0));
+          IPush(Reg(EAX));
+          IPush(Const(err_code)); 
+          ICall("error");
+          IAdd(Reg(ESP), Const(3*4));
+          IMov(Reg(ESP), Reg(EBP)); 
+          IRet;
+        ]
+    in
+    let postlude = [
+        ILineComment("-----postlude-----");
+        IMov(Reg(ESP), Reg(EBP)); 
+        IRet; ]
+        (* error handling *)
+        @ (err_handling "err_arith_not_num" 1)
+        @ err_handling "err_comparison_not_num" 2
+        @ err_handling "err_if_not_boolean" 3
+        @ err_handling "err_logic_not_boolean" 4
+        @ err_handling "err_arith_overflow" 5
+    in
+    let body = (compile_aexpr aexpr 1 [] 0 false) in
+    let as_assembly_string = (to_asm (fun_decs @ stack_setup @ body @ postlude)) in
+    sprintf "%s%s\n" prelude as_assembly_string
 
 (* Feel free to add additional phases to your pipeline.
    The final pipeline phase needs to return a string,
