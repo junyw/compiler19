@@ -93,18 +93,52 @@ let expr_tests = [
 ];;
 
 let function_tests = [
+t "fun_0" {| def f():
+                 10
+                 f() |} "10";
 t "fun_1" {| def f(x):
                  x
-                 f(1)|} "1";
-
-(*t "test_1" {| def f(x, y):
-                  x + y
-              f(1, 2) |}
-              "3";*)
+             f(1)|} "1";
+t "fun_2" {| def f(x):
+                 x
+             f(1) + 1|} "2";
+t "fun_3" {| def f(x, y):
+                 x + y
+             f(1, 2)|} "3";
+t "fun_4" {| def f(x, y):
+                 x * x + y
+             f(1, 2)|} "3";
+t "fun_5" {| def f(x, y, z):
+                 x
+             f(1, 2, 3)|} "1";
+t "fun_6" {| def f(x, y, z):
+                 y
+             f(1, 2, 3)|} "2";
+t "fun_7" {| def f(x, y, z):
+                 z
+             f(1, 2, 3)|} "3";
+t "fun_8" {| def f(x, y, z):
+                 (x * x) + (y * y) + (z * z)
+             f(1, 2, 3)|} "14";
+t "fun_9" {| def f(a, b, c, d):
+                 a
+             f(1, 2, 3, 4)|} "1";
+t "fun_10" {| def f(a, b, c, d):
+                 b
+             f(1, 2, 3, 4)|} "2";
+t "fun_11" {| def f(a, b, c, d):
+                 c
+             f(1, 2, 3, 4)|} "3";
+t "fun_12" {| def f(a, b, c, d):
+                 d
+             f(1, 2, 3, 4)|} "4";
+t "fun_13" {| def f(a, b, c, d, e):
+                 e
+             f(1, 2, 3, 4, 5)|} "5";
 
 ];;
 let all_tests = 
-  expr_tests @
+  (*expr_tests @*)
   function_tests
 ;;
 

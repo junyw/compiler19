@@ -279,10 +279,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
      | PrintStack -> failwith "eprim1 not implemented"
      end
   | CPrim2(op, imme1, imme2, tag) -> 
-     let e1 = imme1 in
-     let e2 = imme2 in (* TODO: rename variables *)
-     let e1_reg = compile_imm e1 env in
-     let e2_reg = compile_imm e2 env in
+     let e1_reg = compile_imm imme1 env in
+     let e2_reg = compile_imm imme2 env in
      let done_label = sprintf "eprim2_done_%d" tag in
      begin match op with 
      | Plus  -> 
@@ -323,44 +321,22 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         @ [ IMov(Reg(EAX), e1_reg); 
             IOr(Reg(EAX),  e2_reg);
           ]
-     | Greater ->
+     | Greater | GreaterEq | Less| LessEq ->
+        let jump_instruction = match op with 
+        | Greater -> IJg(done_label);
+        | GreaterEq -> IJge(done_label);
+        | Less -> IJl(done_label);
+        | LessEq -> IJle(done_label);
+        | _ -> failwith "compile_cprim2_compare: not a compare operator"
+        in
           assert_num e1_reg "err_comparison_not_num"
         @ assert_num e2_reg "err_comparison_not_num"
         @ [ IMov(Reg(EAX), e1_reg);
             ICmp(Reg(EAX), e2_reg);
             IMov(Reg(EAX), const_true);
-            IJg(done_label);
-            IMov(Reg(EAX), const_false);
-            ILabel(done_label);
           ]
-     | GreaterEq ->
-          assert_num e1_reg "err_comparison_not_num"
-        @ assert_num e2_reg "err_comparison_not_num"
-        @ [ IMov(Reg(EAX), e1_reg);
-            ICmp(Reg(EAX), e2_reg);
-            IMov(Reg(EAX), const_true);
-            IJge(done_label);
-            IMov(Reg(EAX), const_false);
-            ILabel(done_label);
-          ]
-     | Less  -> 
-          assert_num e1_reg "err_comparison_not_num"
-        @ assert_num e2_reg "err_comparison_not_num"
-        @ [ IMov(Reg(EAX), e1_reg);
-            ICmp(Reg(EAX), e2_reg);
-            IMov(Reg(EAX), const_true);
-            IJl(done_label);
-            IMov(Reg(EAX), const_false);
-            ILabel(done_label);
-          ]
-     | LessEq ->
-          assert_num e1_reg "err_comparison_not_num"
-        @ assert_num e2_reg "err_comparison_not_num"
-        @ [ IMov(Reg(EAX), e1_reg);
-            ICmp(Reg(EAX), e2_reg);
-            IMov(Reg(EAX), const_true);
-            IJle(done_label);
-            IMov(Reg(EAX), const_false);
+        @ [ jump_instruction ]
+        @ [ IMov(Reg(EAX), const_false);
             ILabel(done_label);
           ]
      | Eq   -> 
@@ -375,13 +351,29 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   | CApp(fun_name, immexprs, tag) ->  (* TODO: handle functions of different arities *)
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
     (* the label of the function declaration *)
-    let tmp = sprintf "fun_dec_%s" fun_name 
+    let tmp = sprintf "fun_dec_%s" fun_name in
+    let num_of_args = List.length immexprs in
+    let stack_padding = match num_of_args with (* TODO *)
+      | 0 -> 0
+      | 1 -> 2
+      | 2 -> 1
+      | 3 -> 0
+      | 4 -> 0
+      | 5 -> 2
+      | _ -> failwith "stack_padding: to be calculated"
+    in
+    let push_args = List.fold_right (fun imm_reg instrs -> 
+        [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs
+      ) imm_regs []
     in
       [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
-        ISub(Reg(ESP), Const(8)); (* stack padding *)
-        IPush(Sized(DWORD_PTR, List.hd imm_regs)); (* TODO: fix *) 
+        ISub(Reg(ESP), Const(stack_padding * word_size)); (* stack padding *)
+      ] 
+      @ push_args @
+      [
+        (*IPush(Sized(DWORD_PTR, List.hd imm_regs)); *)
         ICall(tmp);
-        IAdd(Reg(ESP), Const(3*4));
+        IAdd(Reg(ESP), Const((stack_padding + num_of_args)* word_size));
       ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
 and compile_imm e env : arg =
@@ -428,7 +420,7 @@ and compile_decl (d : tag adecl) : instruction list =
           ((arg, arg_reg)::env, i+1)
       ) ([], 2) args 
     in
-    let body = compile_aexpr aexpr 0 env (List.length args) false in
+    let body = compile_aexpr aexpr 1 env (List.length args) false in
           [ ILineComment(("declaration of function " ^ name));
             ILabel(tmp); ] 
         @ prelude 
