@@ -151,7 +151,6 @@ t "arity_4" {| def f(a, b, c, d, e, f):
 t "arity_5" {| def f(a, b, c, d, e, f, g):
                  g
              f(1, 2, 3, 4, 5, 6, 7)|} "7";
-
 ];;
 let all_tests = 
   (*expr_tests @*)

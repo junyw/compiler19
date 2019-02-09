@@ -31,13 +31,11 @@ let const_false = HexConst(0x7FFFFFFF)
 let bool_mask = HexConst(0x80000000)
 let tag_as_bool = HexConst(0x00000001)
 
-let err_COMP_NOT_NUM   = 0
-let err_ARITH_NOT_NUM  = 1
-let err_LOGIC_NOT_BOOL = 2
-let err_IF_NOT_BOOL    = 3
-let err_OVERFLOW       = 4
-
-
+let err_ARITH_NOT_NUM      = 1
+let err_COMPARISON_NOT_NUM = 2
+let err_IF_NOT_BOOL        = 3
+let err_LOGIC_NOT_BOOL     = 4
+let err_ARITH_OVERFLOW     = 5
 
 (* You may find some of these helpers useful *)
 let rec find ls x =
@@ -464,11 +462,11 @@ global our_code_starts_here" in
             IRet; 
             ILineComment("-----error handling code-----")
           ]
-        @ err_handling "err_arith_not_num" 1
-        @ err_handling "err_comparison_not_num" 2
-        @ err_handling "err_if_not_boolean" 3
-        @ err_handling "err_logic_not_boolean" 4
-        @ err_handling "err_arith_overflow" 5
+        @ err_handling "err_arith_not_num"      err_ARITH_NOT_NUM
+        @ err_handling "err_comparison_not_num" err_COMPARISON_NOT_NUM
+        @ err_handling "err_if_not_boolean"     err_IF_NOT_BOOL
+        @ err_handling "err_logic_not_boolean"  err_LOGIC_NOT_BOOL
+        @ err_handling "err_arith_overflow"     err_ARITH_OVERFLOW
     in
     let body = (compile_aexpr aexpr 1 [] 0 false) in
     let as_assembly_string = (to_asm (fun_decs @ stack_setup @ body @ postlude)) in

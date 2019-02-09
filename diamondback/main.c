@@ -10,8 +10,8 @@ const int BOOL_TAG   = 0x00000001;
 const int BOOL_TRUE  = 0xFFFFFFFF; // These must be the same values
 const int BOOL_FALSE = 0x7FFFFFFF; // as chosen in compile.ml
 
-const int E_ARITH_NOT_INT = 1;
-const int E_COMPARISON_NOT_INT = 2;
+const int E_ARITH_NOT_NUM = 1;
+const int E_COMPARISON_NOT_NUM = 2;
 const int E_IF_NOT_BOOL = 3;
 const int E_LOGIC_NOT_BOOL = 4;
 const int E_ARITH_OVERFLOW = 5;
@@ -29,10 +29,10 @@ int print(int val) {
   return val;
 }
 void error(int errCode, int val) {
-  if(errCode == E_ARITH_NOT_INT) {
+  if(errCode == E_ARITH_NOT_NUM) {
     fprintf(stderr, "Error: arithmetic expected a number, but got %010x\n", val);
     exit(1);
-  } else if(errCode == E_COMPARISON_NOT_INT) {
+  } else if(errCode == E_COMPARISON_NOT_NUM) {
     fprintf(stderr, "Error: comparison expected a number, but got %010x\n", val);
     exit(1);
   } else if(errCode == E_IF_NOT_BOOL) {
