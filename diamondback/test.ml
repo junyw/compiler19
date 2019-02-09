@@ -91,54 +91,58 @@ let expr_tests = [
   te "if_error_2" "let x = 1 in (if x: true else: false)" "Error: if expected a boolean";
   te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
 ];;
-
 let function_tests = [
-t "fun_0" {| def f():
+
+];;
+
+let arity_tests = [
+t "arity_0" {| def f():
                  10
                  f() |} "10";
-t "fun_1" {| def f(x):
+t "arity_1" {| def f(x):
                  x
              f(1)|} "1";
-t "fun_2" {| def f(x):
+t "arity_2" {| def f(x):
                  x
              f(1) + 1|} "2";
-t "fun_3" {| def f(x, y):
+t "arity_3" {| def f(x, y):
                  x + y
              f(1, 2)|} "3";
-t "fun_4" {| def f(x, y):
+t "arity_4" {| def f(x, y):
                  x * x + y
              f(1, 2)|} "3";
-t "fun_5" {| def f(x, y, z):
+t "arity_5" {| def f(x, y, z):
                  x
              f(1, 2, 3)|} "1";
-t "fun_6" {| def f(x, y, z):
+t "arity_6" {| def f(x, y, z):
                  y
              f(1, 2, 3)|} "2";
-t "fun_7" {| def f(x, y, z):
+t "arity_7" {| def f(x, y, z):
                  z
              f(1, 2, 3)|} "3";
-t "fun_8" {| def f(x, y, z):
+t "arity_8" {| def f(x, y, z):
                  (x * x) + (y * y) + (z * z)
              f(1, 2, 3)|} "14";
-t "fun_9" {| def f(a, b, c, d):
+t "arity_9" {| def f(a, b, c, d):
                  a
              f(1, 2, 3, 4)|} "1";
-t "fun_10" {| def f(a, b, c, d):
+t "arity_10" {| def f(a, b, c, d):
                  b
              f(1, 2, 3, 4)|} "2";
-t "fun_11" {| def f(a, b, c, d):
+t "arity_11" {| def f(a, b, c, d):
                  c
              f(1, 2, 3, 4)|} "3";
-t "fun_12" {| def f(a, b, c, d):
+t "arity_12" {| def f(a, b, c, d):
                  d
              f(1, 2, 3, 4)|} "4";
-t "fun_13" {| def f(a, b, c, d, e):
+t "arity_13" {| def f(a, b, c, d, e):
                  e
              f(1, 2, 3, 4, 5)|} "5";
 
 ];;
 let all_tests = 
   (*expr_tests @*)
+  arity_tests @
   function_tests
 ;;
 
