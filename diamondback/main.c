@@ -17,6 +17,9 @@ const int E_IF_NOT_BOOL = 3;
 const int E_LOGIC_NOT_BOOL = 4;
 const int E_ARITH_OVERFLOW = 5;
 
+extern int ebp_value;
+int ebp_value = 0;
+
 void print_tagged_value(int val) {
   if ((val & BOOL_TAG) == 0) { 
     printf("%d", val >> 1);  // shift bits right to remove tag
@@ -32,16 +35,24 @@ void print_tagged_value(int val) {
 
 int printstack(int val, int* EBP, int* ESP) {
   printf("print_stack\n");
+  // printf("ending ebp value: %p\n", (void*)ebp_value);
   printf("ESP: %p ==> %d\n", ESP, (unsigned int)ESP);
   printf("EBP: %p ==> %d\n", EBP, (unsigned int)EBP);
   printf("(difference: %d)\n", (unsigned int)ESP-(unsigned int)EBP);
   printf("Requested return val: %#010x\n", val);
 
-  for(int i = 0; i < 10; i++) {
+  int* old_ebp = EBP;
+  for(int i = 0; i < 40; i++) {
     printf("%p: %#010x   ==>   ", ESP, *ESP);
-    print_tagged_value((int)*ESP);
+    if(ESP == old_ebp) {
+      printf("old ebp");
+      old_ebp = (void*)*ESP;
+    }
+    else {
+      print_tagged_value((int)*ESP);
+    }
     printf("\n");
-    ESP--;
+    ESP++;
   }
   return val; 
 }
@@ -67,7 +78,7 @@ void error(int errCode, int val) {
     fprintf(stderr, "Error: logic expected a boolean, but got %d\n", val >> 1);
   } else if(errCode == E_ARITH_OVERFLOW) {
     fprintf(stderr, "Error: Integer overflow\n");
-  }else {
+  } else {
     fprintf(stderr, "Error: unknown error");
   }
   exit(1);

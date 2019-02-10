@@ -514,6 +514,7 @@ global our_code_starts_here" in
         @ err_handling "err_if_not_boolean"     err_IF_NOT_BOOL
         @ err_handling "err_logic_not_boolean"  err_LOGIC_NOT_BOOL
         @ err_handling "err_arith_overflow"     err_ARITH_OVERFLOW
+
     in
     let body = (compile_aexpr aexpr 1 [] 0 false) in
     let as_assembly_string = (to_asm (fun_decs @ stack_setup @ body @ postlude)) in
