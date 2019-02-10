@@ -318,7 +318,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         @ [ IMov(Reg(EAX), e_reg);
             IXor(Reg(EAX), Const(0x80000000));
           ]
-     | PrintStack -> failwith "eprim1 not implemented"
+     | PrintStack -> 
+        [ ILineComment("calling c function");
+          IPush(Sized(DWORD_PTR, Reg(ESP))); 
+          IPush(Sized(DWORD_PTR, Reg(EBP)));
+          IPush(Sized(DWORD_PTR, e_reg)); 
+          ICall("printstack");
+          IAdd(Reg(ESP), Const(3*4));
+        ]
      end
   | CPrim2(op, imme1, imme2, tag) -> 
      let e1_reg = compile_imm imme1 env in
@@ -471,6 +478,7 @@ let rec compile_prog (anfed : tag aprogram) : string =
     "section .text
 extern error
 extern print
+extern printstack
 global our_code_starts_here" in
     let stack_setup = [
         (* instructions for setting up stack here *)

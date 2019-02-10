@@ -173,7 +173,7 @@ let well_formedness_tests = [
 
 ];;
 let all_tests = 
-  (*expr_tests @*)
+  expr_tests @
   function_tests @
   recursive_tests @
   arity_tests @
