@@ -163,14 +163,58 @@ let anf (p : tag program) : unit aprogram =
 
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-  let rec wf_E e (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for expressions"])
-  and wf_D d (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for definitions"])
+  let rec wf_E (e : sourcespan expr) env : exn list = 
+      let rec wf_E' e env (errors : exn list) : exn list = 
+        match e with
+        | EBool _ -> errors
+        | ENumber(n, loc) -> if n > 1073741823 || n < -1073741824 then
+                               errors @ [ Overflow(n, loc) ]
+                             else errors
+        | EId(x, loc) ->
+          begin match List.assoc_opt x env with
+            | None -> errors @ [ UnboundId(x, loc) ]
+            | Some(_) -> errors
+          end
+        | EPrim1(_, e, _) -> wf_E' e env errors
+        | EPrim2(_, l, r, _) -> errors |> wf_E' l env |> wf_E' r env
+        | EIf(c, t, f, _) -> errors |> wf_E' c env |> wf_E' t env |> wf_E' f env
+        | ELet(binds, body, _) ->
+          let name_locs = List.map (fun (binding_name, _, loc) -> (binding_name, loc)) binds in
+            errors 
+            (* check duplicate bindings *)
+          @ check_duplicates name_locs
+            (* check bindings *)
+          @  (List.flatten @@ List.map (fun (_, binding_body, _) -> wf_E binding_body env) binds)
+            (* check body *)
+          @  (wf_E body (env @ name_locs) )
+        | EApp(f, args, _) -> errors (* TODO *)
+      in wf_E' e env []
+  and check_duplicates (args : (string * sourcespan) list) : exn list =
+    let (errs, _) = 
+            List.fold_left 
+            (fun (errs, args_list) (arg_name, source2) -> 
+              match List.find_opt (fun (x, _) -> String.equal x arg_name) args_list with
+              | Some(duplicate_id, duplicate_source) -> (errs @ [ DuplicateId(arg_name, source2, duplicate_source) ], args_list)
+              | None -> (errs, args_list @ [(arg_name, source2)])
+            ) ([], []) args
+    in
+    errs 
+  and wf_D (d : sourcespan decl) = 
+    match d with
+    | DFun(fun_name, args, body,  _) ->
+      check_duplicates args @ wf_E body args
   in
   match p with
-  | Program(decls, body, _) -> Ok(p)
-     (*Error([NotYetImplemented "Implement well-formedness checking for programs"])*)
+  | Program(decls, body, _) -> 
+    (* check duplicate function declarations *)
+    let duplicate_decls = check_duplicates (List.map (fun decl -> match decl with | DFun(fun_name, _, _, loc) -> (fun_name, loc)) decls) in
+    (* check well-formedness in function declartions *)
+    let decls_err = List.flatten @@ List.map wf_D decls in
+    (* check well-formedness in body *)
+    let body_err = wf_E body [] in
+    if List.length duplicate_decls == 0 && List.length decls_err == 0 && List.length body_err == 0
+      then Ok(p)
+      else Error(duplicate_decls @ decls_err @ body_err)
 ;;
 
 
@@ -351,7 +395,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     (* the label of the function declaration *)
     let tmp = sprintf "fun_dec_%s" fun_name in
     let num_of_args = List.length immexprs in
-    let stack_padding = match (num_of_args mod 4) with (* TODO *)
+    let stack_padding = match (num_of_args mod 4) with
       | 0 -> 0
       | 1 -> 2
       | 2 -> 1
@@ -367,21 +411,16 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       ] 
       @ push_args @
       [
-        (*IPush(Sized(DWORD_PTR, List.hd imm_regs)); *)
         ICall(tmp);
         IAdd(Reg(ESP), Const((stack_padding + num_of_args)* word_size));
       ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
 and compile_imm e env : arg =
   match e with
-  | ImmNum(n, _) -> 
-       if n > 1073741823 || n < -1073741824 then
-       failwith ("Compile-time integer overflow: " ^ (string_of_int n))
-     else
-       Const(n lsl 1)
-  | ImmBool(true, _) -> const_true
+  | ImmNum(n, _)      -> Const(n lsl 1)
+  | ImmBool(true, _)  -> const_true
   | ImmBool(false, _) -> const_false
-  | ImmId(x, _) -> (find env x)
+  | ImmId(x, _)       -> (find env x)
 
 and compile_decl (d : tag adecl) : instruction list =
   match d with 
@@ -426,7 +465,7 @@ and compile_decl (d : tag adecl) : instruction list =
 let rec compile_prog (anfed : tag aprogram) : string =
   match anfed with
   | AProgram (adecls, aexpr, tag) -> 
-    let fun_decs = List.flatten(List.map compile_decl adecls) in
+    let fun_decs = List.flatten @@ List.map compile_decl adecls in
     let n = (count_vars aexpr) in
     let prelude =
     "section .text

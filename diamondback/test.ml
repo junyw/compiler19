@@ -29,9 +29,8 @@ let expr_tests = [
   t "times_1" "1073741823 * 1" "1073741823";
   te "minus_error_2" "1 - false" "Error: arithmetic expected a number";
   te "times_error_1" "1 * false" "Error: arithmetic expected a number";
-  te "overflow_1" "1073741824" "Compile error: Compile-time integer overflow";
-  te "overflow_2" "add1(1073741823)" "Error: Integer overflow";
-  te "overflow_6" "10737418 * 120" "Error: Integer overflow";
+  te "runtime_overflow_1" "add1(1073741823)" "Error: Integer overflow";
+  te "runtime_overflow_2" "10737418 * 120" "Error: Integer overflow";
   t "add1_1" "add1(1)" "2";
   t "sub1_1" "sub1(1)" "0";
   t "isnum_1" "isnum(1)" "true";
@@ -152,11 +151,33 @@ t "arity_5" {| def f(a, b, c, d, e, f, g):
                  g
              f(1, 2, 3, 4, 5, 6, 7)|} "7";
 ];;
+
+let well_formedness_tests = [
+	te "duplicate_1" {| def f(x, x):
+						 x
+						0  |}  "The identifier x, redefined at <duplicate_1, 1:10-1:11>";
+	te "duplicate_2" {| def f(x):
+						 x
+						def f(y):
+						 y
+						0  |}  "The identifier f, redefined at <duplicate_2, 3:6-4:8>";
+	te "duplicate_3" {| let x = 1, x = 2 in x |} 
+		             "The identifier x, redefined at <duplicate_3, 1:12-1:13>";
+	te "duplicate_4" {| let x = (let y = 1, y = 2 in y) in x |} 
+		             "The identifier y, redefined at <duplicate_4, 1:21-1:22>";
+	te "unbound_1" {| x |}  "The identifier x, used at <unbound_1, 1:1-1:2>, is not in scope";
+	te "unbound_2" {| def f(x):
+	                      y
+	                  0 |}  "The identifier y, used at <unbound_2, 2:23-2:24>, is not in scope";
+    te "overflow_1" "1073741824" "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
+
+];;
 let all_tests = 
   (*expr_tests @*)
   function_tests @
   recursive_tests @
-  arity_tests
+  arity_tests @
+  well_formedness_tests
 ;;
 
 let suite =
