@@ -77,7 +77,8 @@ let expr_tests = [
          let y = (if x >= (5 + 4): x + 3 else: false) in 
              isnum(x) && isnum(y)
   |} "true";
-
+  (*t "let_5" "(let x = 1 in x) + (let x = 2 in x)" "3";*)
+  	
   (* if tests *)
   t "if_1" "if true: 1 else: 2" "1";
   t "if_2" "if false: 1 else: 2" "2";
@@ -129,6 +130,15 @@ t "recursive_2" {|
 	    	if(n == 2): 1 
 	        else: fib(n - 1) + fib(n - 2)
 	fib(6) |} "8";
+t "mutual_1" {|
+	def is_even(n):
+	    if(n == 0): true
+	    else: is_odd(n - 1)
+	def is_odd(n):
+	    if(n == 0): false
+	    else: is_even(n - 1)
+	is_even(4) && !(is_even(3)) && is_odd(5)
+|} "true";
 ];;
 
 let arity_tests = [

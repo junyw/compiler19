@@ -554,3 +554,125 @@ ret address
 
 tail-recursion of same arities
 get tail-recursion of difference arities: call functions with greater arities.
+
+## alpha-renaming
+for cases like (let x = 1 in x) + (let x = 2 in x)
+
+Use env (string to string) to keep track of renaming.
+```ocaml
+let rec renaming e env = 
+match e with
+| ...
+| Id(name, tag) ->
+| Let(binds, body, tag) ->  
+
+```
+
+## type rules
+
+----------------
+n : Int
+
+----------------
+true : Bool
+
+----------------
+false: Bool
+
+
+e1: Bool e2: Bool
+----------------
+e1 and e2: Bool
+
+e1: Int e2: Int
+----------------
+e1 + e2: Int
+
+e1: Int e2: Int
+----------------
+e1 < e2: Bool
+
+
+c: Bool t, f : tau
+----------------
+if c t f : tau
+
+e : tau
+----------------
+isBool(e) : Bool
+
+e : tau
+----------------
+print(e) : tau
+
+e1 e2 : tau 
+----------------
+e1 == e2 : Bool
+
+We have to introduce Γ as type environment.
+
+Γ⊢ e: tau1     Γx: tau1⊢ b : tau2 
+--------------------------------
+Γ⊢ let x = e in b : tau2
+
+
+
+
+
+To check the expression (if true then 1 else 2) + 3 : Int:
+
+--------------------------------
+⊢ (if true then 1 else 2) + 3: Int
+
+
+⊢(if true then 1 else 2) : Int   ⊢3 : Int
+--------------------------------
+⊢ (if true then 1 else 2) : Int
+
+
+⊢true:Bool ⊢1:Int ⊢2 Int
+-------------------------        -------
+⊢ (if true then 1 else 2) : Int   ⊢3 : Int
+--------------------------------
+⊢ (if true then 1 else 2) : Int
+
+
+---------  -----  -----
+⊢true:Bool ⊢1:Int ⊢2 Int
+-------------------------        -------
+⊢(if true then 1 else 2) : Int   ⊢3 : Int
+--------------------------------
+⊢ (if true then 1 else 2) : Int
+
+
+
+Hindly-Milner type inference
+let f g h x = h(g(h(x)))
+
+```
+f = lambda.g lambda.h lambda.x h(g(h(x)))
+f : alpha
+alpha = beta->gamma
+g : beta
+gamma = delta->epsilon
+h : delta
+epsilon = miu -> eta
+x : miu
+
+Because h is applied to x
+delta = miu->theta
+beta = ...
+```
+
+Then we can get the type of f:
+
+forall theta, X, f : (theta->X)->(X->theta)->X->theta
+
+
+
+
+
+
+
+
+

@@ -228,7 +228,7 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
      let prelude = compile_cexpr cexpr (si + 1) env num_args is_tail in
      (* id_reg: position of the binding in memory *)
      let id_reg = RegOffset(~-(word_size * si), EBP) in 
-     let body = compile_aexpr aexpr (si + 1) ((id, id_reg)::env) num_args is_tail in
+     let body = compile_aexpr aexpr (si + 1) ((id, id_reg)::env) num_args (is_tail && true) in
      prelude
      @ [ IMov(id_reg, Reg(EAX)) ]
      @ body
@@ -267,10 +267,10 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       @ assert_bool' "err_if_not_boolean"
       @ [ ICmp(Reg(EAX), const_false); 
           IJe(else_label) ]
-      @ compile_aexpr aexpr si env 0 false
+      @ compile_aexpr aexpr si env 0 (is_tail && true)
       @ [ IJmp(done_label); 
           ILabel(else_label) ]
-      @ compile_aexpr aexpr2 si env 0 false
+      @ compile_aexpr aexpr2 si env 0 (is_tail && true)
       @ [ ILabel(done_label) ]
   | CPrim1(op, immexpr, tag) -> 
      let e = immexpr in
@@ -397,7 +397,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ILabel(done_label);
         ]
      end
-  | CApp(fun_name, immexprs, tag) ->  (* TODO: handle functions of different arities *)
+  | CApp(fun_name, immexprs, tag) ->
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
     (* the label of the function declaration *)
     let tmp = sprintf "fun_dec_%s" fun_name in
@@ -414,6 +414,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       ) imm_regs []
     in
       [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
+        ILineComment(("tail call: " ^ (string_of_bool is_tail)));
         ISub(Reg(ESP), Const(stack_padding * word_size)); (* stack padding *)
       ] 
       @ push_args @
@@ -462,7 +463,7 @@ and compile_decl (d : tag adecl) : instruction list =
           ((arg, arg_reg)::env, i+1)
       ) ([], 2) args 
     in
-    let body = compile_aexpr aexpr 1 env (List.length args) false in
+    let body = compile_aexpr aexpr 1 env (List.length args) true in
           [ ILineComment(("declaration of function " ^ name));
             ILabel(tmp); ] 
         @ prelude 
