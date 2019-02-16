@@ -480,6 +480,7 @@ let rec compile_prog (anfed : tag aprogram) : string =
 extern error
 extern print
 extern printstack
+extern _ebp_of_main
 global our_code_starts_here" in
     let stack_setup = [
         (* instructions for setting up stack here *)
@@ -488,7 +489,10 @@ global our_code_starts_here" in
         ILabel("our_code_starts_here");
         ILineComment("-----stack setup-----");
         
-        IMov(Reg(EBP), Reg(ESP)); 
+        IMov(Reg(EBP), Reg(ESP));
+
+        IDebug("  mov [_ebp_of_main], ebp");
+
         ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
 
         ILineComment("-----compiled code-----");

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h> 
 
 extern int our_code_starts_here() asm("our_code_starts_here");
 extern int print(int val) asm("print");
@@ -17,9 +18,14 @@ const int E_IF_NOT_BOOL = 3;
 const int E_LOGIC_NOT_BOOL = 4;
 const int E_ARITH_OVERFLOW = 5;
 
-extern int ebp_value;
-int ebp_value = 0;
+extern int ebp_of_main;
+int ebp_of_main = 0;
 
+
+bool is_tagged_value(int val) {
+  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE) return true;
+  return false;
+}
 void print_tagged_value(int val) {
   if ((val & BOOL_TAG) == 0) { 
     printf("%d", val >> 1);  // shift bits right to remove tag
@@ -28,30 +34,37 @@ void print_tagged_value(int val) {
   } else if (val == BOOL_FALSE) {
     printf("false");
   } else {
-    printf("%#010x\n", val); 
+    printf("%#010x", val); 
   }
   return;
 }
 
 int printstack(int val, int* EBP, int* ESP) {
   printf("print_stack\n");
-  // printf("ending ebp value: %p\n", (void*)ebp_value);
+  printf("ebp_of_main: %p\n", (void*)ebp_of_main);
   printf("ESP: %p ==> %d\n", ESP, (unsigned int)ESP);
   printf("EBP: %p ==> %d\n", EBP, (unsigned int)EBP);
   printf("(difference: %d)\n", (unsigned int)ESP-(unsigned int)EBP);
   printf("Requested return val: %#010x\n", val);
 
-  int* old_ebp = EBP;
-  for(int i = 0; i < 40; i++) {
+  int* current_stack_ebp = EBP;
+  int* last_stack_ebp = NULL;
+  while(true) {
     printf("%p: %#010x   ==>   ", ESP, *ESP);
-    if(ESP == old_ebp) {
-      printf("old ebp");
-      old_ebp = (void*)*ESP;
+    if(ESP == current_stack_ebp) {
+      printf("saved EBP");
+      last_stack_ebp = current_stack_ebp;
+      current_stack_ebp = (void*)*ESP;
+    }
+    else if(ESP == last_stack_ebp + 1) {
+      printf("saved return address");
+      printf("\n-");
     }
     else {
       print_tagged_value((int)*ESP);
     }
     printf("\n");
+    if((int)ESP == ebp_of_main) break;
     ESP++;
   }
   return val; 

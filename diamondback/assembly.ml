@@ -52,7 +52,7 @@ type instruction =
   | ITest of arg * arg
   | ILineComment of string
   | IInstrComment of instruction * string
-
+  | IDebug of string
 
 let r_to_asm (r : reg) : string =
   match r with
@@ -137,6 +137,7 @@ let rec i_to_asm (i : instruction) : string =
      sprintf "  ;;%s" str
   | IInstrComment(instr, str) ->
      sprintf "%s ; %s" (i_to_asm instr) str
+  | IDebug(instr) -> instr
 
 let to_asm (is : instruction list) : string =
   List.fold_left (fun s i -> sprintf "%s\n%s" s (i_to_asm i)) "" is
