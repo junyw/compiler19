@@ -43,12 +43,12 @@ void print_tagged_value(int val) {
   in C to have direct access to memory.
 */
 int printstack(int val, int* EBP, int* ESP) {
-  printf("print_stack\n");
+  printf("printstack\n");
   printf("STACK_BOTTOM: %p\n", (void*)STACK_BOTTOM);
   printf("ESP: %p ==> %d\n", ESP, (unsigned int)ESP);
   printf("EBP: %p ==> %d\n", EBP, (unsigned int)EBP);
   printf("(difference: %d)\n", (unsigned int)ESP-(unsigned int)EBP);
-  printf("Requested return val: %#010x\n\n", val);
+  printf("Requested return val(raw): %#010x\n\n", val);
 
   int* current_stack_ebp = EBP;
   int* last_stack_ebp = NULL;
@@ -71,7 +71,7 @@ int printstack(int val, int* EBP, int* ESP) {
     if((int)ESP == STACK_BOTTOM) break;
     ESP++;
   }
-  printf("\nEnd of printstack\n");
+  printf("- End of printstack\n");
   return val; 
 }
 int print(int val) {
@@ -104,5 +104,5 @@ void error(int errCode, int val) {
 int main(int argc, char** argv) {
   int result = our_code_starts_here();
   print(result);
-  return 0;
+  exit(0);
 }

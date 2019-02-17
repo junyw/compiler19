@@ -293,10 +293,9 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
                   IJo("err_arith_overflow");
                 ] 
      | Print -> [ ILineComment("calling c function");
-                  ISub(Reg(ESP), Const(8)); (* stack padding *)
                   IPush(Sized(DWORD_PTR, e_reg)); 
                   ICall("print");
-                  IAdd(Reg(ESP), Const(3*4));
+                  IAdd(Reg(ESP), Const(1*4));
                 ]
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
@@ -461,7 +460,7 @@ and compile_decl (d : tag adecl) : instruction list =
       (* make current ESP the new EBP *)
       IMov(Reg(EBP), Reg(ESP));
       (* "allocate space" for N local variables *)
-      ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
+      ISub(Reg(ESP), Const(4*n)); 
 
       ILineComment("-----start of function body-----");
       ILabel(tmp_body);
@@ -513,17 +512,16 @@ global our_code_starts_here" in
 
         IDebug("  mov [_STACK_BOTTOM], ebp");
 
-        ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
+        ISub(Reg(ESP), Const(4*n)); 
 
         ILineComment("-----compiled code-----");
       ] in
     let err_handling (err_type : string) (err_code : int) : instruction list = 
         [ ILabel(err_type);
-          IPush(Const(0));
           IPush(Reg(EAX));
           IPush(Const(err_code)); 
           ICall("error");
-          IAdd(Reg(ESP), Const(3*4));
+          IAdd(Reg(ESP), Const(2*4));
           IMov(Reg(ESP), Reg(EBP)); 
           IRet;
         ]
