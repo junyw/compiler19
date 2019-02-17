@@ -1,0 +1,5 @@
+def min(x, y):
+  if x < y: printStack(x)
+  else: min(y, x)
+
+min(2, 1)
