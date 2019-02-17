@@ -77,6 +77,8 @@ let expr_tests = [
          let y = (if x >= (5 + 4): x + 3 else: false) in 
              isnum(x) && isnum(y)
   |} "true";
+  
+  (* let* semantics *)
   t "let_5" {| let x = 10, y = x * 2 in y |} "20"; 	
 
   (* if tests *)

@@ -182,9 +182,14 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
             (* check duplicate bindings *)
           @ check_duplicates name_locs
             (* check bindings: TODO *)
-          @  (List.flatten @@ List.map (fun (_, binding_body, _) -> wf_E binding_body env) binds)
+          @  let (errors, new_env)  = 
+                List.fold_left 
+                (fun (errors, env) (id, binding_body, loc)  -> 
+                   (errors @ (wf_E binding_body env), (id, loc)::env)) 
+                ([], env) binds
+             in errors
             (* check body *)
-          @  (wf_E body (env @ name_locs) )
+          @  (wf_E body new_env)
         | EApp(f, args, _) -> errors (* TODO *)
       in wf_E' e env []
   and check_duplicates (args : (string * sourcespan) list) : exn list =
