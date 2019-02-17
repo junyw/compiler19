@@ -234,7 +234,7 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
      @ body
   | ACExpr(cexpr) -> begin match cexpr with 
                       | CApp _ | CIf _ -> compile_cexpr cexpr si env num_args is_tail
-                      | _ -> compile_cexpr cexpr si env num_args false (* TODO *)
+                      | _ -> compile_cexpr cexpr si env num_args false
                      end
 
 and compile_cexpr (e : tag cexpr) si env num_args is_tail =
@@ -405,14 +405,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let tmp = sprintf "fun_dec_%s" fun_name in
     let tmp_body = sprintf "fun_dec_body_%s" fun_name in
     let num_of_args = List.length immexprs in
-    let stack_padding = match (num_of_args mod 4) with
-        | 0 -> 0
-        | 1 -> 2
-        | 2 -> 1
-        | 3 -> 0
-        | _ -> failwith "stack_padding: impossible value"
-    in
-    if is_tail 
+    if is_tail
     then
       let (_, push_args) = List.fold_right (fun imm_reg (i, instrs) -> 
           (i + 1, 
@@ -433,12 +426,11 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       in
         [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
           ILineComment(("tail call: " ^ (string_of_bool is_tail)));
-          ISub(Reg(ESP), Const(stack_padding * word_size)); (* stack padding *)
         ] 
         @ push_args @
         [
           ICall(tmp);
-          IAdd(Reg(ESP), Const((stack_padding + num_of_args) * word_size));
+          IAdd(Reg(ESP), Const(num_of_args * word_size));
         ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
 and compile_imm e env : arg =
@@ -453,6 +445,7 @@ and compile_decl (d : tag adecl) : instruction list =
   | ADFun(fun_name, args, aexpr, tag) ->
     let tmp = sprintf "fun_dec_%s" fun_name in
     let tmp_body = sprintf "fun_dec_body_%s" fun_name in
+    let num_args = List.length args in
     let n = (count_vars aexpr) in
     let prelude = [
       (* save (previous, caller's) EBP on stack *)
@@ -482,8 +475,9 @@ and compile_decl (d : tag adecl) : instruction list =
           ((arg, arg_reg)::env, i+1)
       ) ([], 2) args 
     in
-    let body = compile_aexpr aexpr 1 env (List.length args) true in
+    let body = compile_aexpr aexpr 1 env num_args true in
           [ ILineComment(("declaration of function " ^ fun_name));
+            ILineComment(("number of arguments " ^ (string_of_int num_args)));
             ILabel(tmp); ] 
         @ prelude 
         @ body 
@@ -508,11 +502,11 @@ global our_code_starts_here" in
         ILabel("our_code_starts_here");
         ILineComment("-----stack setup-----");
         
-        IMov(Reg(EBP), Reg(ESP));
-
-        IDebug("  mov [_STACK_BOTTOM], ebp");
-
+        IMov(Reg(EBP), Reg(ESP));        
         ISub(Reg(ESP), Const(4*n)); 
+
+        (* Set the global variable STACK_BOTTOM to EBP *)
+        IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
 
         ILineComment("-----compiled code-----");
       ] in
@@ -539,7 +533,7 @@ global our_code_starts_here" in
         @ err_handling "err_arith_overflow"     err_ARITH_OVERFLOW
 
     in
-    let body = (compile_aexpr aexpr 1 [] 0 false(* TODO: should be true *)) in
+    let body = (compile_aexpr aexpr 1 [] 0 false) in
     let as_assembly_string = (to_asm (fun_decs @ stack_setup @ body @ postlude)) in
     sprintf "%s%s\n" prelude as_assembly_string
 
