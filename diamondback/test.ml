@@ -77,8 +77,8 @@ let expr_tests = [
          let y = (if x >= (5 + 4): x + 3 else: false) in 
              isnum(x) && isnum(y)
   |} "true";
-  (*t "let_5" "(let x = 1 in x) + (let x = 2 in x)" "3";*)
-  	
+  t "let_5" {| let x = 10, y = x * 2 in y |} "20"; 	
+
   (* if tests *)
   t "if_1" "if true: 1 else: 2" "1";
   t "if_2" "if false: 1 else: 2" "2";
@@ -91,6 +91,12 @@ let expr_tests = [
   te "if_error_2" "let x = 1 in (if x: true else: false)" "Error: if expected a boolean";
   te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
 ];;
+
+let renaming_tests = [
+   t "rename_1" "(let x = 1 in x) + (let x = 2 in x)" "3";
+];;
+
+
 let function_tests = [
 t "fun_1" {|
 	def max(x, y):
@@ -186,6 +192,7 @@ let well_formedness_tests = [
 ];;
 let all_tests = 
   expr_tests @
+  renaming_tests @
   function_tests @
   recursive_tests @
   arity_tests @

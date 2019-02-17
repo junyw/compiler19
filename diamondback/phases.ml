@@ -17,6 +17,7 @@ type phase =
   | Source of string
   | Parsed of sourcespan program
   | WellFormed of sourcespan program
+  | Renamed of tag program
   | Tagged of tag program
   | ANFed of tag aprogram
   | Result of string
@@ -26,6 +27,7 @@ type phase =
 let source s = Source s
 let parsed p = Parsed p
 let well_formed p = WellFormed p
+let renamed p = Renamed p
 let tagged p = Tagged p
 let anfed p = ANFed p
 let result s = Result s
@@ -92,6 +94,7 @@ let print_trace (trace : phase list) : string list =
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
     | WellFormed _ -> "Well-formed"
+    | Renamed _ -> "Alpha-renamed"
     | Tagged _ -> "Tagged"
     | ANFed _ -> "ANF'ed"
     | Result _ -> "Result" in
@@ -99,6 +102,7 @@ let print_trace (trace : phase list) : string list =
     | Source s -> s
     | Parsed p
     | WellFormed p -> string_of_program p
+    | Renamed p -> string_of_program p
     | Tagged p -> string_of_program p
     | ANFed p -> string_of_aprogram p
     | Result s -> s in

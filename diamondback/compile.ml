@@ -160,8 +160,6 @@ let anf (p : tag program) : unit aprogram =
   helpP p
 ;;
 
-
-
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   let rec wf_E (e : sourcespan expr) env : exn list = 
       let rec wf_E' e env (errors : exn list) : exn list = 
@@ -183,7 +181,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
             errors 
             (* check duplicate bindings *)
           @ check_duplicates name_locs
-            (* check bindings *)
+            (* check bindings: TODO *)
           @  (List.flatten @@ List.map (fun (_, binding_body, _) -> wf_E binding_body env) binds)
             (* check body *)
           @  (wf_E body (env @ name_locs) )
@@ -217,12 +215,34 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       else Error(duplicate_decls @ decls_err @ body_err)
 ;;
 
+(* alpha-renaming, called after well-formedness check *)
+let rename (prog : tag program) : tag program = 
+  let rec renameE (env : string envt) (e: tag expr) : tag expr = 
+    match e with
+    | ENumber _ -> e
+    | EBool _   -> e
+    | EId(id, tag) -> EId(find env id, tag)
+    | EPrim1(op, e1, tag) -> EPrim1(op, renameE env e1, tag)
+    | EPrim2(op, e1, e2, tag) -> EPrim2(op, renameE env e1, renameE env e2, tag)
+    | EIf(cond, thn, els, tag) -> EIf(renameE env cond, renameE env thn, renameE env els, tag)
+    | ELet(binds, body, tag) ->
+        let help (binds, env) (name, exp, tag) : (tag bind list * string envt) = 
+          let new_name = sprintf "$%s_%d" name tag in
+          let new_exp = renameE env exp in
+          let new_env = (name, new_name)::env in
+          ((new_name, new_exp, tag)::binds, new_env)
+        in
+          let (new_binds, new_env) = List.fold_left help ([], env) binds
+        in ELet((List.rev new_binds), renameE new_env body, tag)
+    | EApp(fun_name, args, tag) -> EApp(fun_name, List.map (renameE env) args, tag)
+  in
+    match prog with
+    | Program(decls, expr, tag) -> 
+      Program(decls , renameE [] expr, tag) (* TODO *)
 
-let rec compile_fun (fun_name : string) args env : instruction list =
-    failwith "compile_fun not yet implemented"
 
 
-and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
+let rec compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
   | ALet(id, cexpr, aexpr, _) -> 
      let prelude = compile_cexpr cexpr (si + 1) env num_args false in
@@ -544,6 +564,7 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
   |> (add_phase tagged tag)
+  |> (add_phase renamed rename)
   |> (add_phase anfed (fun p -> atag (anf p)))
   |> (add_phase result compile_prog)
 ;;
