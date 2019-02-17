@@ -19,7 +19,7 @@ type arg =
   | Const of int
   | HexConst of int
   | Reg of reg
-  | RegOffset of int * reg (* int is # words of offset *)
+  | RegOffset of int * reg
   | Sized of size * arg
 
 type instruction =

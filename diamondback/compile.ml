@@ -225,14 +225,17 @@ let rec compile_fun (fun_name : string) args env : instruction list =
 and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
   | ALet(id, cexpr, aexpr, _) -> 
-     let prelude = compile_cexpr cexpr (si + 1) env num_args is_tail in
+     let prelude = compile_cexpr cexpr (si + 1) env num_args false in
      (* id_reg: position of the binding in memory *)
      let id_reg = RegOffset(~-(word_size * si), EBP) in 
-     let body = compile_aexpr aexpr (si + 1) ((id, id_reg)::env) num_args (is_tail && true) in
+     let body = compile_aexpr aexpr (si + 1) ((id, id_reg)::env) num_args is_tail in
      prelude
      @ [ IMov(id_reg, Reg(EAX)) ]
      @ body
-  | ACExpr(cexpr) -> compile_cexpr cexpr si env num_args is_tail
+  | ACExpr(cexpr) -> begin match cexpr with 
+                      | CApp _ | CIf _ -> compile_cexpr cexpr si env num_args is_tail
+                      | _ -> compile_cexpr cexpr si env num_args false (* TODO *)
+                     end
 
 and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   let assert_num (e_reg : arg) (error : string) = 
@@ -267,10 +270,10 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       @ assert_bool' "err_if_not_boolean"
       @ [ ICmp(Reg(EAX), const_false); 
           IJe(else_label) ]
-      @ compile_aexpr aexpr si env 0 (is_tail && true)
+      @ compile_aexpr aexpr si env 0 is_tail
       @ [ IJmp(done_label); 
           ILabel(else_label) ]
-      @ compile_aexpr aexpr2 si env 0 (is_tail && true)
+      @ compile_aexpr aexpr2 si env 0 is_tail
       @ [ ILabel(done_label) ]
   | CPrim1(op, immexpr, tag) -> 
      let e = immexpr in
@@ -401,27 +404,43 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
     (* the label of the function declaration *)
     let tmp = sprintf "fun_dec_%s" fun_name in
+    let tmp_body = sprintf "fun_dec_body_%s" fun_name in
     let num_of_args = List.length immexprs in
     let stack_padding = match (num_of_args mod 4) with
-      | 0 -> 0
-      | 1 -> 2
-      | 2 -> 1
-      | 3 -> 0
-      | _ -> failwith "stack_padding: impossible value"
+        | 0 -> 0
+        | 1 -> 2
+        | 2 -> 1
+        | 3 -> 0
+        | _ -> failwith "stack_padding: impossible value"
     in
-    let push_args = List.fold_right (fun imm_reg instrs -> 
-        [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs
-      ) imm_regs []
-    in
-      [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
-        ILineComment(("tail call: " ^ (string_of_bool is_tail)));
-        ISub(Reg(ESP), Const(stack_padding * word_size)); (* stack padding *)
-      ] 
-      @ push_args @
-      [
-        ICall(tmp);
-        IAdd(Reg(ESP), Const((stack_padding + num_of_args)* word_size));
-      ]
+    if is_tail 
+    then
+      let (_, push_args) = List.fold_right (fun imm_reg (i, instrs) -> 
+          (i + 1, 
+           [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs @ [ IPop(Sized(DWORD_PTR, RegOffset((word_size * i), EBP))) ])
+        ) imm_regs (2, [])
+      in
+        [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
+          ILineComment(("tail call: " ^ (string_of_bool is_tail)));
+        ] 
+        @ push_args @
+        [
+          IJmp(tmp_body);
+        ]
+    else
+      let push_args = List.fold_right (fun imm_reg instrs -> 
+          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs
+        ) imm_regs []
+      in
+        [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
+          ILineComment(("tail call: " ^ (string_of_bool is_tail)));
+          ISub(Reg(ESP), Const(stack_padding * word_size)); (* stack padding *)
+        ] 
+        @ push_args @
+        [
+          ICall(tmp);
+          IAdd(Reg(ESP), Const((stack_padding + num_of_args) * word_size));
+        ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
 and compile_imm e env : arg =
   match e with
@@ -432,8 +451,9 @@ and compile_imm e env : arg =
 
 and compile_decl (d : tag adecl) : instruction list =
   match d with 
-  | ADFun(name, args, aexpr, tag) ->
-    let tmp = sprintf "fun_dec_%s" name in
+  | ADFun(fun_name, args, aexpr, tag) ->
+    let tmp = sprintf "fun_dec_%s" fun_name in
+    let tmp_body = sprintf "fun_dec_body_%s" fun_name in
     let n = (count_vars aexpr) in
     let prelude = [
       (* save (previous, caller's) EBP on stack *)
@@ -444,7 +464,7 @@ and compile_decl (d : tag adecl) : instruction list =
       ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
 
       ILineComment("-----start of function body-----");
-
+      ILabel(tmp_body);
     ] in
     let postlude = [
       ILineComment("-----end of function body-----");
@@ -464,7 +484,7 @@ and compile_decl (d : tag adecl) : instruction list =
       ) ([], 2) args 
     in
     let body = compile_aexpr aexpr 1 env (List.length args) true in
-          [ ILineComment(("declaration of function " ^ name));
+          [ ILineComment(("declaration of function " ^ fun_name));
             ILabel(tmp); ] 
         @ prelude 
         @ body 
@@ -480,7 +500,7 @@ let rec compile_prog (anfed : tag aprogram) : string =
 extern error
 extern print
 extern printstack
-extern _ebp_of_main
+extern _STACK_BOTTOM
 global our_code_starts_here" in
     let stack_setup = [
         (* instructions for setting up stack here *)
@@ -491,7 +511,7 @@ global our_code_starts_here" in
         
         IMov(Reg(EBP), Reg(ESP));
 
-        IDebug("  mov [_ebp_of_main], ebp");
+        IDebug("  mov [_STACK_BOTTOM], ebp");
 
         ISub(Reg(ESP), Const((4*n/16+1)*16)); (* make esp 16-byte aligned *)
 
@@ -521,7 +541,7 @@ global our_code_starts_here" in
         @ err_handling "err_arith_overflow"     err_ARITH_OVERFLOW
 
     in
-    let body = (compile_aexpr aexpr 1 [] 0 false) in
+    let body = (compile_aexpr aexpr 1 [] 0 false(* TODO: should be true *)) in
     let as_assembly_string = (to_asm (fun_decs @ stack_setup @ body @ postlude)) in
     sprintf "%s%s\n" prelude as_assembly_string
 

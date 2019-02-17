@@ -93,9 +93,9 @@ let expr_tests = [
 ];;
 let function_tests = [
 t "fun_1" {|
-	def Max(x, y):
+	def max(x, y):
 	    if(x > y): x else: y
-	Max(1, 2) * Max(2, 1)
+	max(1, 2) * max(2, 1)
 |} "4";
 
 t "fun_2" {|
@@ -123,6 +123,7 @@ t "recursive_1" {|
     def factorial(n):
 		if (n == 0): 1 else: n * factorial(n - 1)
 	factorial(6) |} "720";
+
 t "recursive_2" {|
 	def fib(n):
 		if(n == 1): 1 
@@ -130,6 +131,7 @@ t "recursive_2" {|
 	    	if(n == 2): 1 
 	        else: fib(n - 1) + fib(n - 2)
 	fib(6) |} "8";
+
 t "mutual_1" {|
 	def is_even(n):
 	    if(n == 0): true
@@ -179,7 +181,7 @@ let well_formedness_tests = [
 	te "unbound_2" {| def f(x):
 	                      y
 	                  0 |}  "The identifier y, used at <unbound_2, 2:23-2:24>, is not in scope";
-    te "overflow_1" "1073741824" "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
+  te "overflow_1" "1073741824" "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
 
 ];;
 let all_tests = 

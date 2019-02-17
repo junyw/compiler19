@@ -18,8 +18,8 @@ const int E_IF_NOT_BOOL = 3;
 const int E_LOGIC_NOT_BOOL = 4;
 const int E_ARITH_OVERFLOW = 5;
 
-extern int ebp_of_main;
-int ebp_of_main = 0;
+extern int STACK_BOTTOM;
+int STACK_BOTTOM = 0;
 
 
 bool is_tagged_value(int val) {
@@ -38,21 +38,25 @@ void print_tagged_value(int val) {
   }
   return;
 }
-
+/* why this must be implemented as a EPrim1 and not as a EApp expression?
+  Diamondback does not have pointers, therefore printstack must be implemented 
+  in C to have direct access to memory.
+*/
 int printstack(int val, int* EBP, int* ESP) {
   printf("print_stack\n");
-  printf("ebp_of_main: %p\n", (void*)ebp_of_main);
+  printf("STACK_BOTTOM: %p\n", (void*)STACK_BOTTOM);
   printf("ESP: %p ==> %d\n", ESP, (unsigned int)ESP);
   printf("EBP: %p ==> %d\n", EBP, (unsigned int)EBP);
   printf("(difference: %d)\n", (unsigned int)ESP-(unsigned int)EBP);
-  printf("Requested return val: %#010x\n", val);
+  printf("Requested return val: %#010x\n\n", val);
 
   int* current_stack_ebp = EBP;
   int* last_stack_ebp = NULL;
   while(true) {
     printf("%p: %#010x   ==>   ", ESP, *ESP);
     if(ESP == current_stack_ebp) {
-      printf("saved EBP");
+      printf("saved ebp");
+      if((int)ESP == STACK_BOTTOM) printf(" (STACK_BOTTOM)");
       last_stack_ebp = current_stack_ebp;
       current_stack_ebp = (void*)*ESP;
     }
@@ -64,9 +68,10 @@ int printstack(int val, int* EBP, int* ESP) {
       print_tagged_value((int)*ESP);
     }
     printf("\n");
-    if((int)ESP == ebp_of_main) break;
+    if((int)ESP == STACK_BOTTOM) break;
     ESP++;
   }
+  printf("\nEnd of printstack\n");
   return val; 
 }
 int print(int val) {
