@@ -319,8 +319,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       @ compile_aexpr aexpr2 si env num_args is_tail
       @ [ ILabel(done_label) ]
   | CPrim1(op, immexpr, tag) -> 
-     let e = immexpr in
-     let e_reg = compile_imm e env in
+     let e_reg = compile_imm immexpr env in
      let done_label = sprintf "$eprim1_done_%d" tag in
      begin match op with
      | Add1  -> assert_num e_reg "$err_arith_not_num" @
