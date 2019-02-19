@@ -168,6 +168,14 @@ t "tail_1" {|
       else: y
 
     f(1000000, 0)  |} "1000000";
+    
+t "tail_2" {|
+  def mult(x, y):
+    x * y
+  def square(x):
+    mult(x, x)
+  square(3)
+|} "9";
 
 ];;
 
