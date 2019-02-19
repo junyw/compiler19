@@ -1,5 +1,5 @@
 ## Tail-call
- 
+
 Tail-call optimization is implemented for 
 1. self-recursive tail-calls.
 2. arbitrary tail-calls, when the number of arguments is the same between caller and callee.
@@ -12,7 +12,9 @@ $ make output/fact_tail.run
 $ output/fact_tail.run
 ```
 
-## Stack
+
+## Makefile
 
 On MacOS, esp should be 16-byte aligned before function calls. The '-mstackrealign' flag automatically aligns the stack.
 
+The '-g' is for generating debugging information.

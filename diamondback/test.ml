@@ -77,7 +77,7 @@ let expr_tests = [
          let y = (if x >= (5 + 4): x + 3 else: false) in 
              isnum(x) && isnum(y)
   |} "true";
-  
+
   (* let* semantics *)
   t "let_5" {| let x = 10, y = x * 2 in y |} "20"; 	
 
@@ -95,7 +95,10 @@ let expr_tests = [
 ];;
 
 let renaming_tests = [
-   t "rename_1" "(let x = 1 in x) + (let x = 2 in x)" "3";
+   t "rename_1" {| (let x = 1 in x) + (let x = 2 in x) |} "3";
+   t "rename_2" {| def foo(x):
+                       x + (let x = 1 in x) + (let x = 2 in x)
+                    foo(3) |} "6";
 ];;
 
 
@@ -103,14 +106,17 @@ let function_tests = [
 t "fun_1" {|
 	def max(x, y):
 	    if(x > y): x else: y
+
 	max(1, 2) * max(2, 1)
 |} "4";
 
 t "fun_2" {|
 	def NAND(a, b):
 		!(a && b)
+
 	def XOR(a, b):
 		NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
+
 	let a = print(XOR(true, true)) in 
 	let b = print(XOR(true, false)) in
 	let c = print(XOR(false, true)) in
@@ -121,6 +127,7 @@ t "fun_3" {|
 	def q(x):
 		let a = 1, b = -1, c = -2 in
 			(a * x * x) + (b * x) + c
+
 	(q(0) == -2) && (q(-1) == 0) && (q(2) == 0)
 |} "true";
 
@@ -129,8 +136,9 @@ t "fun_3" {|
 let recursive_tests = [
 t "recursive_1" {| 
     def factorial(n):
-		if (n == 0): 1 else: n * factorial(n - 1)
-	factorial(6) |} "720";
+  		if (n == 0): 1 else: n * factorial(n - 1)
+
+	  factorial(6) |} "720";
 
 t "recursive_2" {|
 	def fib(n):
@@ -138,17 +146,29 @@ t "recursive_2" {|
 	    else: 
 	    	if(n == 2): 1 
 	        else: fib(n - 1) + fib(n - 2)
+
 	fib(6) |} "8";
 
 t "mutual_1" {|
 	def is_even(n):
 	    if(n == 0): true
 	    else: is_odd(n - 1)
+
 	def is_odd(n):
 	    if(n == 0): false
 	    else: is_even(n - 1)
+
 	is_even(4) && !(is_even(3)) && is_odd(5)
 |} "true";
+
+(* the function call would cause stack-overflow without tail-call optimization *)
+t "tail_1" {|
+    def f(x, y):
+      if x > 0: f(x - 1, y + 1)
+      else: y
+
+    f(1000000, 0)  |} "1000000";
+
 ];;
 
 let arity_tests = [
@@ -191,7 +211,24 @@ let well_formedness_tests = [
 	                  0 |}  "The identifier y, used at <unbound_2, 2:23-2:24>, is not in scope";
   te "overflow_1" "1073741824" "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
 
+  te "unbound_fun_1" {| f(1) |} 
+     "The function name f, used at <unbound_fun_1, 1:1-1:5>, is not in scope";
+  te "arity_mismatch_1" {| def f(x, y):
+                                x + y
+                            f(1) |} 
+     "The function called at <arity_mismatch_1, 3:28-3:32> expected an arity of 2, but received 1 arguments";
+
+  (* the following program should report 3 errors *)
+  te "errors_1" {| def f(x, x):
+                       y
+                   f(1) |} 
+  "The identifier x, redefined at <errors_1, 1:10-1:11>, duplicates one at <errors_1, 1:7-1:8>
+The identifier y, used at <errors_1, 2:23-2:24>, is not in scope
+The function called at <errors_1, 3:19-3:23> expected an arity of 2, but received 1 arguments";
+
 ];;
+
+
 let all_tests = 
   expr_tests @
   renaming_tests @

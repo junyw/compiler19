@@ -265,18 +265,18 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
   (* check the value in EAX is boolean *)
   and assert_bool' (error : string) =
     [ ILineComment("assert_bool'");
-      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
-      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
+      IMov(Reg(EDX), Reg(EAX));
+      IXor(Reg(EDX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EDX), HexConst(0x7FFFFFFF));
       IJnz(error);
-      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
     ]
   in 
   let assert_bool (e_reg : arg) (error : string) = 
     [ ILineComment("assert_bool");
       IMov(Reg(EAX), e_reg); 
-      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
-      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
-      IMov(Reg(EAX), e_reg); 
+      IMov(Reg(EDX), Reg(EAX));
+      IXor(Reg(EDX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EDX), HexConst(0x7FFFFFFF));
       IJnz(error);
     ]
   in
@@ -430,7 +430,7 @@ let rec compile_expr (e : tag expr) (si : int) (env : (string * int) list) : ins
     let else_label = sprintf "if_false_%d" tag in
     let done_label = sprintf "done_%d" tag in
         compile_expr cond si env
-      @ assert_bool' "err_if_not_boolean"
+      @  assert_bool (Reg(EAX)) "err_if_not_boolean"
       @ [ ICmp(Reg(EAX), const_false); 
           IJe(else_label) ]
       @ compile_expr thn si env

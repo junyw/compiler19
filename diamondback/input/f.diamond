@@ -1,0 +1,5 @@
+def f(x, y):
+	if x > 0: f(x - 1, y + 1)
+	else: printStack(y)
+
+f(1000000, 0)

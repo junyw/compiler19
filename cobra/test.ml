@@ -14,6 +14,8 @@ let number_tests = [
   t "number_2" "0" "0";
   t "number_3" "-41" "-41";
   t "number_4" "1073741823" "1073741823";
+  (* not working, requires renaming *)
+  (*t "x" "(let x = 1 in x) + (let x = 2 in x)" "3";*) 
   (* More tests here *)
 ];;
 let arithmetic_tests = [

@@ -42,7 +42,13 @@ let rec find ls x =
   match ls with
   | [] -> raise (InternalCompilerError (sprintf "Name %s not found" x))
   | (y,v)::rest ->
-     if y = x then v else find rest x
+     if String.equal y x then v else find rest x
+
+let rec find_opt ls x =
+  match ls with
+  | [] -> None
+  | (y,v)::rest ->
+     if String.equal y x then Some(v) else find_opt rest x
 
 let count_vars e =
   let rec helpA e =
@@ -125,20 +131,20 @@ let anf (p : tag program) : unit aprogram =
     | EBool(b, _) -> (ImmBool(b, ()), [])
     | EId(name, _) -> (ImmId(name, ()), [])
     | EPrim1(op, arg, tag) ->
-       let tmp = sprintf "unary_%d" tag in
+       let tmp = sprintf "$unary_%d" tag in
        let (arg_imm, arg_setup) = helpI arg in
        (ImmId(tmp, ()), arg_setup @ [(tmp, CPrim1(op, arg_imm, ()))])
     | EPrim2(op, left, right, tag) ->
-       let tmp = sprintf "binop_%d" tag in
+       let tmp = sprintf "$binop_%d" tag in
        let (left_imm, left_setup) = helpI left in
        let (right_imm, right_setup) = helpI right in
        (ImmId(tmp, ()), left_setup @ right_setup @ [(tmp, CPrim2(op, left_imm, right_imm, ()))])
     | EIf(cond, _then, _else, tag) ->
-       let tmp = sprintf "if_%d" tag in
+       let tmp = sprintf "$if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
     | EApp(funname, args, tag) -> 
-       let tmp = sprintf "app_%d" tag in
+       let tmp = sprintf "$app_%d" tag in
        let (args_imm, args_setup) = 
           List.fold_left
           (fun (args_imm, args_setup) arg -> 
@@ -161,8 +167,8 @@ let anf (p : tag program) : unit aprogram =
 ;;
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-  let rec wf_E (e : sourcespan expr) env : exn list = 
-      let rec wf_E' e env (errors : exn list) : exn list = 
+  let rec wf_E (e : sourcespan expr) env fun_env: exn list = 
+      let rec wf_E' (env : sourcespan envt) (fun_env : sourcespan decl envt) (e : sourcespan expr) (errors : exn list) : exn list = 
         match e with
         | EBool _ -> errors
         | ENumber(n, loc) -> if n > 1073741823 || n < -1073741824 then
@@ -173,9 +179,9 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
             | None -> errors @ [ UnboundId(x, loc) ]
             | Some(_) -> errors
           end
-        | EPrim1(_, e, _) -> wf_E' e env errors
-        | EPrim2(_, l, r, _) -> errors |> wf_E' l env |> wf_E' r env
-        | EIf(c, t, f, _) -> errors |> wf_E' c env |> wf_E' t env |> wf_E' f env
+        | EPrim1(_, e, _) -> wf_E' env fun_env e errors
+        | EPrim2(_, l, r, _) -> errors |> wf_E' env fun_env l |> wf_E' env fun_env r
+        | EIf(c, t, f, _) -> errors |> wf_E' env fun_env c |> wf_E' env fun_env t |> wf_E' env fun_env f
         | ELet(binds, body, _) ->
           let name_locs = List.map (fun (binding_name, _, loc) -> (binding_name, loc)) binds in
             errors 
@@ -185,36 +191,43 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           @  let (errors, new_env)  = 
                 List.fold_left 
                 (fun (errors, env) (id, binding_body, loc)  -> 
-                   (errors @ (wf_E binding_body env), (id, loc)::env)) 
+                   (errors |> wf_E' env fun_env binding_body, (id, loc)::env)) 
                 ([], env) binds
              in errors
             (* check body *)
-          @  (wf_E body new_env)
-        | EApp(f, args, _) -> errors (* TODO *)
-      in wf_E' e env []
+          @ wf_E body new_env fun_env
+        | EApp(f, args, loc) -> 
+          match find_opt fun_env f with
+          | None -> errors @ [ UnboundFun(f, loc) ]
+          | Some(DFun(_, args', _, _)) ->
+              if List.length args' != List.length args
+              then errors @ [ Arity(List.length args', List.length args, loc) ]
+              else errors
+      in wf_E' env fun_env e  []
   and check_duplicates (args : (string * sourcespan) list) : exn list =
     let (errs, _) = 
             List.fold_left 
             (fun (errs, args_list) (arg_name, source2) -> 
-              match List.find_opt (fun (x, _) -> String.equal x arg_name) args_list with
-              | Some(duplicate_id, duplicate_source) -> (errs @ [ DuplicateId(arg_name, source2, duplicate_source) ], args_list)
+              match (find_opt args_list arg_name) with
+              | Some(duplicate_source) -> (errs @ [ DuplicateId(arg_name, source2, duplicate_source) ], args_list)
               | None -> (errs, args_list @ [(arg_name, source2)])
             ) ([], []) args
     in
     errs 
-  and wf_D (d : sourcespan decl) = 
+  and wf_D (fun_env : sourcespan decl envt) (d : sourcespan decl) = 
     match d with
     | DFun(fun_name, args, body,  _) ->
-      check_duplicates args @ wf_E body args
+      check_duplicates args @ wf_E body args fun_env
   in
   match p with
   | Program(decls, body, _) -> 
+    let fun_env : sourcespan decl envt = List.map (fun decl -> match decl with | DFun(fun_name, _, _, _) -> (fun_name, decl)) decls in
     (* check duplicate function declarations *)
     let duplicate_decls = check_duplicates (List.map (fun decl -> match decl with | DFun(fun_name, _, _, loc) -> (fun_name, loc)) decls) in
     (* check well-formedness in function declartions *)
-    let decls_err = List.flatten @@ List.map wf_D decls in
+    let decls_err = List.flatten @@ List.map (wf_D fun_env) decls in
     (* check well-formedness in body *)
-    let body_err = wf_E body [] in
+    let body_err = wf_E body [] fun_env in
     if List.length duplicate_decls == 0 && List.length decls_err == 0 && List.length body_err == 0
       then Ok(p)
       else Error(duplicate_decls @ decls_err @ body_err)
@@ -241,9 +254,15 @@ let rename (prog : tag program) : tag program =
         in ELet((List.rev new_binds), renameE new_env body, tag)
     | EApp(fun_name, args, tag) -> EApp(fun_name, List.map (renameE env) args, tag)
   in
+  let rename_decl (decl: 'a decl) : 'a decl =  
+    match decl with
+    | DFun(fun_id, args, body, tag) -> 
+        let args_env = List.map (fun (x, y) -> (x, x)) args in
+          DFun(fun_id, args, renameE args_env body, tag)
+  in
     match prog with
     | Program(decls, expr, tag) -> 
-      Program(decls , renameE [] expr, tag) (* TODO *)
+      Program(List.map rename_decl decls , renameE [] expr, tag)
 
 
 
@@ -269,53 +288,45 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       ITest(Reg(EAX), HexConst(0x00000001));
       IJnz(error);
     ]
-  (* check the value in EAX is boolean *)
-  and assert_bool' (error : string) =
-    [ ILineComment("assert_bool");
-      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
-      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
-      IJnz(error);
-      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
-    ]
-  in 
-  let assert_bool (e_reg : arg) (error : string) = 
+  (* check the value in e_reg is boolean *)
+  and assert_bool (e_reg : arg) (error : string) = 
     [ ILineComment("assert_bool");
       IMov(Reg(EAX), e_reg); 
-      IXor(Reg(EAX), HexConst(0x7FFFFFFF));
-      ITest(Reg(EAX), HexConst(0x7FFFFFFF));
-      IMov(Reg(EAX), e_reg); 
+      IMov(Reg(EDX), Reg(EAX));
+      IXor(Reg(EDX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EDX), HexConst(0x7FFFFFFF));
       IJnz(error);
     ]
   in
   match e with 
   | CIf(immexpr, aexpr, aexpr2, tag) -> 
-    let else_label = sprintf "if_false_%d" tag in
-    let done_label = sprintf "done_%d" tag in
+    let else_label = sprintf "$if_false_%d" tag in
+    let done_label = sprintf "$done_%d" tag in
         [ IMov(Reg(EAX), compile_imm immexpr env) ]
-      @ assert_bool' "err_if_not_boolean"
+      @ assert_bool (Reg(EAX)) "$err_if_not_boolean"
       @ [ ICmp(Reg(EAX), const_false); 
           IJe(else_label) ]
-      @ compile_aexpr aexpr si env 0 is_tail
+      @ compile_aexpr aexpr si env num_args is_tail
       @ [ IJmp(done_label); 
           ILabel(else_label) ]
-      @ compile_aexpr aexpr2 si env 0 is_tail
+      @ compile_aexpr aexpr2 si env num_args is_tail
       @ [ ILabel(done_label) ]
   | CPrim1(op, immexpr, tag) -> 
      let e = immexpr in
      let e_reg = compile_imm e env in
-     let done_label = sprintf "eprim1_done_%d" tag in
+     let done_label = sprintf "$eprim1_done_%d" tag in
      begin match op with
-     | Add1  -> assert_num e_reg "err_arith_not_num" @
+     | Add1  -> assert_num e_reg "$err_arith_not_num" @
                 [ IMov(Reg(EAX), e_reg);
                   IAdd(Reg(EAX), Const(1 lsl 1)); 
                   (* check overflow *) 
-                  IJo("err_arith_overflow");
+                  IJo("$err_arith_overflow");
                 ] 
-     | Sub1  -> assert_num e_reg "err_arith_not_num" @
+     | Sub1  -> assert_num e_reg "$err_arith_not_num" @
                 [ IMov(Reg(EAX), e_reg); 
                   IAdd(Reg(EAX), Const(~-1 lsl 1));
                   (* check overflow *) 
-                  IJo("err_arith_overflow");
+                  IJo("$err_arith_overflow");
                 ] 
      | Print -> [ ILineComment("calling c function");
                   IPush(Sized(DWORD_PTR, e_reg)); 
@@ -341,7 +352,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ILabel(done_label);
         ];
       | Not  ->
-          assert_bool e_reg "err_logic_not_boolean" 
+          assert_bool e_reg "$err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e_reg);
             IXor(Reg(EAX), Const(0x80000000));
           ]
@@ -357,11 +368,11 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   | CPrim2(op, imme1, imme2, tag) -> 
      let e1_reg = compile_imm imme1 env in
      let e2_reg = compile_imm imme2 env in
-     let done_label = sprintf "eprim2_done_%d" tag in
+     let done_label = sprintf "$eprim2_done_%d" tag in
      begin match op with 
      | Plus  -> 
-        assert_num e1_reg "err_arith_not_num" @
-        assert_num e2_reg "err_arith_not_num" @
+        assert_num e1_reg "$err_arith_not_num" @
+        assert_num e2_reg "$err_arith_not_num" @
         [ IMov(Reg(EAX), e1_reg); 
           IAdd(Reg(EAX), e2_reg);
           (* check overflow *) 
@@ -369,16 +380,16 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
 
         ]
      | Minus -> 
-          assert_num e1_reg "err_arith_not_num"
-        @ assert_num e2_reg "err_arith_not_num"
+          assert_num e1_reg "$err_arith_not_num"
+        @ assert_num e2_reg "$err_arith_not_num"
         @ [ IMov(Reg(EAX), e1_reg); 
             ISub(Reg(EAX), e2_reg);
             (* check overflow *) 
             IJo("err_arith_overflow");
           ]
      | Times -> 
-          assert_num e1_reg "err_arith_not_num"
-        @ assert_num e2_reg "err_arith_not_num"
+          assert_num e1_reg "$err_arith_not_num"
+        @ assert_num e2_reg "$err_arith_not_num"
         @ [ IMov(Reg(EAX), e1_reg); 
             ISar(Reg(EAX), Const(1));
             IMul(Reg(EAX), e2_reg);
@@ -386,14 +397,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
             IJo("err_arith_overflow");
           ]
      | And   -> 
-          assert_bool e1_reg "err_logic_not_boolean" 
-        @ assert_bool e2_reg "err_logic_not_boolean" 
+          assert_bool e1_reg "$err_logic_not_boolean" 
+        @ assert_bool e2_reg "$err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e1_reg); 
             IAnd(Reg(EAX), e2_reg); 
           ]
      | Or    -> 
-          assert_bool e1_reg "err_logic_not_boolean" 
-        @ assert_bool e2_reg "err_logic_not_boolean" 
+          assert_bool e1_reg "$err_logic_not_boolean" 
+        @ assert_bool e2_reg "$err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e1_reg); 
             IOr(Reg(EAX),  e2_reg);
           ]
@@ -405,8 +416,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         | LessEq -> IJle(done_label);
         | _ -> failwith "compile_cprim2_compare: not a compare operator"
         in
-          assert_num e1_reg "err_comparison_not_num"
-        @ assert_num e2_reg "err_comparison_not_num"
+          assert_num e1_reg "$err_comparison_not_num"
+        @ assert_num e2_reg "$err_comparison_not_num"
         @ [ IMov(Reg(EAX), e1_reg);
             ICmp(Reg(EAX), e2_reg);
             IMov(Reg(EAX), const_true);
@@ -427,17 +438,18 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   | CApp(fun_name, immexprs, tag) ->
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
     (* the label of the function declaration *)
-    let tmp = sprintf "fun_dec_%s" fun_name in
-    let tmp_body = sprintf "fun_dec_body_%s" fun_name in
+    let tmp = sprintf "$fun_dec_%s" fun_name in
+    let tmp_body = sprintf "$fun_dec_body_%s" fun_name in
     let num_of_args = List.length immexprs in
-    if is_tail
+    if is_tail && num_of_args == num_args (* TODO *)
     then
       let (_, push_args) = List.fold_right (fun imm_reg (i, instrs) -> 
           (i + 1, 
            [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs @ [ IPop(Sized(DWORD_PTR, RegOffset((word_size * i), EBP))) ])
         ) imm_regs (2, [])
       in
-        [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
+        [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
+          ILineComment(sprintf "caller has %d arguments" num_args);
           ILineComment(("tail call: " ^ (string_of_bool is_tail)));
         ] 
         @ push_args @
@@ -449,7 +461,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs
         ) imm_regs []
       in
-        [ ILineComment(("calling function " ^ fun_name ^ ": " ^tmp));
+        [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
+          ILineComment(sprintf "caller has %d arguments" num_args);
           ILineComment(("tail call: " ^ (string_of_bool is_tail)));
         ] 
         @ push_args @
@@ -468,8 +481,8 @@ and compile_imm e env : arg =
 and compile_decl (d : tag adecl) : instruction list =
   match d with 
   | ADFun(fun_name, args, aexpr, tag) ->
-    let tmp = sprintf "fun_dec_%s" fun_name in
-    let tmp_body = sprintf "fun_dec_body_%s" fun_name in
+    let tmp = sprintf "$fun_dec_%s" fun_name in
+    let tmp_body = sprintf "$fun_dec_body_%s" fun_name in
     let num_args = List.length args in
     let n = (count_vars aexpr) in
     let prelude = [
@@ -551,11 +564,11 @@ global our_code_starts_here" in
             IRet; 
             ILineComment("-----error handling code-----")
           ]
-        @ err_handling "err_arith_not_num"      err_ARITH_NOT_NUM
-        @ err_handling "err_comparison_not_num" err_COMPARISON_NOT_NUM
-        @ err_handling "err_if_not_boolean"     err_IF_NOT_BOOL
-        @ err_handling "err_logic_not_boolean"  err_LOGIC_NOT_BOOL
-        @ err_handling "err_arith_overflow"     err_ARITH_OVERFLOW
+        @ err_handling "$err_arith_not_num"      err_ARITH_NOT_NUM
+        @ err_handling "$err_comparison_not_num" err_COMPARISON_NOT_NUM
+        @ err_handling "$err_if_not_boolean"     err_IF_NOT_BOOL
+        @ err_handling "$err_logic_not_boolean"  err_LOGIC_NOT_BOOL
+        @ err_handling "$err_arith_overflow"     err_ARITH_OVERFLOW
 
     in
     let body = (compile_aexpr aexpr 1 [] 0 false) in
