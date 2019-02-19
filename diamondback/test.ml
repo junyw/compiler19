@@ -196,15 +196,18 @@ let well_formedness_tests = [
 	te "duplicate_1" {| def f(x, x):
 						 x
 						0  |}  "The identifier x, redefined at <duplicate_1, 1:10-1:11>";
-	te "duplicate_2" {| def f(x):
-						 x
-						def f(y):
-						 y
-						0  |}  "The identifier f, redefined at <duplicate_2, 3:6-4:8>";
-	te "duplicate_3" {| let x = 1, x = 2 in x |} 
-		             "The identifier x, redefined at <duplicate_3, 1:12-1:13>";
-	te "duplicate_4" {| let x = (let y = 1, y = 2 in y) in x |} 
-		             "The identifier y, redefined at <duplicate_4, 1:21-1:22>";
+	te "duplicate_2" {| let x = 1, x = 2 in x |} 
+		             "The identifier x, redefined at <duplicate_2, 1:12-1:13>";
+	te "duplicate_3" {| let x = (let y = 1, y = 2 in y) in x |} 
+		             "The identifier y, redefined at <duplicate_3, 1:21-1:22>";
+
+  te "fun_duplicate_1" {|
+    def foo(x): 
+        x
+    def foo(y):
+        y
+    1
+  |} "The function name foo, redefined at <fun_duplicate_1, 4:4-5:9>, duplicates one at <fun_duplicate_1, 2:4-3:9>";
 	te "unbound_1" {| x |}  "The identifier x, used at <unbound_1, 1:1-1:2>, is not in scope";
 	te "unbound_2" {| def f(x):
 	                      y

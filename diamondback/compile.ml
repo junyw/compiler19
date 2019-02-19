@@ -167,12 +167,14 @@ let anf (p : tag program) : unit aprogram =
 ;;
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-    let check_duplicates (args : sourcespan envt) (errors : exn list) : exn list =
+    let err_duplicate_id id source_used source_defined = DuplicateId(id, source_used, source_defined) in
+    let err_duplicate_fun fun_name source_used source_defined = DuplicateFun(fun_name, source_used, source_defined) in
+    let check_duplicates (args : sourcespan envt) mk_error (errors : exn list)  : exn list =
       let (errs, _) = 
           List.fold_left 
           (fun (errs, args_list) (arg_name, source2) -> 
             match (find_opt args_list arg_name) with
-            | Some(duplicate_source) -> (errs @ [ DuplicateId(arg_name, source2, duplicate_source) ], args_list)
+            | Some(duplicate_source) -> (errs @ [ (mk_error arg_name source2 duplicate_source) ], args_list)
             | None -> (errs, args_list @ [ (arg_name, source2) ])
           ) ([], []) args
       in
@@ -195,7 +197,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       | EIf(c, t, f, _)      -> errors |> wf_E env fun_env c |> wf_E env fun_env t |> wf_E env fun_env f
       | ELet(binds, body, _) ->
         let name_locs = List.map (fun (binding_name, _, loc) -> (binding_name, loc)) binds in
-          (errors |> check_duplicates name_locs)
+          (errors |> check_duplicates name_locs err_duplicate_id)
           (* check bindings *)
         @  let (errors, new_env)  = 
               List.fold_left 
@@ -216,7 +218,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   and wf_D (fun_env : sourcespan decl envt) (d : sourcespan decl) errors = 
     match d with
     | DFun(fun_name, args, body, _) ->
-      errors |> check_duplicates args |> wf_E args fun_env body
+      errors |> check_duplicates args err_duplicate_id |> wf_E args fun_env body
   and wf_decls fun_env decls errors = 
     match decls with
     | [] -> errors
@@ -227,7 +229,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     let fun_env : sourcespan decl envt = List.map (fun decl -> match decl with | DFun(fun_name, _, _, _) -> (fun_name, decl)) decls in
     let errors = [] 
       (* check duplicate function declarations *)
-      |> check_duplicates (List.map (fun decl -> match decl with | DFun(fun_name, _, _, loc) -> (fun_name, loc)) decls)
+      |> check_duplicates (List.map (fun decl -> match decl with | DFun(fun_name, _, _, loc) -> (fun_name, loc)) decls) err_duplicate_fun
       (* check well-formedness in function declartions *)
       |> wf_decls fun_env decls
       (* check well-formedness in body *)
