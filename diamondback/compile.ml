@@ -167,70 +167,75 @@ let anf (p : tag program) : unit aprogram =
 ;;
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-  let rec wf_E (e : sourcespan expr) env fun_env: exn list = 
-      let rec wf_E' (env : sourcespan envt) (fun_env : sourcespan decl envt) (e : sourcespan expr) (errors : exn list) : exn list = 
-        match e with
-        | EBool _ -> errors
-        | ENumber(n, loc) -> if n > 1073741823 || n < -1073741824 then
-                               errors @ [ Overflow(n, loc) ]
-                             else errors
-        | EId(x, loc) ->
-          begin match List.assoc_opt x env with
-            | None -> errors @ [ UnboundId(x, loc) ]
-            | Some(_) -> errors
-          end
-        | EPrim1(_, e, _) -> wf_E' env fun_env e errors
-        | EPrim2(_, l, r, _) -> errors |> wf_E' env fun_env l |> wf_E' env fun_env r
-        | EIf(c, t, f, _) -> errors |> wf_E' env fun_env c |> wf_E' env fun_env t |> wf_E' env fun_env f
-        | ELet(binds, body, _) ->
-          let name_locs = List.map (fun (binding_name, _, loc) -> (binding_name, loc)) binds in
-            errors 
-            (* check duplicate bindings *)
-          @ check_duplicates name_locs
-            (* check bindings: TODO *)
-          @  let (errors, new_env)  = 
-                List.fold_left 
-                (fun (errors, env) (id, binding_body, loc)  -> 
-                   (errors |> wf_E' env fun_env binding_body, (id, loc)::env)) 
-                ([], env) binds
-             in errors
-            (* check body *)
-          @ wf_E body new_env fun_env
-        | EApp(f, args, loc) -> 
-          match find_opt fun_env f with
-          | None -> errors @ [ UnboundFun(f, loc) ]
-          | Some(DFun(_, args', _, _)) ->
-              if List.length args' != List.length args
-              then errors @ [ Arity(List.length args', List.length args, loc) ]
-              else errors
-      in wf_E' env fun_env e  []
-  and check_duplicates (args : (string * sourcespan) list) : exn list =
-    let (errs, _) = 
-            List.fold_left 
-            (fun (errs, args_list) (arg_name, source2) -> 
-              match (find_opt args_list arg_name) with
-              | Some(duplicate_source) -> (errs @ [ DuplicateId(arg_name, source2, duplicate_source) ], args_list)
-              | None -> (errs, args_list @ [(arg_name, source2)])
-            ) ([], []) args
+    let check_duplicates (args : sourcespan envt) (errors : exn list) : exn list =
+      let (errs, _) = 
+          List.fold_left 
+          (fun (errs, args_list) (arg_name, source2) -> 
+            match (find_opt args_list arg_name) with
+            | Some(duplicate_source) -> (errs @ [ DuplicateId(arg_name, source2, duplicate_source) ], args_list)
+            | None -> (errs, args_list @ [ (arg_name, source2) ])
+          ) ([], []) args
+      in
+      errors @ errs 
     in
-    errs 
-  and wf_D (fun_env : sourcespan decl envt) (d : sourcespan decl) = 
+    let rec wf_E (env : sourcespan envt) (fun_env : sourcespan decl envt) (e : sourcespan expr) (errors : exn list) : exn list = 
+      match e with
+      | EBool _ -> errors
+      | ENumber(n, loc) -> 
+          if n > 1073741823 || n < -1073741824 then
+             errors @ [ Overflow(n, loc) ]
+           else errors
+      | EId(x, loc) ->
+         begin match find_opt env x with
+          | None   -> errors @ [ UnboundId(x, loc) ]
+          | Some _ -> errors
+        end
+      | EPrim1(_, e, _)      -> errors |> wf_E env fun_env e
+      | EPrim2(_, l, r, _)   -> errors |> wf_E env fun_env l |> wf_E env fun_env r
+      | EIf(c, t, f, _)      -> errors |> wf_E env fun_env c |> wf_E env fun_env t |> wf_E env fun_env f
+      | ELet(binds, body, _) ->
+        let name_locs = List.map (fun (binding_name, _, loc) -> (binding_name, loc)) binds in
+          (errors |> check_duplicates name_locs)
+          (* check bindings *)
+        @  let (errors, new_env)  = 
+              List.fold_left 
+              (fun (errors, env) (id, binding_body, loc)  -> 
+                 (errors |> wf_E env fun_env binding_body, (id, loc)::env)) 
+              ([], env) binds
+           in errors
+          (* check body *)
+        |> wf_E new_env fun_env body
+      | EApp(f, args, loc) -> 
+        match find_opt fun_env f with
+        | None -> (* function not defined *)
+            errors @ [ UnboundFun(f, loc) ]
+        | Some(DFun(_, args', _, _)) -> (* wrong arity *)
+            if List.length args' != List.length args
+            then errors @ [ Arity(List.length args', List.length args, loc) ]
+            else errors
+  and wf_D (fun_env : sourcespan decl envt) (d : sourcespan decl) errors = 
     match d with
-    | DFun(fun_name, args, body,  _) ->
-      check_duplicates args @ wf_E body args fun_env
+    | DFun(fun_name, args, body, _) ->
+      errors |> check_duplicates args |> wf_E args fun_env body
+  and wf_decls fun_env decls errors = 
+    match decls with
+    | [] -> errors
+    | d::rest -> errors |> wf_D fun_env d |> wf_decls fun_env rest
   in
   match p with
   | Program(decls, body, _) -> 
     let fun_env : sourcespan decl envt = List.map (fun decl -> match decl with | DFun(fun_name, _, _, _) -> (fun_name, decl)) decls in
-    (* check duplicate function declarations *)
-    let duplicate_decls = check_duplicates (List.map (fun decl -> match decl with | DFun(fun_name, _, _, loc) -> (fun_name, loc)) decls) in
-    (* check well-formedness in function declartions *)
-    let decls_err = List.flatten @@ List.map (wf_D fun_env) decls in
-    (* check well-formedness in body *)
-    let body_err = wf_E body [] fun_env in
-    if List.length duplicate_decls == 0 && List.length decls_err == 0 && List.length body_err == 0
-      then Ok(p)
-      else Error(duplicate_decls @ decls_err @ body_err)
+    let errors = [] 
+      (* check duplicate function declarations *)
+      |> check_duplicates (List.map (fun decl -> match decl with | DFun(fun_name, _, _, loc) -> (fun_name, loc)) decls)
+      (* check well-formedness in function declartions *)
+      |> wf_decls fun_env decls
+      (* check well-formedness in body *)
+      |> wf_E [] fun_env body
+    in
+      if List.length errors == 0
+        then Ok(p)
+        else Error(errors)
 ;;
 
 (* alpha-renaming, called after well-formedness check *)
