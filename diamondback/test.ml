@@ -131,6 +131,17 @@ t "fun_3" {|
 	(q(0) == -2) && (q(-1) == 0) && (q(2) == 0)
 |} "true";
 
+t "fun_4" {|
+  def loop(start, end, step, value):
+    if start > end:
+      0
+    else:
+      let output = value + loop(start + step, end, step, value) 
+      in output
+
+  loop(1, 10, 1, 2)
+|} "20";
+
 ];;
 
 let recursive_tests = [

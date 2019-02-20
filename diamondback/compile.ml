@@ -447,7 +447,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let tmp = sprintf "$fun_dec_%s" fun_name in
     let tmp_body = sprintf "$fun_dec_body_%s" fun_name in
     let num_of_args = List.length immexprs in
-    if is_tail && num_of_args == num_args (* TODO *)
+    if is_tail && num_of_args == num_args 
     then
       let (_, push_args) = List.fold_right (fun imm_reg (i, instrs) -> 
           (i + 1, 
