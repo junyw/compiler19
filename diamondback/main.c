@@ -104,5 +104,5 @@ void error(int errCode, int val) {
 int main(int argc, char** argv) {
   int result = our_code_starts_here();
   print(result);
-  exit(0);
+  return 0;
 }

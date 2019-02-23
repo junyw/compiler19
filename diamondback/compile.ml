@@ -546,6 +546,7 @@ global our_code_starts_here" in
         ILabel("our_code_starts_here");
         ILineComment("-----stack setup-----");
         
+        IPush(Reg(EBP));
         IMov(Reg(EBP), Reg(ESP));        
         ISub(Reg(ESP), Const(4*n)); 
 
@@ -567,6 +568,7 @@ global our_code_starts_here" in
     let postlude = 
           [ ILineComment("-----postlude-----");
             IMov(Reg(ESP), Reg(EBP)); 
+            IPop(Reg(EBP));
             IRet; 
             ILineComment("-----error handling code-----")
           ]
