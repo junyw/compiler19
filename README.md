@@ -5,7 +5,7 @@
 - [x] boa
 - [x] cobra
 - [x] diamondback
-- [ ] Taipan
+- [ ] taipan
 
 To run all tests
 ```bash

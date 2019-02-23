@@ -1,4 +1,4 @@
-The Taipan Language
+# The Taipan Language
 
 ```
 <program>:
@@ -34,6 +34,11 @@ The Taipan Language
 <expr>: ...
 
 
-
-
 ```
+
+# Type Inference 
+
+
+
+
+

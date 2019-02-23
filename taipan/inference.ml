@@ -32,7 +32,7 @@ let any2any = SForall(["X"], TyArr([tyVarX], tyVarX, dummy_span), dummy_span)
 (* create more type synonyms here, if you need to *)
 let initial_env : sourcespan scheme envt =
   List.fold_left (fun env (name, typ) -> StringMap.add name typ env) StringMap.empty [
-      failwith "Create an initial function environment here"
+      (*failwith "Create an initial function environment here"*)
   ]
 
 let rec find_pos (ls : 'a envt) x pos : 'a =
@@ -160,14 +160,21 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
   | DFun(name, args, scheme, body, loc) ->
      failwith "Implement inferring type schemes for declarations"
 ;;
+
 let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
-  failwith "Implement inferring type schemes for declaration groups"
+  let fun1 = List.hd g in (* TODO *)
+    let (s, t, d) = infer_decl funenv env fun1 [] in
+      (s, []@[d])
 ;;
+
 let infer_prog funenv env (p : sourcespan program) : sourcespan program =
   match p with
   | Program(declgroups, body, typ, tag) ->
-     failwith "Implement inferrence for entire programs"
+     (*let (_, _) = infer_group funenv env (List.hd declgroups) in *)
+      let (unification, result_typ, rebuilt_expr) = infer_exp funenv env body [] in 
+     p (* TODO *)
 ;;
+
 let type_synth (p : sourcespan program) : sourcespan program fallible =
   try
     Ok(infer_prog initial_env StringMap.empty p)

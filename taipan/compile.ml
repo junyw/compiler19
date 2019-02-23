@@ -6,7 +6,7 @@ open Assembly
 open Errors
 (* Add at least one of these two *)
 (* open TypeCheck *)
-(* open Inference *)
+open Inference 
        
 type 'a envt = (string * 'a) list
 
@@ -520,6 +520,7 @@ global our_code_starts_here" in
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
+  |> (add_err_phase type_checked type_synth)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
