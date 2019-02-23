@@ -7,7 +7,9 @@ open Exprs
 open Phases
 open Assembly
 open Errors
-       
+open Inference
+open ExtLib
+
 let is_osx = Conf.make_bool "osx" false "Set this flag to run on osx";;
 
 let t name program expected = name>::test_run program name expected;;
@@ -24,12 +26,26 @@ let tanf name program expected = name>::fun _ ->
 let teq name actual expected = name>::fun _ ->
   assert_equal expected actual ~printer:(fun s -> s);;
 
+let t_any name value expected = name>::
+  (fun _ -> assert_equal expected value ~printer:dump);;
+
+
+
+
 let forty_one = "41";;
 
 let forty_one_a = (AProgram([], ACExpr(CImmExpr(ImmNum(41, ()))), ()))
 
 let test_prog = "let x : Int = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3)) else: (if 0 == 0: sub1(4) else: sub1(5)) in x"
 let anf1 = (anf     (tag (parse_string "test" test_prog)))
+
+
+let inference_tests = [
+	t_any "apply_subst_typ_1" (apply_subst_typ [] (TyBlank(dummy_span)))  (TyBlank(dummy_span));
+	t_any "apply_subst_typ_1" (apply_subst_typ [("T1", tInt)] (TyVar("T1", dummy_span)))  (TyBlank(dummy_span));
+
+];;
+
 
 let expr_tests = [
   (* arithmetic tests *)
@@ -146,9 +162,10 @@ let init_tests =
 ];;
 
 let all_tests = 
+  inference_tests (* @
   expr_tests @
   renaming_tests @
-  init_tests
+  init_tests *)
 ;;
 
 let suite =
