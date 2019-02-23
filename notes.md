@@ -669,10 +669,73 @@ Then we can get the type of f:
 forall theta, X, f : (theta->X)->(X->theta)->X->theta
 
 
+## Add new values
+
+If we can figure out pairs, we can figure out arbitary length tuples/vectors or arrays. 
+
+Let's try to add pairs to our language. 
+
+- construct 
+- destruct
+- syntax
+- types
+- representation
+- well-formedness
+- mutability
+- evaluation order
+
+```
+let t = (3, 4) in f(t)
+```
+a pair is a cexpr.
 
 
+```
+let (x, (y, z)) = (3, (4, 5))
+```
+```
+let (x, y) = (3, (4, 5))
+```
 
+```
+let (x, tmp) = (3, (4, 5)) in
+  let (y, z) = tmp
+```
+Elements of array must have same type. Tuple can have any type.
+Therefore, we can not statically type check accessor syntax (tup[#]) like arrays.
 
+We need to decide the run-time representation of tuples.
+
+.....0 => Int
+...111 => Bool
+...101 => Tuple 
+...011 => reserved...
+
+Check the tag: and with ...111 and compare and jump.
+
+Another way to do it:
+and with ...111 -> 0 - 7, put 1 in EAX, bit shift to left by the remaining bits. Shift left again by 31-tag.
+The 1 is left in the most significant bit if and only if it matches the tag.
+
+Because pointer needs to be 8-byte aligned, the 3 least significant digits are not used and can be used to store some information.
+
+## Using heap in our language
+```c
+byte *HEAP = calloc(16kb);//check HEAP is aligned...
+
+int ans = our_code_starts_here(HEAP);
+
+print(ans);
+return 0;
+
+```
+Use the ESI register for the heap pointer.
+
+Representation of tuple in heap as a contiguous memory.
+
+First is length, then tagged values.
+Tuple (3, 4) => | 2 | 6 | 8 | 4-byte padding |
+We also need padding to make pointers 8-byte algined.
 
 
 

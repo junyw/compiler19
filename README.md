@@ -4,7 +4,8 @@
 - [x] adder
 - [x] boa
 - [x] cobra
-- [ ] diamond-back
+- [x] diamondback
+- [ ] Taipan
 
 To run all tests
 ```bash
