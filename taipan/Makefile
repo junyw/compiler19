@@ -8,7 +8,7 @@ endif
 endif
 
 PKGS=oUnit,extlib,unix
-BUILD=ocamlbuild -r -use-ocamlfind
+BUILD=ocamlbuild -r -use-ocamlfind 
 
 main: *.ml parser.mly lexer.mll
 	$(BUILD) -package $(PKGS) main.native
@@ -19,7 +19,7 @@ test: *.ml parser.mly lexer.mll
 	mv test.native test
 
 output/%.run: output/%.o main.c
-	clang -mstackrealign -g -m32 -o $@ main.c $<
+	clang -mstackrealign -m32 -o $@ main.c $<
 
 output/%.o: output/%.s
 	nasm -f $(FORMAT) -o $@ $<

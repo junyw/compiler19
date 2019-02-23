@@ -31,6 +31,86 @@ let forty_one_a = (AProgram([], ACExpr(CImmExpr(ImmNum(41, ()))), ()))
 let test_prog = "let x : Int = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3)) else: (if 0 == 0: sub1(4) else: sub1(5)) in x"
 let anf1 = (anf     (tag (parse_string "test" test_prog)))
 
+let expr_tests = [
+  (* arithmetic tests *)
+  t "expr_1" "3" "3";
+  t "expr_2" "1 + 2" "3";
+  t "expr_3" "1 * 2 + 3" "5";
+  t "times_1" "1073741823 * 1" "1073741823";
+  te "minus_error_2" "1 - false" "Error: arithmetic expected a number";
+  te "times_error_1" "1 * false" "Error: arithmetic expected a number";
+  te "runtime_overflow_1" "add1(1073741823)" "Error: Integer overflow";
+  te "runtime_overflow_2" "10737418 * 120" "Error: Integer overflow";
+  t "add1_1" "add1(1)" "2";
+  t "sub1_1" "sub1(1)" "0";
+  t "isnum_1" "isnum(1)" "true";
+  t "isnum_2" "isnum(true)" "false";
+  t "prim1_1" "let x = if 1 + 3 >= 4: 10 else: false in isbool(x)" "false";
+  t "prim1_2" "let x = if 1 + 3 > 4: 10 else: false in isbool(x)" "true";
+  te "add1_error" "add1(true)" "Error: arithmetic expected a number";
+  
+  (* logic tests *)
+  t "isbool_1" "isbool(true)" "true";
+  t "isbool_2" "isbool(false)" "true";
+  t "isbool_3" "isbool(1)" "false";
+  t "not_1" "!(true)" "false";
+  t "not_2" "!(false)" "true";
+  t "and_1" "true && true" "true";
+  t "or_1" "true || true" "true";
+  t "greater_1" "2 > 1" "true";
+  t "greaterEq_1" "2 >= 1" "true";
+  t "less_1" "1 < 2" "true";
+  t "less_2" "1 < 0" "false";
+  (*t "lessEq_1" "1 <= 2" "true";*) (* TODO: should pass *)
+  t "eq_1" "1 == 1" "true";
+  t "eq_2" "1 == 0" "false";  
+  (* errors *)
+  te "not_error_1" "!(3)" "Error: logic expected a boolean, but got 3";
+  te "logic_error_1" "1 && true" "Error: logic expected a boolean, but got 1";
+  te "logic_error_2" "false && 1" "Error: logic expected a boolean, but got 1";
+  te "compare_error_1" "true > 1" "Error: comparison expected a number";
+  
+  (* print tests *)
+  t "print_1" "print(41)" "41\n41";
+  t "print_2" "print(true)" "true\ntrue";
+
+  (* let tests *)
+  t "let_1" "let x = 1 in x" "1";
+  t "let_2" "let x = (1 == 2) in x" "false";
+  t "let_3"  
+  {| let x = true in
+         let y = !(x) && x in
+             y
+  |} "false";
+  t "let_4" 
+  {| let x = 10 in
+         let y = (if x >= (5 + 4): x + 3 else: false) in 
+             isnum(x) && isnum(y)
+  |} "true";
+
+  (* let* semantics *)
+  t "let_5" {| let x = 10, y = x * 2 in y |} "20";  
+
+  (* if tests *)
+  t "if_1" "if true: 1 else: 2" "1";
+  t "if_2" "if false: 1 else: 2" "2";
+  t "if_3" "if 3 > 2: 1 else: 2" "1";
+  t "if_4" "if !(2 == (1 + 1)): 1 else: 2" "2";
+  t "if_5" "if (let x = true in x): 1 else: 2" "1";
+  t "if_6" "let x = 1 in if x > 0: 1 else: 2" "1";
+  (* errors *)
+  te "if_error_1" "if 54: true else: false" "Error: if expected a boolean";
+  te "if_error_2" "let x = 1 in (if x: true else: false)" "Error: if expected a boolean";
+  te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
+];;
+
+let renaming_tests = [
+   t "rename_1" {| (let x = 1 in x) + (let x = 2 in x) |} "3";
+   t "rename_2" {| def foo(x):
+                       x + (let x = 1 in x) + (let x = 2 in x)
+                    foo(3) |} "6";
+];;
+
 let init_tests =
 [
   t "expr_0" "3" "3";
@@ -66,6 +146,8 @@ let init_tests =
 ];;
 
 let all_tests = 
+  expr_tests @
+  renaming_tests @
   init_tests
 ;;
 

@@ -21,6 +21,7 @@ type arg =
   | Reg of reg
   | RegOffset of int * reg (* int is # words of offset *)
   | Sized of size * arg
+  | Variable of string
 
 type instruction =
   | IMov of arg * arg
@@ -75,6 +76,7 @@ let rec arg_to_asm (a : arg) : string =
      sprintf "%s %s"
              (match size with | DWORD_PTR -> "DWORD" | WORD_PTR -> "WORD" | BYTE_PTR -> "BYTE")
              (arg_to_asm a)
+  | Variable(id) -> sprintf "[%s]" id
 ;;
 
 let rec i_to_asm (i : instruction) : string =
