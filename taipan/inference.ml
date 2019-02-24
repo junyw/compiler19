@@ -77,15 +77,16 @@ let rec subst_var_typ (((tyvar : string), (to_typ : 'a typ)) as sub) (in_typ : '
 ;;
 
 let subst_var_scheme ((tyvar, to_typ) as sub) scheme =
-  failwith "Implement substituting a type for a type variable, within a scheme, here"
+  match scheme with (* ?? *)
+    | SForall(strings, typ, loc) -> SForall(strings, subst_var_typ sub typ, loc)
 ;;
-
 let apply_subst_typ (subst : 'a typ subst) (t : 'a typ) : 'a typ =
   List.fold_left (fun t sub -> subst_var_typ sub t) t subst
 ;;
 
 let apply_subst_scheme (subst : 'a typ subst) (scheme : 'a scheme) : 'a scheme =
-  failwith "Implement applying a substitution to a scheme here"
+  List.fold_left (fun scheme sub -> subst_var_scheme sub scheme) scheme subst
+;;
 
 let apply_subst_env (subst : 'a typ subst) (env : 'a typ envt) : 'a typ envt =
   failwith "Implement applying a substitution to a type environment here"
@@ -249,7 +250,12 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
 let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme envt * sourcespan typ * sourcespan decl =
   match decl with
   | DFun(name, args, scheme, body, loc) ->
-     failwith "Implement inferring type schemes for declarations"
+     let ((first_arg : string), _) = List.hd args in
+     let tX = TyVar(gensym "arg", loc) in (* TODO: handle args correctly  *)
+     let new_env = StringMap.add first_arg tX env in 
+     let (b_subst, b_typ, body) = infer_exp funenv new_env body reasons in
+     let final_subst = compose_subst b_subst [(first_arg, tX)] in
+        (StringMap.add name (apply_subst_scheme final_subst scheme) StringMap.empty, TyArr([tX], b_typ, loc), decl)
 ;;
 
 let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =

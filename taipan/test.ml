@@ -29,6 +29,8 @@ let teq name actual expected = name>::fun _ ->
 let t_any name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:dump);;
 
+let t_typ name value expected = name>::
+  (fun _ -> assert_equal expected value ~printer:string_of_typ);;
 
 
 
@@ -98,8 +100,10 @@ let tyenv0 = StringMap.empty
 let tyenv1 = StringMap.add "x" tInt tyenv0
 
 let funenv0 = StringMap.empty
-let funenv1 = StringMap.add "f" int2int funenv0
+let funenv1 = StringMap.add "f" any2any funenv0
 
+
+let getType (_, typ, _) = typ;;
 let inference_tests = [
 	
 	(* typing rules *)
@@ -112,10 +116,11 @@ let inference_tests = [
 		(infer_exp StringMap.empty tyenv1 (mk_var "x") [])
 		([], tInt, (mk_var "x"));
 
-	t_any "abs_1"
+	t_typ "abs_1"
 	    (* f(a) = add1(a) *)
-		(infer_decl StringMap.empty tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) [])
-		(funenv1, tInt, (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))));
+	    (* should deduce the type of f as Int -> Int *)
+		(getType (infer_decl StringMap.empty tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) []))
+		(mk_tyarr [tInt] tInt);
 ];;
 
 
