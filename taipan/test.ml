@@ -89,21 +89,29 @@ let utility_tests = [
 ];;
 
 let mk_enum n = ENumber(n, dummy_span)
-let mk_var x = EId(x, dummy_span)
+let mk_var (x : string) : 'a expr = EId(x, dummy_span)
 let mk_fun (name : string) (args : string list) scheme body  =
 	DFun(name, List.map (fun x -> (x, dummy_span)) args, scheme, body, dummy_span)
 ;;
 let mk_eprim1 (op : prim1) (x : 'a expr) = 
 	EPrim1(op, x, dummy_span)
 ;;
+let mk_typbind (name : string) (typ : 'a typ) = (name, typ, dummy_span);;
+let mk_bind typbind expr = (typbind, expr, dummy_span);;
+let mk_binding name typ expr = (mk_typbind name typ, expr, dummy_span);;
+
+let mk_let (bindings : 'a bind list) (body : 'a expr) : 'a expr = 
+	ELet(bindings, body, dummy_span)
+;;
+
 let tyenv0 = StringMap.empty
 let tyenv1 = StringMap.add "x" tInt tyenv0
 
 let funenv0 = StringMap.empty
 let funenv1 = StringMap.add "f" any2any funenv0
 
+let get_2_3 (_, a, _) = a;;
 
-let getType (_, typ, _) = typ;;
 let inference_tests = [
 	
 	(* typing rules *)
@@ -116,10 +124,19 @@ let inference_tests = [
 		(infer_exp StringMap.empty tyenv1 (mk_var "x") [])
 		([], tInt, (mk_var "x"));
 
+	t_typ "let_1"
+		(* let x = 1 in x *)
+		(get_2_3 (infer_exp funenv0 tyenv0 
+							(mk_let 
+								[ (mk_binding "x" tX1 (mk_enum 1)) ]
+								(mk_var("x")) ) 
+				  []))
+		tInt;
+
 	t_typ "abs_1"
 	    (* f(a) = add1(a) *)
 	    (* should deduce the type of f as Int -> Int *)
-		(getType (infer_decl StringMap.empty tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) []))
+		(get_2_3 (infer_decl StringMap.empty tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) []))
 		(mk_tyarr [tInt] tInt);
 ];;
 

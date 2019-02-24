@@ -10,7 +10,6 @@ module StringSet = Set.Make(String);;
 type 'a envt = 'a StringMap.t;;
 type 'a subst = (string * 'a) list;;
 
-
 let print_funenv funenv =
   StringMap.iter (fun name scheme -> debug_printf "\t%s => %s\n" name (string_of_scheme scheme)) funenv;;
 let print_env env =
@@ -216,7 +215,24 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
   | ENumber(v, loc) -> ([], tInt, e)
   | EBool(v, loc) -> ([], tBool, e)
   | EId(x, loc) ->  ([], find_pos env x loc, e)
-  | ELet(binds, aexpr, loc) -> failwith "ELet: Finish implementing inferring types for expressions"
+  | ELet(binds, aexpr, loc) -> 
+    let (new_env, binds_subst) = 
+        List.fold_left 
+        (fun (env, subst) (typbind, expr, _) -> 
+            let (binding_subst, binding_typ, expr) = infer_exp funenv env expr reasons in
+            let (name, typ, _) = typbind in (* TODO : check given typ *)
+            let subst_so_far = compose_subst subst binding_subst in
+            let binding_typ = apply_subst_typ subst_so_far binding_typ in
+            let new_env = StringMap.add name binding_typ env in
+                (* unification ? *)
+            (new_env, subst_so_far))
+        (env, []) binds 
+    in
+    let (body_subst, body_typ, aexpr) = infer_exp funenv new_env aexpr reasons in
+    let subst_so_far = compose_subst body_subst binds_subst in
+    let body_typ = apply_subst_typ subst_so_far body_typ in
+    (subst_so_far, body_typ, e)
+
   | EPrim1(op, expr, loc) -> 
     let (expr_subst, expr_typ, expr) = infer_exp funenv env expr reasons in
 
@@ -225,7 +241,11 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
     let final_typ = apply_subst_typ final_subst tInt (* DO NOTHING *) in
     (final_subst, final_typ, e)
   | EPrim2(op, expr1, expr2, loc) -> failwith "EPrim2: Finish implementing inferring types for expressions"
-  | EApp(fun_name, args, loc) -> failwith "EApp: Finish implementing inferring types for expressions"
+  | EApp(fun_name, args, loc) -> 
+     (* lookup function scheme from funenv *)
+     let scheme = find_pos funenv fun_name loc in
+
+        
   | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
   | EIf(c, t, f, loc) ->
      let (c_subst, c_typ, c) = infer_exp funenv env c reasons in
