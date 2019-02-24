@@ -21,21 +21,29 @@ let print_subst subst =
 
 
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
-             
+let mk_tyvar (label: string) : 'a typ = 
+    TyVar(label, dummy_span)
+;;
+let mk_tyarr left right : 'a typ = 
+    TyArr(left, right, dummy_span)
+;;
+let mk_scheme (ids : string list) typ =
+    SForall(ids, typ, dummy_span)
+
 let tInt = TyCon("Int", dummy_span)
 let tBool = TyCon("Bool", dummy_span)
 
 (*  forall,  Int * Int -> Int *)
-let intint2int = SForall([], TyArr([tInt; tInt], tInt, dummy_span), dummy_span)
+let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
 
 (*  forall,  Int -> Int *)
-let int2int = SForall([], TyArr([tInt], tInt, dummy_span), dummy_span)
+let int2int = SForall([], mk_tyarr [tInt] tInt, dummy_span)
 
 (*  forall,  Int -> Bool *)
-let int2bool = SForall([], TyArr([tInt], tBool, dummy_span), dummy_span)
+let int2bool = SForall([], mk_tyarr [tInt] tBool, dummy_span)
 let tyVarX = TyVar("X", dummy_span)
-let any2bool = SForall(["X"], TyArr([tyVarX], tBool, dummy_span), dummy_span)
-let any2any = SForall(["X"], TyArr([tyVarX], tyVarX, dummy_span), dummy_span)
+let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
+let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)
 (* create more type synonyms here, if you need to *)
 
 
@@ -53,31 +61,48 @@ let rec find_pos (ls : 'a envt) x pos : 'a =
   | Not_found -> failwith (sprintf "Name %s not found at %s" x (string_of_sourcespan pos))
 ;;
 
+
 (* subst_var_typ: converts each occurrence of the given type variable tyvar 
     into the desired type to_typ in the target type in_typ *)
 let rec subst_var_typ (((tyvar : string), (to_typ : 'a typ)) as sub) (in_typ : 'a typ): 'a typ =
-  failwith "Implement substituting a type for a type variable, within a type, here"
+  match in_typ with 
+  | TyBlank _ -> in_typ 
+  | TyCon _ -> in_typ
+  | TyVar(tyvar1, _) -> if String.equal tyvar tyvar1 then to_typ else in_typ
+  | TyArr(typs, typ, tag) ->
+    let typs_subst = List.map (fun typ -> subst_var_typ sub typ) typs in
+    let typ_subst = subst_var_typ sub typ in
+        TyArr(typs_subst, typ_subst, tag)
+  | TyApp(typ, typs, _) -> failwith "subst_var_typ: TyApp not implemented" 
 ;;
+
 let subst_var_scheme ((tyvar, to_typ) as sub) scheme =
   failwith "Implement substituting a type for a type variable, within a scheme, here"
 ;;
+
 let apply_subst_typ (subst : 'a typ subst) (t : 'a typ) : 'a typ =
   List.fold_left (fun t sub -> subst_var_typ sub t) t subst
 ;;
+
 let apply_subst_scheme (subst : 'a typ subst) (scheme : 'a scheme) : 'a scheme =
   failwith "Implement applying a substitution to a scheme here"
+
 let apply_subst_env (subst : 'a typ subst) (env : 'a typ envt) : 'a typ envt =
   failwith "Implement applying a substitution to a type environment here"
 ;;
+
 let apply_subst_funenv (subst : 'a typ subst) (env : 'a scheme envt) : 'a scheme envt =
   failwith "Implement applying a substitution to a scheme environment here"
 ;;
+
 let apply_subst_subst (subst : 'a typ subst) (dest : 'a typ subst) : 'a typ subst =
-  failwith "Implement applying a substitution to another substitution here"
+  List.map (fun (tyvar, typ) -> (tyvar, apply_subst_typ subst typ)) dest
 ;;
+
 let compose_subst (sub1 : 'a typ subst) (sub2 : 'a typ subst) : 'a typ subst =
   sub1 @ (apply_subst_subst sub1 sub2)
 ;;
+
 let rec ftv_type (t : 'a typ) : StringSet.t =
   match t with
   | TyBlank _ -> StringSet.empty
@@ -136,8 +161,13 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
     | TyArr(typs, typ, _) -> 
     	begin match t2 with 
 			   | TyArr(typs2, typ2, _) -> 
-			        (* TODO: handle typs correctly *)
-			   		let subst1 = unify (List.hd typs) (List.hd typs2) loc reasons in
+                    let subst1 = 
+                        List.fold_left2
+                        (fun subst typ typ2 -> 
+                            let subst0 = unify typ typ2 loc reasons in
+                                compose_subst subst subst0 )
+                        [] typs typs2 
+                    in
 			   		let subst2 = unify typ typ2 loc reasons in
 			   		compose_subst subst1 subst2
 			   | _ -> failwith "unify fail: unable to unify"
@@ -177,13 +207,14 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
   failwith "Implement generalizing a type here"
 ;;
 
+
 (* Ex 14 *)
 let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
   match e with
-  | ENumber(v, loc) -> ([] ,tInt, e)
-  | EBool(v, loc) -> ([] ,tBool, e)
-  | EId(id, loc) -> failwith "EId: Finish implementing inferring types for expressions"
+  | ENumber(v, loc) -> ([], tInt, e)
+  | EBool(v, loc) -> ([], tBool, e)
+  | EId(x, loc) ->  ([], find_pos env x loc, e)
   | ELet(binds, aexpr, loc) -> failwith "ELet: Finish implementing inferring types for expressions"
   | EPrim1(op, expr, loc) -> 
     let (expr_subst, expr_typ, expr) = infer_exp funenv env expr reasons in

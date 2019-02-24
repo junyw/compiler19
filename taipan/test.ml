@@ -40,10 +40,82 @@ let test_prog = "let x : Int = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3
 let anf1 = (anf     (tag (parse_string "test" test_prog)))
 
 
-let inference_tests = [
-	t_any "apply_subst_typ_1" (apply_subst_typ [] (TyBlank(dummy_span)))  (TyBlank(dummy_span));
-	t_any "apply_subst_typ_1" (apply_subst_typ [("T1", tInt)] (TyVar("T1", dummy_span)))  (TyBlank(dummy_span));
+let tX1 = mk_tyvar "X1" 
+let tX2 = mk_tyvar "X2"
+let tX3 = mk_tyvar "X3"
 
+(* X1 -> X2 *)
+let tX1toX2 = mk_tyarr [tX1] tX2
+(* X1 X2 -> X3 *)
+let tX1X2toX3 = mk_tyarr [tX1;tX2] tX3
+
+let utility_tests = [
+	(* type substitution tests *)
+	t_any "apply_subst_typ_1" (apply_subst_typ [] (TyBlank(dummy_span)))  (TyBlank(dummy_span));
+	t_any "apply_subst_typ_2" (apply_subst_typ [("X1", tInt)] tX1)  tInt;
+
+	t_any "apply_subst_typ_3" 
+		(apply_subst_typ [("X1", tInt)] tX1toX2) 
+		(mk_tyarr [tInt] tX2);
+
+	t_any "apply_subst_typ_4" 
+		(apply_subst_typ [("X1", tX3); ("X2", tX3)] tX1toX2) 
+		(mk_tyarr [tX3] tX3);
+
+    (* unification tests *)
+	t_any "unify_1"
+		(unify tInt tInt dummy_span []) 
+		[];
+
+	t_any "unify_2"
+		(unify tX1 tX1 dummy_span []) 
+		[];
+
+	t_any "unify_3"
+		(unify tX1 tInt dummy_span []) 
+		[("X1", tInt)];
+
+	t_any "unify_4"
+		(unify tInt tX1 dummy_span []) 
+		[("X1", tInt)];
+
+	t_any "unify_5"
+		(unify (mk_tyarr [tInt; tInt] tInt) tX1X2toX3 dummy_span [])
+		[("X1", tInt); ("X2", tInt); ("X3", tInt)];
+
+	(* TODO: test unification failures *)
+];;
+
+let mk_enum n = ENumber(n, dummy_span)
+let mk_var x = EId(x, dummy_span)
+let mk_fun (name : string) (args : string list) scheme body  =
+	DFun(name, List.map (fun x -> (x, dummy_span)) args, scheme, body, dummy_span)
+;;
+let mk_eprim1 (op : prim1) (x : 'a expr) = 
+	EPrim1(op, x, dummy_span)
+;;
+let tyenv0 = StringMap.empty
+let tyenv1 = StringMap.add "x" tInt tyenv0
+
+let funenv0 = StringMap.empty
+let funenv1 = StringMap.add "f" int2int funenv0
+
+let inference_tests = [
+	
+	(* typing rules *)
+
+	t_any "number_1" 
+		(infer_exp StringMap.empty tyenv0 (mk_enum 3) []) 
+		([], tInt, (mk_enum 3));
+
+	t_any "var_1"
+		(infer_exp StringMap.empty tyenv1 (mk_var "x") [])
+		([], tInt, (mk_var "x"));
+
+	t_any "abs_1"
+	    (* f(a) = add1(a) *)
+		(infer_decl StringMap.empty tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) [])
+		(funenv1, tInt, (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))));
 ];;
 
 
@@ -162,7 +234,9 @@ let init_tests =
 ];;
 
 let all_tests = 
-  inference_tests (* @
+  utility_tests @
+  inference_tests
+   (* @
   expr_tests @
   renaming_tests @
   init_tests *)
