@@ -211,6 +211,38 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
 (* Ex 14 *)
 let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
+  let infer_app (e : 'a expr)  
+        : (sourcespan typ subst * sourcespan typ * sourcespan expr) =
+      let (fun_name, args, loc) =
+         match e with
+         | EPrim1(op, expr, loc) -> (string_of_op1 op, [expr], loc)
+         | EPrim2(op, expr1, expr2, loc) -> (string_of_op2 op, [expr1; expr2], loc) 
+         | EApp(fun_name, args, loc) -> (fun_name, args, loc)
+         | _ -> failwith "infer_app: impossible expr"
+      in
+      (* lookup function scheme from funenv *)
+      let scheme = find_pos funenv fun_name loc in
+      (* fun_ty: type of the function *)
+      let fun_ty = instantiate scheme in
+      (* generate a new type variable as return type *)
+      let tX = TyVar(gensym "arg", loc) in
+      (* type of the arguments *)
+      let (arg_substs, args_typs) = 
+         List.fold_left 
+         (fun (subst_so_far, args_typs) arg -> 
+            let (arg_subst, arg_typ, arg) = infer_exp funenv env arg reasons in 
+            (compose_subst arg_subst subst_so_far, args_typs@[arg_typ])
+         ) ([], []) args
+      in
+      (* type of the function call *)
+      let app_typ = TyArr(args_typs, tX, loc) in
+      (* unification *)
+      let unif_subst1 = unify fun_ty app_typ loc reasons in
+      let final_subst = unif_subst1 (* ?? *) in
+      let final_typ = apply_subst_typ final_subst tX in
+      (final_subst, final_typ, e)   
+  in
+
   match e with
   | ENumber(v, loc) -> ([], tInt, e)
   | EBool(v, loc) -> ([], tBool, e)
@@ -233,19 +265,9 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
     let body_typ = apply_subst_typ subst_so_far body_typ in
     (subst_so_far, body_typ, e)
 
-  | EPrim1(op, expr, loc) -> 
-    let (expr_subst, expr_typ, expr) = infer_exp funenv env expr reasons in
-
-    let unif_subst1 = unify expr_typ tInt loc reasons in (* TODO *)
-    let final_subst = compose_subst unif_subst1 expr_subst in
-    let final_typ = apply_subst_typ final_subst tInt (* DO NOTHING *) in
-    (final_subst, final_typ, e)
-  | EPrim2(op, expr1, expr2, loc) -> failwith "EPrim2: Finish implementing inferring types for expressions"
-  | EApp(fun_name, args, loc) -> 
-     (* lookup function scheme from funenv *)
-     let scheme = find_pos funenv fun_name loc in
-
-        
+  | EPrim1(op, expr, loc)         -> infer_app e
+  | EPrim2(op, expr1, expr2, loc) ->  infer_app e
+  | EApp(fun_name, args, loc)     -> infer_app e
   | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
   | EIf(c, t, f, loc) ->
      let (c_subst, c_typ, c) = infer_exp funenv env c reasons in
