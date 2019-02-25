@@ -236,16 +236,46 @@ let rec unblank (t : 'a typ) : 'a typ =
 
 let instantiate (s : 'a scheme) : 'a typ =
   match s with
-  | SForall(vars, typ, _) -> (* TODO *)
-
+  | SForall(vars, typ, loc) -> 
+    let subst = 
+      List.fold_left
+      (fun subst var -> 
+        let tyvar = TyVar(gensym "scheme", loc) in
+          (var, tyvar)::subst
+      ) [] vars
+    in
+    let ins_typ = apply_subst_typ subst typ in
+      ins_typ
 ;;
 
 let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
-  failwith "Implement generalizing a type here"
+  (* generalize_typ: decides if a type needs to be generalized 
+      if the type variable is not present in env, add it to env and some.
+  *)
+  let generalize_typ (env, (some : string list)) (t : 'a typ) = 
+    match t with
+    | TyVar(x, _) -> 
+      (* if type t is not in the environment, add the type to some and env *)
+      begin match StringMap.find_opt x env with
+      | Some _ -> (env, some)
+      | None   -> (StringMap.add x t env, x::some)
+      end 
+    | TyCon _   -> (env, some)
+    | TyArr _   -> failwith "generalize: TyArr not implemented - higher order function is not implemented"
+    | TyBlank _ -> failwith "generalize: TyBlank not implemented"
+    | TyApp _   -> failwith "generalize: TyApp - impossible case"
+  in
+  match t with 
+  | TyArr(arg_typs, b_typ, loc) -> 
+    let (e_new, some) = 
+        List.fold_left
+        generalize_typ (e, []) arg_typs
+    in
+    let (_, some) = generalize_typ (e_new, some) b_typ in
+      SForall(some, t, loc)
 ;;
 
 
-(* Ex 14 *)
 let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
   let infer_app (e : 'a expr)  
@@ -328,13 +358,33 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
 
 let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme envt * sourcespan typ * sourcespan decl =
   match decl with
-  | DFun(name, args, scheme, body, loc) ->
-     let ((first_arg : string), _) = List.hd args in
-     let tX = TyVar(gensym "arg", loc) in (* TODO: handle args correctly  *)
-     let new_env = StringMap.add first_arg tX env in 
-     let (b_subst, b_typ, body) = infer_exp funenv new_env body reasons in
-     let final_subst = compose_subst b_subst [(first_arg, tX)] in
-        (StringMap.add name (apply_subst_scheme final_subst scheme) StringMap.empty, TyArr([tX], b_typ, loc), decl)
+  | DFun(f_name, arg_names, scheme, b, loc) ->
+     (* 1. type the arguments and return value. Create fresh type variables for arguments if there
+         are no type annotations *)
+      let () = Printf.printf ";scheme of decl before typed %s: %s\n" f_name (string_of_scheme scheme); in
+      let fun_typ = instantiate scheme in
+     (* 2. add the type of the arguments to the type environment and type the body *)
+      let (arg_typs, ret_typ) = 
+        match fun_typ with
+        | TyArr(arg_typs, ret_typ, loc) -> (arg_typs, ret_typ)
+        | _ -> failwith "infer_decl: impossible type" 
+      in
+      let new_env =
+            List.fold_left2 
+            (fun env (arg_name, _) arg_typ ->
+              StringMap.add arg_name arg_typ env
+            ) env arg_names arg_typs
+      in
+     (* 3. type the function body *)
+      let (b_subst, b_typ, b) = infer_exp funenv new_env b reasons in
+     (* 4. unify the type of function body with type of the function definition *)
+      let unif_subst = unify b_typ ret_typ loc reasons in
+      let fun_typ = apply_subst_typ unif_subst fun_typ in
+     (* 5. generalize the type of the function to type sheme *)
+      let scheme = generalize env fun_typ in
+      let () = Printf.printf ";scheme of decl after typed %s: %s\n" f_name (string_of_scheme scheme); in
+
+      (StringMap.add f_name scheme funenv, fun_typ, decl)
 ;;
 
 let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
