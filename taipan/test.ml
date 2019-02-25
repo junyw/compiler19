@@ -33,7 +33,6 @@ let t_typ name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:string_of_typ);;
 
 
-
 let forty_one = "41";;
 
 let forty_one_a = (AProgram([], ACExpr(CImmExpr(ImmNum(41, ()))), ()))
@@ -136,7 +135,7 @@ let inference_tests = [
 	t_typ "abs_1"
 	    (* f(a) = add1(a) *)
 	    (* should deduce the type of f as Int -> Int *)
-		(get_2_3 (infer_decl StringMap.empty tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) []))
+		(get_2_3 (infer_decl initial_env tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) []))
 		(mk_tyarr [tInt] tInt);
 ];;
 

@@ -32,25 +32,58 @@ let mk_scheme (ids : string list) typ =
 let tInt = TyCon("Int", dummy_span)
 let tBool = TyCon("Bool", dummy_span)
 
-(*  forall,  Int * Int -> Int *)
-let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
-
 (*  forall,  Int -> Int *)
 let int2int = SForall([], mk_tyarr [tInt] tInt, dummy_span)
 
+(*  forall,  Int * Int -> Int *)
+let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
+
 (*  forall,  Int -> Bool *)
 let int2bool = SForall([], mk_tyarr [tInt] tBool, dummy_span)
+
+(*  forall,  Bool -> Bool *)
+let bool2bool = SForall([], mk_tyarr [tBool] tBool, dummy_span)
+
+(*  forall,  Bool * Bool -> Bool *)
+let boolbool2bool = SForall([], mk_tyarr [tBool; tBool] tBool, dummy_span)
+
+(*  forall,  Int * Int -> Bool *)
+let intint2bool = SForall([], mk_tyarr [tInt; tInt] tBool, dummy_span)
+
 let tyVarX = TyVar("X", dummy_span)
+let tyVarY = TyVar("Y", dummy_span)
+
+(* forall X, X -> Bool *)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
+
+(* forall X, X -> X *)
 let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)
-(* create more type synonyms here, if you need to *)
 
 
 (* initial function environment *)
 let initial_env : sourcespan scheme envt =
   List.fold_left (fun env (name, typ) -> StringMap.add name typ env) StringMap.empty [
-      (*failwith "Create an initial function environment here"*)
-      ("add1", int2int);
+
+      (* prim1 functions *)      
+      ("Add1", int2int);
+      ("Sub1", int2int);
+      (*("Print", );*) (* ?? *)
+      (*("PrintStack", );*)
+      ("Not",    bool2bool);
+      ("IsNum",  any2bool);
+      ("IsBool", any2bool);
+
+      (* prim2 functions *)      
+      ("Plus",  intint2int);
+      ("Minus", intint2int);
+      ("Times", intint2int);
+      ("And", boolbool2bool);
+      ("Or",  boolbool2bool);
+      ("Greater", intint2bool);
+      ("Less", intint2bool);
+      ("GreaterEq", intint2bool);
+      ("LessEq", intint2bool);
+      ("Eq", SForall(["X";"Y"], mk_tyarr [tyVarX; tyVarY] tBool, dummy_span));
   ]
 
 let rec find_pos (ls : 'a envt) x pos : 'a =
@@ -200,9 +233,13 @@ let rec unblank (t : 'a typ) : 'a typ =
      let t = unblank t in
      let args = List.map unblank args in TyApp(t, args, tag)
 ;;
+
 let instantiate (s : 'a scheme) : 'a typ =
-  failwith "Implement instantiating a type scheme here"
+  match s with
+  | SForall(vars, typ, _) -> (* TODO *)
+
 ;;
+
 let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
   failwith "Implement generalizing a type here"
 ;;
@@ -215,8 +252,8 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) =
       let (fun_name, args, loc) =
          match e with
-         | EPrim1(op, expr, loc) -> (string_of_op1 op, [expr], loc)
-         | EPrim2(op, expr1, expr2, loc) -> (string_of_op2 op, [expr1; expr2], loc) 
+         | EPrim1(op, expr, loc) -> (name_of_op1 op, [expr], loc)
+         | EPrim2(op, expr1, expr2, loc) -> (name_of_op2 op, [expr1; expr2], loc) 
          | EApp(fun_name, args, loc) -> (fun_name, args, loc)
          | _ -> failwith "infer_app: impossible expr"
       in
@@ -266,7 +303,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
     (subst_so_far, body_typ, e)
 
   | EPrim1(op, expr, loc)         -> infer_app e
-  | EPrim2(op, expr1, expr2, loc) ->  infer_app e
+  | EPrim2(op, expr1, expr2, loc) -> infer_app e
   | EApp(fun_name, args, loc)     -> infer_app e
   | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
   | EIf(c, t, f, loc) ->
