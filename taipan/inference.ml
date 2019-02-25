@@ -52,6 +52,7 @@ let intint2bool = SForall([], mk_tyarr [tInt; tInt] tBool, dummy_span)
 
 let tyVarX = TyVar("X", dummy_span)
 let tyVarY = TyVar("Y", dummy_span)
+let tyVarZ = TyVar("Z", dummy_span)
 
 (* forall X, X -> Bool *)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
@@ -61,6 +62,9 @@ let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
 
 (* forall X Y, X -> Y *)
 let any2any = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
+
+(* forall X Y Z, X Y -> Z *)
+let anyany2any = SForall(["X";"Y";"Z"], mk_tyarr [tyVarX; tyVarY] tyVarZ, dummy_span)
 
 
 (* initial function environment *)
@@ -376,7 +380,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
             List.fold_left2 
             (fun env (arg_name, _) arg_typ ->
               StringMap.add arg_name arg_typ env
-            ) env arg_names arg_typs (* TODO : if arg_names and arg_typs have different length *)
+            ) env arg_names arg_typs (* TODO : throw error if arg_names and arg_typs have different length *)
       in
      (* 3. type the function body *)
       let (b_subst, b_typ, b) = infer_exp funenv new_env b reasons in

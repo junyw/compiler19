@@ -152,16 +152,16 @@ let inference_tests = [
 
   (* f3(x, y): isnum(print(x)) && isbool(y) *)
   (* should type f3 as T1, T2 -> Bool *)
-(*  t_typ "abs_3"
+  t_typ "abs_3"
     (get_2_3 (infer_decl initial_env tyenv0 
-      (mk_fun "f3" ["x"; "y"] any2any 
+      (mk_fun "f3" ["x"; "y"] anyany2any 
         (mk_eprim2 And
           (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
           (mk_eprim1 IsBool (mk_var "y"))
       )) 
     []))
     (mk_tyarr [tX1; tX2] tBool);
-*)
+
 ];;
 
 

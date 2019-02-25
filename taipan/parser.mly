@@ -64,13 +64,6 @@ exprs :
   | expr COMMA exprs { $1::$3 }
 
 decl :
-  | DEF ID LPARENNOSPACE RPAREN COLON expr
-    { let arg_pos = Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 4 in
-      DFun($2, [], SForall([], TyArr([], TyBlank arg_pos, arg_pos), arg_pos), $6, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
-  | DEF ID LPARENNOSPACE RPAREN THINARROW typ COLON expr
-    {
-      let typ_pos = (Parsing.rhs_start_pos 6, Parsing.rhs_end_pos 6) in
-      DFun($2, [], SForall([], TyArr([], $6, typ_pos), typ_pos), $8, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
   | DEF ID LESSNOSPACE tyids GREATER LPARENNOSPACE ids RPAREN THINARROW typ COLON expr
     {
       let arg_names = List.map (fun (name, _, a) -> (name, a)) $7 in
@@ -78,6 +71,13 @@ decl :
       let arrow_pos = (Parsing.rhs_start_pos 6, Parsing.rhs_end_pos 10) in
       let typ_pos = (Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 10) in
       DFun($2, arg_names, SForall($4, TyArr(arg_types, $10, arrow_pos), typ_pos), $12, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()))
+    }
+  | DEF ID LPARENNOSPACE ids RPAREN THINARROW typ COLON expr
+    {
+      let arg_names = List.map (fun (name, _, a) -> (name, a)) $4 in
+      let arg_types = List.map (fun (_, typ, _) -> typ) $4 in
+      let typ_pos = (Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 7) in
+      DFun($2, arg_names, SForall([], TyArr(arg_types, $7, typ_pos), typ_pos), $9, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()))
     }
   | DEF ID LPARENNOSPACE ids RPAREN COLON expr
     {
@@ -87,23 +87,24 @@ decl :
       let arr_typ = SForall([], TyArr(arg_types, TyBlank(typ_pos), typ_pos), typ_pos) in
       DFun($2, arg_names, arr_typ, $7, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()))
     }
-  | DEF ID LPARENNOSPACE ids RPAREN THINARROW typ COLON expr
-    {
-      let arg_names = List.map (fun (name, _, a) -> (name, a)) $4 in
-      let arg_types = List.map (fun (_, typ, _) -> typ) $4 in
-      let typ_pos = (Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 7) in
-      DFun($2, arg_names, SForall([], TyArr(arg_types, $7, typ_pos), typ_pos), $9, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()))
-    }
 
 tyids :
   | { [] }
-  | TYID COMMA tyids { $1::$3 }
+  | more_tyids { $1 }
+
+more_tyids :
+  | TYID { [$1] }
+  | TYID COMMA more_tyids { $1::$3 }
 
 tyid : TYID { TyVar($1, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
 
 ids :
+  | { [] }
+  | more_ids { $1 }
+
+more_ids :
   | bind { [$1] }
-  | bind COMMA ids { $1::$3 }
+  | bind COMMA more_ids { $1::$3 }
 
 bind :
   | ID { ($1, TyBlank(Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()), (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
