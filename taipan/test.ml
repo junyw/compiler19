@@ -87,7 +87,7 @@ let utility_tests = [
 	(* TODO: test unification failures *)
 ];;
 
-let mk_enum n = ENumber(n, dummy_span)
+let mk_num n = ENumber(n, dummy_span)
 let mk_var (x : string) : 'a expr = EId(x, dummy_span)
 let mk_fun (name : string) (args : string list) scheme body  =
 	DFun(name, List.map (fun x -> (x, dummy_span)) args, scheme, body, dummy_span)
@@ -95,6 +95,10 @@ let mk_fun (name : string) (args : string list) scheme body  =
 let mk_eprim1 (op : prim1) (x : 'a expr) = 
 	EPrim1(op, x, dummy_span)
 ;;
+let mk_eprim2 (op : prim2) (x : 'a expr) (y : 'a expr) = 
+  EPrim2(op, x, y, dummy_span)
+;;
+
 let mk_typbind (name : string) (typ : 'a typ) = (name, typ, dummy_span);;
 let mk_bind typbind expr = (typbind, expr, dummy_span);;
 let mk_binding name typ expr = (mk_typbind name typ, expr, dummy_span);;
@@ -116,8 +120,8 @@ let inference_tests = [
 	(* typing rules *)
 
 	t_any "number_1" 
-		(infer_exp StringMap.empty tyenv0 (mk_enum 3) []) 
-		([], tInt, (mk_enum 3));
+		(infer_exp StringMap.empty tyenv0 (mk_num 3) []) 
+		([], tInt, (mk_num 3));
 
 	t_any "var_1"
 		(infer_exp StringMap.empty tyenv1 (mk_var "x") [])
@@ -127,16 +131,37 @@ let inference_tests = [
 		(* let x = 1 in x *)
 		(get_2_3 (infer_exp funenv0 tyenv0 
 							(mk_let 
-								[ (mk_binding "x" tX1 (mk_enum 1)) ]
+								[ (mk_binding "x" tX1 (mk_num 1)) ]
 								(mk_var("x")) ) 
 				  []))
 		tInt;
 
+
+  (* f1(x): add1(x) *)
+  (* should type f1 as Int -> Int *)
 	t_typ "abs_1"
-	    (* f(a) = add1(a) *)
-	    (* should deduce the type of f as Int -> Int *)
-		(get_2_3 (infer_decl initial_env tyenv1 (mk_fun "f" ["a"] any2any (mk_eprim1 Add1 (mk_var "a"))) []))
+		(get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f1" ["x"] any2any (mk_eprim1 Add1 (mk_var "x"))) []))
 		(mk_tyarr [tInt] tInt);
+
+
+  (* f2(x): x + 6 *)
+  (* should type f2 as Int -> Int *)
+  t_typ "abs_2"
+    (get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f2" ["x"] any2any (mk_eprim2 Plus (mk_var "x") (mk_num 6))) []))
+    (mk_tyarr [tInt] tInt);
+
+  (* f3(x, y): isnum(print(x)) && isbool(y) *)
+  (* should type f3 as T1, T2 -> Bool *)
+(*  t_typ "abs_3"
+    (get_2_3 (infer_decl initial_env tyenv0 
+      (mk_fun "f3" ["x"; "y"] any2any 
+        (mk_eprim2 And
+          (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
+          (mk_eprim1 IsBool (mk_var "y"))
+      )) 
+    []))
+    (mk_tyarr [tX1; tX2] tBool);
+*)
 ];;
 
 

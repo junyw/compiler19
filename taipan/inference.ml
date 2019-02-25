@@ -57,7 +57,10 @@ let tyVarY = TyVar("Y", dummy_span)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
 
 (* forall X, X -> X *)
-let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)
+(*let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)*)
+
+(* forall X Y, X -> Y *)
+let any2any = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
 
 
 (* initial function environment *)
@@ -67,8 +70,8 @@ let initial_env : sourcespan scheme envt =
       (* prim1 functions *)      
       ("Add1", int2int);
       ("Sub1", int2int);
-      (*("Print", );*) (* ?? *)
-      (*("PrintStack", );*)
+      ("Print", any2any); 
+      ("PrintStack", any2any);
       ("Not",    bool2bool);
       ("IsNum",  any2bool);
       ("IsBool", any2bool);
@@ -373,11 +376,13 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
             List.fold_left2 
             (fun env (arg_name, _) arg_typ ->
               StringMap.add arg_name arg_typ env
-            ) env arg_names arg_typs
+            ) env arg_names arg_typs (* TODO : if arg_names and arg_typs have different length *)
       in
      (* 3. type the function body *)
       let (b_subst, b_typ, b) = infer_exp funenv new_env b reasons in
      (* 4. unify the type of function body with type of the function definition *)
+      let fun_typ = apply_subst_typ b_subst fun_typ in
+      let ret_typ = apply_subst_typ b_subst ret_typ in
       let unif_subst = unify b_typ ret_typ loc reasons in
       let fun_typ = apply_subst_typ unif_subst fun_typ in
      (* 5. generalize the type of the function to type sheme *)
