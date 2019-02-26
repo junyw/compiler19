@@ -737,5 +737,124 @@ First is length, then tagged values.
 Tuple (3, 4) => | 2 | 6 | 8 | 4-byte padding |
 We also need padding to make pointers 8-byte algined.
 
+## Type inference
+
+use of declaration groups:
+look at mutually recursive functions, 
+```
+def iseven(n):         
+  if n == 0: true
+  else : isodd(n - 1)
+def isodd(n): 
+  ...
+```
+To type the above decl group:
+
+First guess a type for ALL functions in the decl group.
+Instantiate ALL their types.
+Typecheck each of the bodies. 
+Finally, generalize the schemes for all functions. 
+
+Note: we distinguish scheme and typ in our datatype definition. This excludes higher-kind types.
+
+If not in the same decl group, we should infer separately, to avoid over-specific typing.
+```
+def is_a_num(x);
+  isnum(x)
+
+def foo(x, y):
+  is_a_num(x+0) && is_a_num(!y)
+```
+
+## Tuples and types
+Taken the expression:
+{3, 4 + 5, true}
+To type it, we need to write down the typing rule:
+
+
+------  -----------   -----------  
+3: Int  4 + 5 : Int   true : Bool
+----------------------------------
+{3, 4 + 5, true} : Int * Int * Bool
+
+To type check, we need to have syntax to specify the type of the tuple:
+```
+let x : Int * Int * Bool = {3, 4 + 5, true} in ...
+```
+Type inference on tuple is easy.
+
+
+
+### Accessor syntax
+To type a value in the tuple
+Use bracket syntax to access value in a tuple.
+```
+e[i]
+```
+
+
+```
+def (e, i):
+  e[i]
+```
+i must be constant number to be able to type the function.
+
+
+```
+e[i of m]
+```
+
+### Mutator syntax
+Change the value of the tuple.
+```
+e[i of m := e']
+
+```
+However changing the type is not allow, because the tuple maybe aliased and cause inconsistencies.
+
+### Unpacking syntax
+```
+let {x, y, z} = f() in ...
+```
+To type check, we need type annotations:
+```
+let {x : Int, y : Int, z : Bool} = f() in ...
+```
+
+## Data Structures
+
+type int list = int * int list
+type numbt = int * numbt * numbt
+
+```
+let x : int list = {3, nil} in ...
+```
+int list -> int * int list
+              3        nil
+`nil` is the base case for all type synonyms...
+
+representation of nil : use tuple tag but the pointer part is all 0.
+
+Extend == to test structural equality.
+
+### Statement syntax for side effects
+Sequencing:
+```
+e1;e2
+```
+equivalent to ocaml syntax:
+```ocaml
+ let _ = e1 in e2
+```
+
+to typecheck, 
+
+
+
+
+
+
+
+
 
 

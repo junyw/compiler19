@@ -33,6 +33,16 @@ let t_typ name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:string_of_typ);;
 
 
+let unify_opt (t1 : 'a typ) (t2 : 'a typ) = 
+  try 
+    let _ = unify t1 t2 dummy_span [] in Ok(true)
+  with 
+    err -> Error(err)
+
+(* test two types are equivalent up to unification *)
+let t_typ_eq name value expected = name>::
+  (fun _ -> assert_equal (Ok(true)) (unify_opt expected value) ~printer:dump);;
+
 let forty_one = "41";;
 
 let forty_one_a = (AProgram([], ACExpr(CImmExpr(ImmNum(41, ()))), ()))
@@ -140,21 +150,21 @@ let inference_tests = [
   (* f1(x): add1(x) *)
   (* should type f1 as Int -> Int *)
 	t_typ "abs_1"
-		(get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f1" ["x"] any2any (mk_eprim1 Add1 (mk_var "x"))) []))
+		(get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f1" ["x"] arrX2Y (mk_eprim1 Add1 (mk_var "x"))) []))
 		(mk_tyarr [tInt] tInt);
 
 
   (* f2(x): x + 6 *)
   (* should type f2 as Int -> Int *)
   t_typ "abs_2"
-    (get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f2" ["x"] any2any (mk_eprim2 Plus (mk_var "x") (mk_num 6))) []))
+    (get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f2" ["x"] arrX2Y (mk_eprim2 Plus (mk_var "x") (mk_num 6))) []))
     (mk_tyarr [tInt] tInt);
 
   (* f3(x, y): isnum(print(x)) && isbool(y) *)
   (* should type f3 as T1, T2 -> Bool *)
-  t_typ "abs_3"
+  t_typ_eq "abs_3"
     (get_2_3 (infer_decl initial_env tyenv0 
-      (mk_fun "f3" ["x"; "y"] anyany2any 
+      (mk_fun "f3" ["x"; "y"] arrXY2Z 
         (mk_eprim2 And
           (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
           (mk_eprim1 IsBool (mk_var "y"))

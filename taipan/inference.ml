@@ -58,13 +58,13 @@ let tyVarZ = TyVar("Z", dummy_span)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
 
 (* forall X, X -> X *)
-(*let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)*)
+let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)
 
 (* forall X Y, X -> Y *)
-let any2any = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
+let arrX2Y = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
 
 (* forall X Y Z, X Y -> Z *)
-let anyany2any = SForall(["X";"Y";"Z"], mk_tyarr [tyVarX; tyVarY] tyVarZ, dummy_span)
+let arrXY2Z = SForall(["X";"Y";"Z"], mk_tyarr [tyVarX; tyVarY] tyVarZ, dummy_span)
 
 
 (* initial function environment *)
@@ -74,8 +74,8 @@ let initial_env : sourcespan scheme envt =
       (* prim1 functions *)      
       ("Add1", int2int);
       ("Sub1", int2int);
-      ("Print", any2any); 
-      ("PrintStack", any2any);
+      ("Print", arrX2Y); 
+      ("PrintStack", arrX2Y);
       ("Not",    bool2bool);
       ("IsNum",  any2bool);
       ("IsBool", any2bool);
@@ -128,11 +128,15 @@ let apply_subst_scheme (subst : 'a typ subst) (scheme : 'a scheme) : 'a scheme =
 ;;
 
 let apply_subst_env (subst : 'a typ subst) (env : 'a typ envt) : 'a typ envt =
-  failwith "Implement applying a substitution to a type environment here"
+  StringMap.fold 
+  (fun name typ new_env -> StringMap.add name (apply_subst_typ subst typ) new_env)
+  env StringMap.empty
 ;;
 
 let apply_subst_funenv (subst : 'a typ subst) (env : 'a scheme envt) : 'a scheme envt =
-  failwith "Implement applying a substitution to a scheme environment here"
+  StringMap.fold 
+  (fun name scheme new_env -> StringMap.add name (apply_subst_scheme subst scheme) new_env)
+  env StringMap.empty
 ;;
 
 let apply_subst_subst (subst : 'a typ subst) (dest : 'a typ subst) : 'a typ subst =
@@ -247,7 +251,7 @@ let instantiate (s : 'a scheme) : 'a typ =
     let subst = 
       List.fold_left
       (fun subst var -> 
-        let tyvar = TyVar(gensym "scheme", loc) in
+        let tyvar = TyVar(gensym "fun", loc) in
           (var, tyvar)::subst
       ) [] vars
     in
@@ -369,10 +373,14 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
      (* 1. type the arguments and return value. Create fresh type variables for arguments if there
          are no type annotations *)
       let () = Printf.printf ";scheme of decl before typed %s: %s\n" f_name (string_of_scheme scheme); in
-      let fun_typ = instantiate scheme in
+      let scheme = match StringMap.find_opt f_name funenv with
+                  | Some(scheme') -> scheme' (* in case that the scheme has been instantiated before *)
+                  | None    -> scheme 
+      in
+      let f_typ = instantiate scheme in
      (* 2. add the type of the arguments to the type environment and type the body *)
       let (arg_typs, ret_typ) = 
-        match fun_typ with
+        match f_typ with
         | TyArr(arg_typs, ret_typ, loc) -> (arg_typs, ret_typ)
         | _ -> failwith "infer_decl: impossible type" 
       in
@@ -385,29 +393,62 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
      (* 3. type the function body *)
       let (b_subst, b_typ, b) = infer_exp funenv new_env b reasons in
      (* 4. unify the type of function body with type of the function definition *)
-      let fun_typ = apply_subst_typ b_subst fun_typ in
+      let f_typ = apply_subst_typ b_subst f_typ in
       let ret_typ = apply_subst_typ b_subst ret_typ in
       let unif_subst = unify b_typ ret_typ loc reasons in
-      let fun_typ = apply_subst_typ unif_subst fun_typ in
+      let f_typ = apply_subst_typ unif_subst f_typ in
      (* 5. generalize the type of the function to type sheme *)
-      let scheme = generalize env fun_typ in
+      let scheme = generalize env f_typ in
       let () = Printf.printf ";scheme of decl after typed %s: %s\n" f_name (string_of_scheme scheme); in
 
-      (StringMap.add f_name scheme funenv, fun_typ, decl)
+      (StringMap.add f_name scheme funenv, f_typ, decl)
 ;;
 
+(* infer_group: inter types for mutually recursive functions *)
 let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
-  let fun1 = List.hd g in (* TODO *)
-    let (s, t, d) = infer_decl funenv env fun1 [] in
-      (s, []@[d])
+  (* 1. first instantiate type scheme for all functions in the group *)
+    let env = 
+      List.fold_left
+      (fun env decl ->
+        match decl with
+        | DFun(f_name, arg_names, scheme, b, loc) -> 
+          let f_typ = instantiate scheme in
+            StringMap.add f_name f_typ env
+      ) env g
+    in
+  (* 2. type the body of each function *)
+    let (env, f_typs) =
+      List.fold_left 
+      (fun (env, f_typs) (DFun(f_name, _, _, _, _) as decl) -> 
+         let (_, f_typ, _) = infer_decl funenv env decl [] in (* the new funenv is discarded because we want to keep function scheme as general as possible in this stage *)
+             (env, (f_name, f_typ)::f_typs)
+      ) (env, []) g
+    in
+  (* 3. generalize the scheme of all functions *)
+    let funenv = 
+      List.fold_left
+      (fun funenv (f_name, f_typ) ->
+        StringMap.add f_name (generalize env f_typ) funenv
+      ) funenv f_typs
+    in
+    (funenv, g)
 ;;
 
 let infer_prog funenv env (p : sourcespan program) : sourcespan program =
   match p with
   | Program(declgroups, body, typ, tag) ->
-     (*let (_, _) = infer_group funenv env (List.hd declgroups) in *)
-      let (unification, result_typ, rebuilt_expr) = infer_exp funenv env body [] in 
-     p (* TODO *)
+      (* 1. type the declgroups *)
+      let funenv = 
+        List.fold_left 
+        (fun funenv g ->
+          let (funenv', _) = infer_group funenv env g in
+            funenv'
+        ) funenv declgroups
+      in
+      (* 2. type the body *)
+      let (unification, result_typ, rebuilt_expr) = infer_exp funenv env body [] 
+      in 
+        p 
 ;;
 
 let type_synth (p : sourcespan program) : sourcespan program fallible =
