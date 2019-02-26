@@ -154,15 +154,15 @@ let inference_tests = [
 	
 	(* typing rules *)
 
-	t_any "num_1" 
+	t_any "ty_num_1" 
 		(infer_exp StringMap.empty tyenv0 (mk_num 3) []) 
 		([], tInt, (mk_num 3));
 
-	t_any "var_1"
+	t_any "ty_var_1"
 		(infer_exp StringMap.empty tyenv1 (mk_var "x") [])
 		([], tInt, (mk_var "x"));
 
-	t_typ "let_1"
+	t_typ "ty_let_1"
 		(* let x = 1 in x *)
 		(type_expr funenv0 tyenv0 
 							(mk_let 
@@ -170,7 +170,7 @@ let inference_tests = [
 								(mk_var("x"))))
 		tInt;
 
-  t_typ "if_1"
+  t_typ "ty_if_1"
     (* if x == 1 then true else false *)
     (type_expr initial_env tyenv1
       (mk_if 
@@ -179,7 +179,7 @@ let inference_tests = [
         (mk_bool false)))
     tBool;
 
-  t_typ "prim2_1" 
+  t_typ "ty_prim2_1" 
     (* 1 + x *)
     (type_expr initial_env tyenv1 
         (mk_eprim2 Plus (mk_var "x") (mk_num 1)))
@@ -188,20 +188,20 @@ let inference_tests = [
 
   (* def f1(x): add1(x) *)
   (* should type f1 as Int -> Int *)
-	t_typ "abs_1"
+	t_typ "ty_abs_1"
 		(get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f1" ["x"] arrX2Y (mk_eprim1 Add1 (mk_var "x"))) []))
 		(mk_tyarr [tInt] tInt);
 
 
   (* def f2(x): x + 6 *)
   (* should type f2 as Int -> Int *)
-  t_typ "abs_2"
+  t_typ "ty_abs_2"
     (get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f2" ["x"] arrX2Y (mk_eprim2 Plus (mk_var "x") (mk_num 6))) []))
     (mk_tyarr [tInt] tInt);
 
   (* def f3(x, y): isnum(print(x)) && isbool(y) *)
   (* should type f3 as T1, T2 -> Bool *)
-  t_typ_eq "abs_3"
+  t_typ_eq "ty_abs_3"
     (type_decl initial_env tyenv0 
       (mk_fun "f3" ["x"; "y"] arrXY2Z 
         (mk_eprim2 And
@@ -217,7 +217,7 @@ let inference_tests = [
     f(38)
   *)
   (* should type the final type of the program as Int *)
-  t_typ "prog_1"
+  t_typ "ty_prog_1"
     (type_prog initial_env
       (mk_prog
         [[(mk_fun "f3" ["x"] arrX2Y 
@@ -237,7 +237,7 @@ let inference_tests = [
     g(7)
   *)
   (* should type the final type as Bool *)
-  t_typ "prog_2"
+  t_typ "ty_prog_2"
     (type_prog initial_env
       (mk_prog
         (* declarations *)
@@ -251,6 +251,33 @@ let inference_tests = [
         (mk_app "g1" [(mk_num 7)])))
     tBool;
 
+
+  (* Typing mutually recursive functions *)
+  (*
+    def iseven(n):         
+      if n == 0: true
+      else: isodd(n - 1)
+    def isodd(n): 
+      if n == 0: false
+      else: iseven(n - 1) 
+
+    iseven(10)
+  *)
+  t_typ "ty_prog_3"
+    (type_prog initial_env
+      (mk_prog
+        (* declarations *)
+        [[(mk_fun "iseven" ["n"] arrX2Y
+            (mk_if  (mk_eprim2 Eq (mk_var "n") (mk_num 0)) 
+                    (mk_bool true) 
+                    (mk_app "isodd" [(mk_eprim2 Minus (mk_var "n") (mk_num 1))])));
+          (mk_fun "isodd" ["n"] arrX2Y
+            (mk_if  (mk_eprim2 Eq (mk_var "n") (mk_num 0))  
+                    (mk_bool false) 
+                    (mk_app "iseven" [(mk_eprim2 Minus (mk_var "n") (mk_num 1))])));]]
+        (* body *)
+        (mk_app "iseven" [(mk_num 10)])))
+    tBool;
 
 ];;
 
@@ -369,13 +396,19 @@ let init_tests =
   (*tvg "funcalls" "def fact(n : Int) -> Int: if n < 2: 1 else: n * fact(n - 1)\n\nfact(5)" "120"*)  
 ];;
 
-let all_tests = 
+
+let typing_tests = 
   utility_tests @
   inference_tests
-   (* @
+;;
+let language_tests = 
   expr_tests @
-  renaming_tests @
-  init_tests *)
+  renaming_tests 
+  (*init_tests*)
+;;
+let all_tests = 
+  typing_tests @
+  language_tests  
 ;;
 
 let suite =

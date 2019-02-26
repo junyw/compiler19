@@ -289,6 +289,7 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
 
 let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
+  (* infer_app: infer type of function call *)
   let infer_app (e : 'a expr)  
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) =
       let (fun_name, args, loc) =
@@ -406,15 +407,14 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
 
 (* infer_group: inter types for function gourps that may be mutually recursive *)
 let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
-  (* 1. first instantiate type scheme for all functions in the group *)
-    let env = 
+  (* 1. first pull out the scheme of all functions in the group *)
+    let funenv = 
       List.fold_left
-      (fun env decl ->
+      (fun funenv decl ->
         match decl with
         | DFun(f_name, arg_names, scheme, b, loc) -> 
-          let f_typ = instantiate scheme in
-            StringMap.add f_name f_typ env
-      ) env g
+            StringMap.add f_name scheme funenv
+      ) funenv g
     in
   (* 2. type the body of each function *)
     let (env, f_typs) =
