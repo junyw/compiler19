@@ -51,6 +51,47 @@ let test_prog = "let x : Int = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3
 let anf1 = (anf     (tag (parse_string "test" test_prog)))
 
 
+(* well-formedness tests *)
+let wf_tests = [
+  te "duplicate_1" {| def f(x, x):
+             x
+            0  |}  "The identifier x, redefined at <duplicate_1, 1:10-1:11>";
+  te "duplicate_2" {| let x = 1, x = 2 in x |} 
+                 "The identifier x, redefined at <duplicate_2, 1:12-1:13>";
+  te "duplicate_3" {| let x = (let y = 1, y = 2 in y) in x |} 
+                 "The identifier y, redefined at <duplicate_3, 1:21-1:22>";
+
+  te "fun_duplicate_1" {|
+    def foo(x): 
+        x
+    def foo(y):
+        y
+    1
+  |} "The function name foo, redefined at <fun_duplicate_1, 4:4-5:9>, duplicates one at <fun_duplicate_1, 2:4-3:9>";
+  te "unbound_1" {| x |}  "The identifier x, used at <unbound_1, 1:1-1:2>, is not in scope";
+  te "unbound_2" {| def f(x):
+                        y
+                    0 |}  "The identifier y, used at <unbound_2, 2:23-2:24>, is not in scope";
+  te "overflow_1" "1073741824" "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
+
+  te "unbound_fun_1" {| f(1) |} 
+     "The function name f, used at <unbound_fun_1, 1:1-1:5>, is not in scope";
+  te "arity_mismatch_1" {| def f(x, y):
+                                x + y
+                            f(1) |} 
+     "The function called at <arity_mismatch_1, 3:28-3:32> expected an arity of 2, but received 1 arguments";
+
+  (* the following program should report 3 errors *)
+  te "errors_1" {| def f(x, x):
+                       y
+                   f(1) |} 
+  "The identifier x, redefined at <errors_1, 1:10-1:11>, duplicates one at <errors_1, 1:7-1:8>
+The identifier y, used at <errors_1, 2:23-2:24>, is not in scope
+The function called at <errors_1, 3:19-3:23> expected an arity of 2, but received 1 arguments";
+
+];;
+
+
 let tX1 = mk_tyvar "X1" 
 let tX2 = mk_tyvar "X2"
 let tX3 = mk_tyvar "X3"
@@ -281,6 +322,21 @@ let inference_tests = [
 
 ];;
 
+let type_error = [
+
+  te "ty_add1_error" "add1(true)" "Type error at ty_add1_error, 1:0-1:10: expected Int but got Bool";
+  te "ty_not_error_1" "!(3)" "Type error at ty_not_error_1, 1:0-1:4: expected Bool but got Int";
+  te "ty_logic_error_1" "1 && true" "Type error at ty_logic_error_1, 1:0-1:9: expected Bool but got Int";
+  te "ty_logic_error_2" "false && 1" "Type error at ty_logic_error_2, 1:0-1:10: expected Bool but got Int";
+  te "ty_compare_error_1" "true > 1" "Type error at ty_compare_error_1, 1:0-1:8: expected Int but got Bool";
+  
+
+  te "ty_if_error_1" "if 54: true else: false" "Type error at ty_if_error_1, 1:0-1:23: expected Int but got Bool";
+  te "ty_if_error_2" "let x = 1 in (if x: true else: false)" "Type error at ty_if_error_2, 1:14-1:36: expected Int but got Bool";
+  te "ty_if_error_3" "if (let x = 1 in x): true else: false" "Type error at ty_if_error_3, 1:0-1:37: expected Int but got Bool";
+
+];;
+
 
 let expr_tests = [
   (* arithmetic tests *)
@@ -288,17 +344,12 @@ let expr_tests = [
   t "expr_2" "1 + 2" "3";
   t "expr_3" "1 * 2 + 3" "5";
   t "times_1" "1073741823 * 1" "1073741823";
-  te "minus_error_2" "1 - false" "Error: arithmetic expected a number";
-  te "times_error_1" "1 * false" "Error: arithmetic expected a number";
   te "runtime_overflow_1" "add1(1073741823)" "Error: Integer overflow";
   te "runtime_overflow_2" "10737418 * 120" "Error: Integer overflow";
   t "add1_1" "add1(1)" "2";
   t "sub1_1" "sub1(1)" "0";
   t "isnum_1" "isnum(1)" "true";
   t "isnum_2" "isnum(true)" "false";
-  t "prim1_1" "let x = if 1 + 3 >= 4: 10 else: false in isbool(x)" "false";
-  t "prim1_2" "let x = if 1 + 3 > 4: 10 else: false in isbool(x)" "true";
-  te "add1_error" "add1(true)" "Error: arithmetic expected a number";
   
   (* logic tests *)
   t "isbool_1" "isbool(true)" "true";
@@ -315,11 +366,6 @@ let expr_tests = [
   (*t "lessEq_1" "1 <= 2" "true";*) (* TODO: should pass *)
   t "eq_1" "1 == 1" "true";
   t "eq_2" "1 == 0" "false";  
-  (* errors *)
-  te "not_error_1" "!(3)" "Error: logic expected a boolean, but got 3";
-  te "logic_error_1" "1 && true" "Error: logic expected a boolean, but got 1";
-  te "logic_error_2" "false && 1" "Error: logic expected a boolean, but got 1";
-  te "compare_error_1" "true > 1" "Error: comparison expected a number";
   
   (* print tests *)
   t "print_1" "print(41)" "41\n41";
@@ -335,9 +381,9 @@ let expr_tests = [
   |} "false";
   t "let_4" 
   {| let x = 10 in
-         let y = (if x >= (5 + 4): x + 3 else: false) in 
+         let y = (if x >= (5 + 4): true else: false) in 
              isnum(x) && isnum(y)
-  |} "true";
+  |} "false";
 
   (* let* semantics *)
   t "let_5" {| let x = 10, y = x * 2 in y |} "20";  
@@ -349,17 +395,118 @@ let expr_tests = [
   t "if_4" "if !(2 == (1 + 1)): 1 else: 2" "2";
   t "if_5" "if (let x = true in x): 1 else: 2" "1";
   t "if_6" "let x = 1 in if x > 0: 1 else: 2" "1";
-  (* errors *)
-  te "if_error_1" "if 54: true else: false" "Error: if expected a boolean";
-  te "if_error_2" "let x = 1 in (if x: true else: false)" "Error: if expected a boolean";
-  te "if_error_3" "if (let x = 1 in x): true else: false" "Error: if expected a boolean";
 ];;
 
 let renaming_tests = [
    t "rename_1" {| (let x = 1 in x) + (let x = 2 in x) |} "3";
-   t "rename_2" {| def foo(x):
+   t "rename_2" {| def foo(x : Int) -> Int:
                        x + (let x = 1 in x) + (let x = 2 in x)
                     foo(3) |} "6";
+];;
+
+
+let typed_fun_tests = [
+  t "typed_fun_1" {|
+    def max(x: Int, y: Int) -> Int:
+        if(x > y): x else: y
+
+    max(1, 2) * max(2, 1)
+  |} "4";
+
+  t "typed_fun_2" {|
+    def NAND(a: Bool, b: Bool) -> Bool:
+      !(a && b)
+
+    def XOR(a: Bool, b: Bool) -> Bool:
+      NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
+
+    let a = print(XOR(true, true)) in 
+    let b = print(XOR(true, false)) in
+    let c = print(XOR(false, true)) in
+      print(XOR(false, false))
+  |} "false\ntrue\ntrue\nfalse\nfalse";
+
+  t "typed_fun_3" {|
+    def q(x: Int) -> Int:
+      let a = 1, b = -1, c = -2 in
+        (a * x * x) + (b * x) + c
+
+    (q(0) == -2) && (q(-1) == 0) && (q(2) == 0)
+  |} "true";
+
+];;
+
+let fun_tests = [
+  t "fun_1" {|
+    def max(x, y):
+        if(x > y): x else: y
+
+    max(1, 2) * max(2, 1)
+  |} "4";
+
+  t "fun_2" {|
+    def NAND(a, b):
+      !(a && b)
+
+    def XOR(a, b):
+      NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
+
+    let a = print(XOR(true, true)) in 
+    let b = print(XOR(true, false)) in
+    let c = print(XOR(false, true)) in
+      print(XOR(false, false))
+  |} "false\ntrue\ntrue\nfalse\nfalse";
+
+  t "fun_3" {|
+    def q(x):
+      let a = 1, b = -1, c = -2 in
+        (a * x * x) + (b * x) + c
+
+    (q(0) == -2) && (q(-1) == 0) && (q(2) == 0)
+  |} "true";
+
+  t "fun_4" {|
+    def mult(x, y):
+      x * y
+    def square(x):
+      mult(x, x)
+    square(3)
+  |} "9";
+
+  t "recursive_1" {| 
+      def factorial(n):
+        if (n == 0): 1 else: n * factorial(n - 1)
+
+      factorial(6) |} "720";
+
+  t "recursive_2" {|
+    def fib(n):
+      if(n == 1): 1 
+        else: 
+          if(n == 2): 1 
+            else: fib(n - 1) + fib(n - 2)
+
+    fib(6) |} "8";
+
+  t "mutual_1" {|
+    def is_even(n):
+        if(n == 0): true
+        else: is_odd(n - 1)
+
+    def is_odd(n):
+        if(n == 0): false
+        else: is_even(n - 1)
+
+    is_even(4) && !(is_even(3)) && is_odd(5)
+  |} "true";
+
+  (* this function call would stack-overflow without tail-call optimization *)
+  t "tail_1" {|
+      def f(x, y):
+        if x > 0: f(x - 1, y + 1)
+        else: y
+
+      f(1000000, 0)  |} "1000000";
 ];;
 
 let init_tests =
@@ -397,16 +544,24 @@ let init_tests =
 ];;
 
 
+
+let wellformedness_tests = 
+  wf_tests
+;;
 let typing_tests = 
   utility_tests @
-  inference_tests
+  inference_tests @
+  type_error
 ;;
 let language_tests = 
   expr_tests @
-  renaming_tests 
+  renaming_tests @
+  typed_fun_tests
+  (*fun_tests*)
   (*init_tests*)
 ;;
 let all_tests = 
+  wellformedness_tests @
   typing_tests @
   language_tests  
 ;;

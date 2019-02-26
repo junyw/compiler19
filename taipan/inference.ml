@@ -214,13 +214,13 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
                     in
 			   		let subst2 = unify typ typ2 loc reasons in
 			   		compose_subst subst1 subst2
-			   | _ -> failwith "unify fail: unable to unify"
+			   | _ -> raise (TypeMismatch(loc, t1, t2, reasons))
 	     end
     | _ -> 
     	begin match t2 with 
 		 		| TyVar(id2, _) when not (occurs id2 t1) ->
 		 			[(id2, t1)]
-		 		| _ -> failwith "unify fail: unable to unify"
+		 		| _ -> raise (TypeMismatch(loc, t1, t2, reasons))
 		end
 ;;     
      

@@ -188,16 +188,95 @@ let anf (p : tag program) : unit aprogram =
 
 
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
-  let rec wf_E e (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for expressions"])
-  and wf_D d (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for definitions"])
-  and wf_G g (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement well-formedness checking for definition groups"])
+  let err_duplicate_id id source_used source_defined = DuplicateId(id, source_used, source_defined) in
+  let err_duplicate_fun fun_name source_used source_defined = DuplicateFun(fun_name, source_used, source_defined) in
+  let rec find_opt ls x =
+    match ls with
+    | [] -> None
+    | (y,v)::rest ->
+       if String.equal y x then Some(v) else find_opt rest x
+  in
+  let check_duplicates (args : (string * sourcespan) list) mk_error : exn list =
+    let (errs, _) = 
+        List.fold_left 
+        (fun (errs, args_list) (arg_name, source2) -> 
+          match (find_opt args_list arg_name) with
+          | Some(duplicate_source) -> (errs @ [ (mk_error arg_name source2 duplicate_source) ], args_list)
+          | None -> (errs, args_list @ [ (arg_name, source2) ])
+        ) ([], []) args
+    in
+    errs 
+  in
+  let rec wf_E e (env : (string * sourcespan) list) (fun_env : (string * sourcespan decl) list) : exn list =
+      match e with
+      | EBool _ -> []
+      | ENumber(n, loc) -> 
+          if n > 1073741823 || n < -1073741824 then
+             [ Overflow(n, loc) ]
+           else []
+      | EId(x, loc) ->
+         begin match find_opt env x with
+          | None   -> [ UnboundId(x, loc) ]
+          | Some _ -> []
+        end
+      | EPrim1(_, e, _)      -> wf_E e env fun_env
+      | EPrim2(_, l, r, _)   -> wf_E l env fun_env @ wf_E r env fun_env
+      | EIf(c, t, f, _)      -> wf_E c env fun_env @ wf_E t env fun_env @ wf_E f env fun_env
+      | ELet(binds, body, _) ->
+        let name_locs = List.map 
+                        (fun binding -> 
+                          let (tybind, _, loc) = binding in 
+                          let (binding_name, _, _) = tybind in
+                              (binding_name, loc)) 
+                        binds
+        in
+          (check_duplicates name_locs err_duplicate_id)
+          (* check bindings *)
+        @  let (errors, new_env)  = 
+              List.fold_left 
+              (fun (errors, env) ((id, _, _), binding_body, loc)  -> 
+                 (errors @ wf_E binding_body env fun_env , (id, loc)::env)) 
+              ([], env) binds
+           in errors
+          (* check body *)
+        @ wf_E body new_env fun_env 
+      | EApp(f, args, loc) -> 
+        match find_opt fun_env f with
+        | None -> (* function not defined *)
+            [ UnboundFun(f, loc) ]
+        | Some(DFun(_, args', _, _, _)) -> (* wrong arity *)
+            if List.length args' != List.length args
+            then [ Arity(List.length args', List.length args, loc) ]
+            else []
+  (* wf_D: check well-formedness of a decl *)
+  and wf_D d (fun_env : (string * sourcespan decl) list): exn list =
+    match d with
+    | DFun(fun_name, args, _, body, _) ->
+      check_duplicates args err_duplicate_id @ wf_E body args fun_env
+  (* wf_G: check well-formedness of a declgroup *)
+  and wf_G g : exn list =
+    [](* TODO *)
   in
   match p with
   | Program(decls, body, typ, _) ->
-     Ok(p)
+    let fun_env : (string * sourcespan decl) list = 
+        List.flatten @@
+          List.map 
+          (fun declgroup ->  
+            List.map (fun (DFun(fun_name, _, _, _, loc) as decl) -> (fun_name, decl)) declgroup
+          ) decls
+    in
+    let errors = [] 
+      (* check duplicate in function declarations *)
+      @ check_duplicates (List.map (fun (fun_name, DFun(_, _, _, _, loc)) -> (fun_name, loc)) fun_env) err_duplicate_fun
+      (* check well-formedness in declgroups *)
+      @ List.flatten (List.map (fun declgroup -> wf_G declgroup) decls)
+      (* check well-formedness in body *)
+      @ wf_E body [] fun_env
+    in
+      if List.length errors == 0
+        then Ok(p)
+        else Error(errors)
 ;;
 
 
@@ -524,6 +603,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  |>  debug
+  (*|>  debug*)
   |> (add_phase result compile_prog)
 ;;
