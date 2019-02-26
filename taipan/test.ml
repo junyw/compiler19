@@ -97,7 +97,9 @@ let utility_tests = [
 	(* TODO: test unification failures *)
 ];;
 
+(* helper function to create expr for testing *)
 let mk_num n = ENumber(n, dummy_span)
+let mk_bool (b : bool) = EBool(b, dummy_span)
 let mk_var (x : string) : 'a expr = EId(x, dummy_span)
 let mk_fun (name : string) (args : string list) scheme body  =
 	DFun(name, List.map (fun x -> (x, dummy_span)) args, scheme, body, dummy_span)
@@ -117,6 +119,17 @@ let mk_let (bindings : 'a bind list) (body : 'a expr) : 'a expr =
 	ELet(bindings, body, dummy_span)
 ;;
 
+let mk_if (cond : 'a expr) (thn : 'a expr) (els : 'a expr) : 'a expr =
+  EIf(cond, thn, els, dummy_span)
+;;
+
+let mk_app (f_name : string) (args : 'a expr list) =
+  EApp(f_name, args, dummy_span)
+;;
+
+let mk_prog declgroups body =
+  Program(declgroups, body, (TyBlank(dummy_span)), dummy_span)
+
 let tyenv0 = StringMap.empty
 let tyenv1 = StringMap.add "x" tInt tyenv0
 
@@ -125,11 +138,23 @@ let funenv1 = StringMap.add "f" any2any funenv0
 
 let get_2_3 (_, a, _) = a;;
 
+(* type_expr : type an expression *)
+let type_expr funenv env expr : 'a typ = 
+  get_2_3 (infer_exp funenv env expr [])
+;;
+let type_decl funenv env decl : 'a typ = 
+  get_2_3 (infer_decl funenv env decl [])
+;;
+
+let type_prog funenv p: 'a typ =
+  let (ret_typ, _) = infer_prog funenv StringMap.empty p in
+    ret_typ
+;;
 let inference_tests = [
 	
 	(* typing rules *)
 
-	t_any "number_1" 
+	t_any "num_1" 
 		(infer_exp StringMap.empty tyenv0 (mk_num 3) []) 
 		([], tInt, (mk_num 3));
 
@@ -139,38 +164,93 @@ let inference_tests = [
 
 	t_typ "let_1"
 		(* let x = 1 in x *)
-		(get_2_3 (infer_exp funenv0 tyenv0 
+		(type_expr funenv0 tyenv0 
 							(mk_let 
 								[ (mk_binding "x" tX1 (mk_num 1)) ]
-								(mk_var("x")) ) 
-				  []))
+								(mk_var("x"))))
 		tInt;
 
+  t_typ "if_1"
+    (* if x == 1 then true else false *)
+    (type_expr initial_env tyenv1
+      (mk_if 
+        (mk_eprim2 Eq (mk_var "x") (mk_num 1))
+        (mk_bool true)
+        (mk_bool false)))
+    tBool;
 
-  (* f1(x): add1(x) *)
+  t_typ "prim2_1" 
+    (* 1 + x *)
+    (type_expr initial_env tyenv1 
+        (mk_eprim2 Plus (mk_var "x") (mk_num 1)))
+    tInt;
+
+
+  (* def f1(x): add1(x) *)
   (* should type f1 as Int -> Int *)
 	t_typ "abs_1"
 		(get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f1" ["x"] arrX2Y (mk_eprim1 Add1 (mk_var "x"))) []))
 		(mk_tyarr [tInt] tInt);
 
 
-  (* f2(x): x + 6 *)
+  (* def f2(x): x + 6 *)
   (* should type f2 as Int -> Int *)
   t_typ "abs_2"
     (get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f2" ["x"] arrX2Y (mk_eprim2 Plus (mk_var "x") (mk_num 6))) []))
     (mk_tyarr [tInt] tInt);
 
-  (* f3(x, y): isnum(print(x)) && isbool(y) *)
+  (* def f3(x, y): isnum(print(x)) && isbool(y) *)
   (* should type f3 as T1, T2 -> Bool *)
   t_typ_eq "abs_3"
-    (get_2_3 (infer_decl initial_env tyenv0 
+    (type_decl initial_env tyenv0 
       (mk_fun "f3" ["x"; "y"] arrXY2Z 
         (mk_eprim2 And
           (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
           (mk_eprim1 IsBool (mk_var "y"))
-      )) 
-    []))
+      ))) 
     (mk_tyarr [tX1; tX2] tBool);
+  
+  (*
+    def f(x):
+      x + 6
+
+    f(38)
+  *)
+  (* should type the final type of the program as Int *)
+  t_typ "prog_1"
+    (type_prog initial_env
+      (mk_prog
+        [[(mk_fun "f3" ["x"] arrX2Y 
+          (mk_eprim2 Plus
+            (mk_var "x")
+            (mk_num 6)))]] 
+        (mk_app "f3" [(mk_num 38)])))
+    tInt;
+
+  (*
+    def f(x, y):
+      isnum(print(x)) && isbool(y)
+
+    def g(z):
+      f(z, 5)
+
+    g(7)
+  *)
+  (* should type the final type as Bool *)
+  t_typ "prog_2"
+    (type_prog initial_env
+      (mk_prog
+        (* declarations *)
+        [[(mk_fun "f4" ["x"; "y"] arrXY2Z 
+            (mk_eprim2 And
+              (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
+              (mk_eprim1 IsBool (mk_var "y"))))];
+          [(mk_fun "g1" ["z"] arrX2Y
+            (mk_app "f4" [(mk_var "z"); (mk_num 5)]))]]
+        (* body *)
+        (mk_app "g1" [(mk_num 7)])))
+    tBool;
+
 
 ];;
 

@@ -404,7 +404,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
       (StringMap.add f_name scheme funenv, f_typ, decl)
 ;;
 
-(* infer_group: inter types for mutually recursive functions *)
+(* infer_group: inter types for function gourps that may be mutually recursive *)
 let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
   (* 1. first instantiate type scheme for all functions in the group *)
     let env = 
@@ -434,7 +434,7 @@ let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt 
     (funenv, g)
 ;;
 
-let infer_prog funenv env (p : sourcespan program) : sourcespan program =
+let infer_prog funenv env (p : sourcespan program) : ('a typ * sourcespan program) =
   match p with
   | Program(declgroups, body, typ, tag) ->
       (* 1. type the declgroups *)
@@ -446,13 +446,13 @@ let infer_prog funenv env (p : sourcespan program) : sourcespan program =
         ) funenv declgroups
       in
       (* 2. type the body *)
-      let (unification, result_typ, rebuilt_expr) = infer_exp funenv env body [] 
+      let (unification, ret_typ, rebuilt_expr) = infer_exp funenv env body [] 
       in 
-        p 
+        (ret_typ, p)
 ;;
 
 let type_synth (p : sourcespan program) : sourcespan program fallible =
   try
-    Ok(infer_prog initial_env StringMap.empty p)
+    let (_, p) = infer_prog initial_env StringMap.empty p in Ok(p)
   with e -> Error([e])
 ;;
