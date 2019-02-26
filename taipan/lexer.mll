@@ -21,6 +21,8 @@ rule token = parse
   | '\n' "(" { LPARENSPACE }
   | blank "<" { LESSSPACE }
   | '\n' "<" { LESSSPACE }
+  | blank "<=" { LESSEQSPACE }
+  | '\n' "<=" { LESSEQSPACE }
   | blank { token lexbuf }
   | '\n' { new_line lexbuf; token lexbuf }
   | signed_int as x { NUM (int_of_string x) }

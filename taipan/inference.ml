@@ -248,6 +248,8 @@ let rec unblank (t : 'a typ) : 'a typ =
 let instantiate (s : 'a scheme) : 'a typ =
   match s with
   | SForall(vars, typ, loc) -> 
+    (* if there are blanks, replace it with a fresh type variable *)
+    let typ = unblank typ in
     let subst = 
       List.fold_left
       (fun subst var -> 
@@ -272,9 +274,9 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
       | None   -> (StringMap.add x t env, x::some)
       end 
     | TyCon _   -> (env, some)
-    | TyArr _   -> failwith "generalize: TyArr not implemented - higher order function is not implemented"
-    | TyBlank _ -> failwith "generalize: TyBlank not implemented"
-    | TyApp _   -> failwith "generalize: TyApp - impossible case"
+    | TyArr _   -> failwith "generalize_typ: TyArr not implemented - higher order function is not implemented"
+    | TyBlank _ -> failwith "generalize_typ: TyBlank not implemented"
+    | TyApp _   -> failwith "generalize_typ: TyApp - impossible case"
   in
   match t with 
   | TyArr(arg_typs, b_typ, loc) -> 
@@ -284,6 +286,7 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
     in
     let (_, some) = generalize_typ (e_new, some) b_typ in
       SForall(some, t, loc)
+  | _ -> failwith "generalize: impossible case"
 ;;
 
 
@@ -350,7 +353,9 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
   | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
   | EIf(c, t, f, loc) ->
      let (c_subst, c_typ, c) = infer_exp funenv env c reasons in
+     let env = apply_subst_env c_subst env in
      let (t_subst, t_typ, t) = infer_exp funenv env t reasons in
+     let env = apply_subst_env t_subst env in
      let (f_subst, f_typ, f) = infer_exp funenv env f reasons in
      (* Compose the substitutions together *)
      let subst_so_far = compose_subst (compose_subst c_subst t_subst) f_subst in
@@ -373,7 +378,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
   | DFun(f_name, arg_names, scheme, b, loc) ->
      (* 1. type the arguments and return value. Create fresh type variables for arguments if there
          are no type annotations *)
-      let () = Printf.printf ";scheme of decl before typed %s: %s\n" f_name (string_of_scheme scheme); in
+      let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in
       let scheme = match StringMap.find_opt f_name funenv with
                   | Some(scheme') -> scheme' (* in case that the scheme has been instantiated before *)
                   | None    -> scheme 
@@ -400,7 +405,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
       let f_typ = apply_subst_typ unif_subst f_typ in
      (* 5. generalize the type of the function to type sheme *)
       let scheme = generalize env f_typ in
-      let () = Printf.printf ";scheme of decl after typed %s: %s\n" f_name (string_of_scheme scheme); in
+      let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in
 
       (StringMap.add f_name scheme funenv, f_typ, decl)
 ;;

@@ -29,53 +29,57 @@ let teq name actual expected = name>::fun _ ->
 let t_any name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:dump);;
 
+(* test if two types are equal *)
 let t_typ name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:string_of_typ);;
 
-
+(* unify_opt: check if two types can be unified *)
 let unify_opt (t1 : 'a typ) (t2 : 'a typ) = 
   try 
     let _ = unify t1 t2 dummy_span [] in Ok(true)
   with 
     err -> Error(err)
+;;
 
-(* test two types are equivalent up to unification *)
+(* test two types are equal up to unification *)
 let t_typ_eq name value expected = name>::
   (fun _ -> assert_equal (Ok(true)) (unify_opt expected value) ~printer:dump);;
-
-let forty_one = "41";;
-
-let forty_one_a = (AProgram([], ACExpr(CImmExpr(ImmNum(41, ()))), ()))
-
-let test_prog = "let x : Int = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3)) else: (if 0 == 0: sub1(4) else: sub1(5)) in x"
-let anf1 = (anf     (tag (parse_string "test" test_prog)))
-
+;;
 
 (* well-formedness tests *)
 let wf_tests = [
   te "duplicate_1" {| def f(x, x):
-             x
-            0  |}  "The identifier x, redefined at <duplicate_1, 1:10-1:11>";
+                          x
+                      0  |}  
+      "The identifier x, redefined at <duplicate_1, 1:10-1:11>";
+  
   te "duplicate_2" {| let x = 1, x = 2 in x |} 
-                 "The identifier x, redefined at <duplicate_2, 1:12-1:13>";
+     "The identifier x, redefined at <duplicate_2, 1:12-1:13>";
+  
   te "duplicate_3" {| let x = (let y = 1, y = 2 in y) in x |} 
-                 "The identifier y, redefined at <duplicate_3, 1:21-1:22>";
+     "The identifier y, redefined at <duplicate_3, 1:21-1:22>";
 
-  te "fun_duplicate_1" {|
-    def foo(x): 
-        x
-    def foo(y):
-        y
-    1
-  |} "The function name foo, redefined at <fun_duplicate_1, 4:4-5:9>, duplicates one at <fun_duplicate_1, 2:4-3:9>";
-  te "unbound_1" {| x |}  "The identifier x, used at <unbound_1, 1:1-1:2>, is not in scope";
+  te "fun_duplicate_1" {| def foo(x): 
+                              x
+                          def foo(y):
+                              y
+                          1  |} 
+     "The function name foo, redefined at <fun_duplicate_1, 3:26-4:31>, duplicates one at <fun_duplicate_1, 1:1-2:31>";
+  
+  te "unbound_1" {| x |}  
+     "The identifier x, used at <unbound_1, 1:1-1:2>, is not in scope";
+  
   te "unbound_2" {| def f(x):
                         y
-                    0 |}  "The identifier y, used at <unbound_2, 2:23-2:24>, is not in scope";
-  te "overflow_1" "1073741824" "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
+                    0 |}  
+     "The identifier y, used at <unbound_2, 2:24-2:25>, is not in scope";
+ 
+  te "overflow_1" "1073741824" 
+     "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
 
   te "unbound_fun_1" {| f(1) |} 
      "The function name f, used at <unbound_fun_1, 1:1-1:5>, is not in scope";
+  
   te "arity_mismatch_1" {| def f(x, y):
                                 x + y
                             f(1) |} 
@@ -88,10 +92,14 @@ let wf_tests = [
   "The identifier x, redefined at <errors_1, 1:10-1:11>, duplicates one at <errors_1, 1:7-1:8>
 The identifier y, used at <errors_1, 2:23-2:24>, is not in scope
 The function called at <errors_1, 3:19-3:23> expected an arity of 2, but received 1 arguments";
+  
+  (* TODO *)
+  (*te "shadow_1" "let x : Bool = true in (let y : Bool = (let x : Bool = false in x) in y)" "shadows one defined";*)
 
 ];;
 
 
+(* type variables for testing *)
 let tX1 = mk_tyvar "X1" 
 let tX2 = mk_tyvar "X2"
 let tX3 = mk_tyvar "X3"
@@ -329,8 +337,6 @@ let type_error = [
   te "ty_logic_error_1" "1 && true" "Type error at ty_logic_error_1, 1:0-1:9: expected Bool but got Int";
   te "ty_logic_error_2" "false && 1" "Type error at ty_logic_error_2, 1:0-1:10: expected Bool but got Int";
   te "ty_compare_error_1" "true > 1" "Type error at ty_compare_error_1, 1:0-1:8: expected Int but got Bool";
-  
-
   te "ty_if_error_1" "if 54: true else: false" "Type error at ty_if_error_1, 1:0-1:23: expected Int but got Bool";
   te "ty_if_error_2" "let x = 1 in (if x: true else: false)" "Type error at ty_if_error_2, 1:14-1:36: expected Int but got Bool";
   te "ty_if_error_3" "if (let x = 1 in x): true else: false" "Type error at ty_if_error_3, 1:0-1:37: expected Int but got Bool";
@@ -363,7 +369,7 @@ let expr_tests = [
   t "greaterEq_1" "2 >= 1" "true";
   t "less_1" "1 < 2" "true";
   t "less_2" "1 < 0" "false";
-  (*t "lessEq_1" "1 <= 2" "true";*) (* TODO: should pass *)
+  t "lessEq_1" "1 <= 2" "true"; 
   t "eq_1" "1 == 1" "true";
   t "eq_2" "1 == 0" "false";  
   
@@ -416,7 +422,7 @@ let typed_fun_tests = [
   t "typed_fun_2" {|
     def NAND(a: Bool, b: Bool) -> Bool:
       !(a && b)
-
+    and 
     def XOR(a: Bool, b: Bool) -> Bool:
       NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
 
@@ -447,7 +453,7 @@ let fun_tests = [
   t "fun_2" {|
     def NAND(a, b):
       !(a && b)
-
+    and
     def XOR(a, b):
       NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
 
@@ -468,6 +474,7 @@ let fun_tests = [
   t "fun_4" {|
     def mult(x, y):
       x * y
+    and 
     def square(x):
       mult(x, x)
     square(3)
@@ -492,7 +499,7 @@ let fun_tests = [
     def is_even(n):
         if(n == 0): true
         else: is_odd(n - 1)
-
+    and
     def is_odd(n):
         if(n == 0): false
         else: is_even(n - 1)
@@ -502,68 +509,32 @@ let fun_tests = [
 
   (* this function call would stack-overflow without tail-call optimization *)
   t "tail_1" {|
-      def f(x, y):
-        if x > 0: f(x - 1, y + 1)
+      def tail1(x, y):
+        if x > 0: tail1(x - 1, y + 1)
         else: y
 
-      f(1000000, 0)  |} "1000000";
+      tail1(1000000, 0)  |} "1000000";
 ];;
-
-let init_tests =
-[
-  t "expr_0" "3" "3";
-  (* tanf "forty_one_anf"
-       (Program([], ENumber(41, ()), TyBlank(), ()))
-       forty_one_a; *)
-
-  (* tanf "prim1_anf"
-   *      (Program([], (EPrim1(Sub1, ENumber(55, ()), ())), ()))
-   *      (AProgram([],
-   *                (ALet("unary_1", CPrim1(Sub1, ImmNum(55, ()), ()),
-   *                      ACExpr(CImmExpr(ImmId("unary_1", ()))),
-   *                      ())),
-   *               ())); *)
-
-  (*te "scope_err1" "let x : Bool = true in (let y : Bool = (let x : Bool = false in x) in y)" "shadows one defined";*)
-
-  (*ta "forty_one_run_anf" (atag forty_one_a) "41";*)
- 
-  (*t "forty_one" forty_one "41";*)
-
-
-  (*t "test" test_prog "3";*)
-      
-    (* Some useful if tests to start you off *)
-
-  (*t "if1" "if 7 < 8: 5 else: 3" "5";*)
-  (*t "if2" "if 0 > 1: 4 else: 2" "2";*)
-
-  (*te "overflow" "add1(1073741823)" "overflow";*)
-
-  (*tvg "funcalls" "def fact(n : Int) -> Int: if n < 2: 1 else: n * fact(n - 1)\n\nfact(5)" "120"*)  
-];;
-
-
 
 let wellformedness_tests = 
   wf_tests
 ;;
+
 let typing_tests = 
-  utility_tests @
-  inference_tests @
-  type_error
+    utility_tests 
+  @ inference_tests 
+  @ type_error
 ;;
 let language_tests = 
-  expr_tests @
-  renaming_tests @
-  typed_fun_tests
-  (*fun_tests*)
-  (*init_tests*)
+    expr_tests 
+  @ renaming_tests
+  @ typed_fun_tests
+  @ fun_tests
 ;;
 let all_tests = 
-  wellformedness_tests @
-  typing_tests @
-  language_tests  
+    wellformedness_tests
+  @ typing_tests
+  @ language_tests  
 ;;
 
 let suite =

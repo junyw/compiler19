@@ -241,13 +241,16 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           (* check body *)
         @ wf_E body new_env fun_env 
       | EApp(f, args, loc) -> 
-        match find_opt fun_env f with
-        | None -> (* function not defined *)
-            [ UnboundFun(f, loc) ]
-        | Some(DFun(_, args', _, _, _)) -> (* wrong arity *)
-            if List.length args' != List.length args
-            then [ Arity(List.length args', List.length args, loc) ]
-            else []
+        begin match find_opt fun_env f with
+          | None -> (* function not defined *)
+              [ UnboundFun(f, loc) ]
+          | Some(DFun(_, args', _, _, _)) -> (* wrong arity *)
+              if List.length args' != List.length args
+              then [ Arity(List.length args', List.length args, loc) ]
+              else []
+        end
+      | EAnnot _ -> failwith "wf_E: EAnnot not implemented"
+
   (* wf_D: check well-formedness of a decl *)
   and wf_D d (fun_env : (string * sourcespan decl) list): exn list =
     match d with
@@ -255,7 +258,10 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
       check_duplicates args err_duplicate_id @ wf_E body args fun_env
   (* wf_G: check well-formedness of a declgroup *)
   and wf_G g : exn list =
-    [](* TODO *)
+    let g_fun_env : (string * sourcespan decl) list = 
+      List.map (fun (DFun(fun_name, _, _, _, _) as decl) -> (fun_name, decl)) g in
+        (* check well-formedness in function declartions *)
+        List.flatten (List.map (fun decl -> wf_D decl g_fun_env) g)
   in
   match p with
   | Program(decls, body, typ, _) ->
@@ -346,6 +352,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
                   ICall("print");
                   IAdd(Reg(ESP), Const(1*4));
                 ]
+     | PrintB -> failwith "compile_cexpr: PrintB not implemented"
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
           IAnd(Reg(EAX), Const(0x7FFFFFFF));
@@ -447,6 +454,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           IMov(Reg(EAX), const_false);
           ILabel(done_label);
         ]
+     | EqB -> failwith "compile_cexpr: EqB not implemented"
      end
   | CApp(fun_name, immexprs, tag) ->
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in

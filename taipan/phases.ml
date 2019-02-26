@@ -121,6 +121,6 @@ let debug (cur_pipeline : 'a pipeline) : 'a pipeline =
       | Error(errs, trace) -> print_trace trace
       | Ok(cur_val, trace) -> print_trace trace
     in
-      List.map (fun x -> Printf.eprintf "%s\n" x) strings_of_trace;
-      cur_pipeline
+    let _ = List.map (fun x -> Printf.eprintf "%s\n" x) strings_of_trace in
+    cur_pipeline
 ;;
