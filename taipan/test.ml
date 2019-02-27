@@ -109,55 +109,6 @@ let tX1toX2 = mk_tyarr [tX1] tX2
 (* X1 X2 -> X3 *)
 let tX1X2toX3 = mk_tyarr [tX1;tX2] tX3
 
-let utility_tests = [
-	(* type substitution tests *)
-	t_any "apply_subst_typ_1" (apply_subst_typ [] (TyBlank(dummy_span)))  (TyBlank(dummy_span));
-	t_any "apply_subst_typ_2" (apply_subst_typ [("X1", tInt)] tX1)  tInt;
-
-	t_any "apply_subst_typ_3" 
-		(apply_subst_typ [("X1", tInt)] tX1toX2) 
-		(mk_tyarr [tInt] tX2);
-
-	t_any "apply_subst_typ_4" 
-		(apply_subst_typ [("X1", tX3); ("X2", tX3)] tX1toX2) 
-		(mk_tyarr [tX3] tX3);
-
-    (* unification tests *)
-	t_any "unify_1"
-		(unify tInt tInt dummy_span []) 
-		[];
-
-	t_any "unify_2"
-		(unify tX1 tX1 dummy_span []) 
-		[];
-
-	t_any "unify_3"
-		(unify tX1 tInt dummy_span []) 
-		[("X1", tInt)];
-
-	t_any "unify_4"
-		(unify tInt tX1 dummy_span []) 
-		[("X1", tInt)];
-
-	t_any "unify_5"
-		(unify (mk_tyarr [tInt; tInt] tInt) tX1X2toX3 dummy_span [])
-		[("X1", tInt); ("X2", tInt); ("X3", tInt)];
-
-  (* unify X1 -> Int and X2 -> X2 *)
-  t_any "unify_6"
-    (unify (mk_tyarr [tX1] tInt) (mk_tyarr [tX2] tX2)  dummy_span [])
-    [("X2", tInt); ("X1", tInt)];
-  
-  (* unify Int -> X1 and X2 -> X2 *)
-  t_any "unify_7"
-    (unify (mk_tyarr [tInt] tX1) (mk_tyarr [tX2] tX2)  dummy_span [])
-    [("X2", tInt); ("X1", tInt)];
-
-
-
-	(* TODO: test unification failures *)
-];;
-
 (* helper function to create expr for testing *)
 let mk_num n = ENumber(n, dummy_span)
 let mk_bool (b : bool) = EBool(b, dummy_span)
@@ -211,6 +162,71 @@ let type_prog funenv p: 'a typ =
   let (ret_typ, _) = infer_prog funenv StringMap.empty p in
     ret_typ
 ;;
+
+
+let utility_tests = [
+  (* type substitution tests *)
+  t_any "apply_subst_typ_1" (apply_subst_typ [] (TyBlank(dummy_span)))  (TyBlank(dummy_span));
+  t_any "apply_subst_typ_2" (apply_subst_typ [("X1", tInt)] tX1)  tInt;
+
+  t_any "apply_subst_typ_3" 
+    (apply_subst_typ [("X1", tInt)] tX1toX2) 
+    (mk_tyarr [tInt] tX2);
+
+  t_any "apply_subst_typ_4" 
+    (apply_subst_typ [("X1", tX3); ("X2", tX3)] tX1toX2) 
+    (mk_tyarr [tX3] tX3);
+
+    (* unification tests *)
+  t_any "unify_1"
+    (unify tInt tInt dummy_span []) 
+    [];
+
+  t_any "unify_2"
+    (unify tX1 tX1 dummy_span []) 
+    [];
+
+  t_any "unify_3"
+    (unify tX1 tInt dummy_span []) 
+    [("X1", tInt)];
+
+  t_any "unify_4"
+    (unify tInt tX1 dummy_span []) 
+    [("X1", tInt)];
+
+  t_any "unify_5"
+    (unify (mk_tyarr [tInt; tInt] tInt) tX1X2toX3 dummy_span [])
+    [("X3", tInt); ("X1", tInt); ("X2", tInt)];
+
+  (* unify X1 -> Int and X2 -> X2 *)
+  (* [X1 => X2, X2 => Int] *)
+  t_any "unify_6"
+    (unify (mk_tyarr [tX1] tInt) (mk_tyarr [tX2] tX2)  dummy_span [])
+    [("X2", tInt); ("X1", tInt)];
+  
+  (* unify Int -> X1 and X2 -> X2 *)
+  t_any "unify_7"
+    (unify (mk_tyarr [tInt] tX1) (mk_tyarr [tX2] tX2)  dummy_span [])
+    [("X1", tInt); ("X2", tInt)];
+
+  (* unify X2 -> X2 and Int -> X1*)
+  t_any "unify_8"
+    (unify (mk_tyarr [tX2] tX2) (mk_tyarr [tInt] tX1)  dummy_span [])
+    [("X1", tInt); ("X2", tInt)];
+
+  (* TODO: test unification failures *)
+
+  (* generalization *)
+  t_any "generalize_1"
+    (generalize StringMap.empty (mk_tyarr [tX1] tX2))
+    (SForall(["X2";"X1"], (mk_tyarr [tX1] tX2), dummy_span));
+
+  t_any "generalize_2"
+    (generalize StringMap.empty (mk_tyarr [tBool] tBool))
+    (SForall([], (mk_tyarr [tBool] tBool), dummy_span));
+
+];;
+
 let inference_tests = [
 	
 	(* typing rules *)
@@ -271,6 +287,15 @@ let inference_tests = [
       ))) 
     (mk_tyarr [tX1; tX2] tBool);
   
+  (* def f4(x): x == 1 *)
+  (* should type f4 as Bool -> Bool *)
+  t_typ "polymorphic_1"
+    (type_decl initial_env tyenv0
+      (mk_fun "f4" ["x"] arrX2Y
+        (mk_eprim2 Eq (mk_var "x") (mk_num 1))))
+    (mk_tyarr [tInt] tBool);
+
+
   (*
     def f(x):
       x + 6
@@ -356,13 +381,17 @@ let type_error = [
   te "ty_logic_error_2" "false && 1" 
      "Type error at ty_logic_error_2, 1:0-1:10: expected Bool but got Int";
   
-  te "ty_compare_error_1" "true > 1" "Type error at ty_compare_error_1, 1:0-1:8: expected Int but got Bool";
+  te "ty_compare_error_1" "true > 1" 
+     "Type error at ty_compare_error_1, 1:0-1:8: expected Int but got Bool";
   
-  te "ty_if_error_1" "if 54: true else: false" "Type error at ty_if_error_1, 1:0-1:23: expected Int but got Bool";
+  te "ty_if_error_1" "if 54: true else: false" 
+     "Type error at ty_if_error_1, 1:0-1:23: expected Bool but got Int";
   
-  te "ty_if_error_2" "let x = 1 in (if x: true else: false)" "Type error at ty_if_error_2, 1:14-1:36: expected Int but got Bool";
+  te "ty_if_error_2" "let x = 1 in (if x: true else: false)" 
+     "Type error at ty_if_error_2, 1:14-1:36: expected Bool but got Int";
   
-  te "ty_if_error_3" "if (let x = 1 in x): true else: false" "Type error at ty_if_error_3, 1:0-1:37: expected Int but got Bool";
+  te "ty_if_error_3" "if (let x = 1 in x): true else: false" 
+    "Type error at ty_if_error_3, 1:0-1:37: expected Bool but got Int";
 
 ];;
 

@@ -217,14 +217,14 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
             let typ = apply_subst_typ subst1 typ in
             let typ2 = apply_subst_typ subst1 typ2 in
 			   		let subst2 = unify typ typ2 loc reasons in
-			   		compose_subst subst1 subst2  
-			   | _ -> raise (TypeMismatch(loc, t1, t2, reasons))
+			   		compose_subst subst2 subst1
+			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 	     end
     | _ -> 
     	begin match t2 with 
 		 		| TyVar(id2, _) when not (occurs id2 t1) ->
 		 			[(id2, t1)]
-		 		| _ -> raise (TypeMismatch(loc, t1, t2, reasons))
+		 		| _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 		end
 ;;     
      
@@ -324,7 +324,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       (* type of the function call *)
       let app_typ = TyArr(args_typs, ret_ty, loc) in
       (* unification *)
-      let unif_subst1 = unify fun_ty app_typ loc reasons in
+      let unif_subst1 = unify app_typ fun_ty loc reasons in
       let final_subst = unif_subst1 (* ?? *) in
       let final_typ = apply_subst_typ final_subst ret_ty in
       (final_subst, final_typ, e)   
