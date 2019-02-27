@@ -29,7 +29,7 @@ let teq name actual expected = name>::fun _ ->
 let t_any name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:dump);;
 
-(* test if two types are equal *)
+(* t_typ: test if two types are equal *)
 let t_typ name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:string_of_typ);;
 
@@ -41,7 +41,7 @@ let unify_opt (t1 : 'a typ) (t2 : 'a typ) =
     err -> Error(err)
 ;;
 
-(* test two types are equal up to unification *)
+(* t_typ_eq: test two types are equal up to unification *)
 let t_typ_eq name value expected = name>::
   (fun _ -> assert_equal (Ok(true)) (unify_opt expected value) ~printer:dump);;
 ;;
@@ -154,16 +154,20 @@ let get_2_3 (_, a, _) = a;;
 let type_expr funenv env expr : 'a typ = 
   get_2_3 (infer_exp funenv env expr [])
 ;;
+
+(* type_expr : type an function declaration *)
 let type_decl funenv env decl : 'a typ = 
   get_2_3 (infer_decl funenv env decl [])
 ;;
 
+(* type_prog : type an program and return the return type of the program *)
 let type_prog funenv p: 'a typ =
   let (ret_typ, _) = infer_prog funenv StringMap.empty p in
     ret_typ
 ;;
 
 
+(* test utility functions for type inference *)
 let utility_tests = [
   (* type substitution tests *)
   t_any "apply_subst_typ_1" (apply_subst_typ [] (TyBlank(dummy_span)))  (TyBlank(dummy_span));
@@ -227,9 +231,8 @@ let utility_tests = [
 
 ];;
 
+
 let inference_tests = [
-	
-	(* typing rules *)
 
 	t_any "ty_num_1" 
 		(infer_exp StringMap.empty tyenv0 (mk_num 3) []) 
@@ -295,7 +298,7 @@ let inference_tests = [
         (mk_eprim2 Eq (mk_var "x") (mk_num 1))))
     (mk_tyarr [tInt] tBool);
 
-  (* def f5(x): if x == 1 then: 10 else: 11 *)
+  (* def f5(x): if x == 1: 10 else: 11 *)
   (* should type f4 as Int -> Int *)
   t_typ "polymorphic_2"
     (type_decl initial_env tyenv0
@@ -305,6 +308,32 @@ let inference_tests = [
           (mk_num 10)
           (mk_num 11))))
     (mk_tyarr [tInt] tInt);
+
+  (* def f6(x): isNum(x) *)
+  (* should type f6 as T1 -> Bool *)
+  t_typ_eq "polymorphic_3"
+    (type_decl initial_env tyenv0
+      (mk_fun "f6" ["x"] arrX2Y
+        (mk_eprim1 IsNum (mk_var "x"))))
+    (mk_tyarr [tX1] tBool);
+
+  (* def f7(x): x *)
+  (* should type f7 as T1 -> T2 *)
+  t_typ_eq "polymorphic_4"
+    (type_decl initial_env tyenv0
+      (mk_fun "f7" ["x"] arrX2Y
+        (mk_var "x")))
+    (mk_tyarr [tX1] tX2);
+
+  (* def f8(x): if x: false else: true *)
+  (* should type f8 as Bool -> Bool *)
+  t_typ "type_if_expr_1"
+    (type_decl initial_env tyenv0
+      (mk_fun "f8" ["x"] arrX2Y
+        (mk_if (mk_var "x")
+               (mk_bool false)
+               (mk_bool true))))
+    (mk_tyarr [tBool] tBool);
 
   (*
     def f(x):
@@ -403,6 +432,12 @@ let type_error = [
   te "ty_if_error_3" "if (let x = 1 in x): true else: false" 
     "Type error at ty_if_error_3, 1:0-1:37: expected Bool but got Int";
 
+  te "ty_mismatch_1" {| def foo(b, a):
+                            if b: (a + 0) < 1
+                            else: a && true
+                        foo(1, 2)
+                     |}
+      "Type error at ty_mismatch_1, 3:34-3:43: expected Bool but got Int";
 ];;
 
 

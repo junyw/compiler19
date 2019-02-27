@@ -185,17 +185,17 @@ let ty_err t1 t2 loc reasons = TypeMismatch(loc, t2, t1, reasons)
 
 let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason list) : 'a typ subst =
   let is_same_typ_var t1 t2 = match t1 with
-  	| TyVar(id1, _) -> 
-  		begin match t2 with 
-  				| TyVar(id2, _) -> String.equal id1 id2
-  				| _ -> false
-  		end
+    | TyVar(id1, _) -> 
+      begin match t2 with 
+            | TyVar(id2, _) -> String.equal id1 id2
+            | _ -> false
+      end
     | TyCon(id1, _) ->
         begin match t2 with 
                 | TyCon(id2, _) -> String.equal id1 id2
                 | _ -> false
         end
-  	| _ -> false 
+    | _ -> false 
   in
   if is_same_typ_var t1 t2 then []
   else 
@@ -221,11 +221,11 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
 			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 	     end
     | _ -> 
-    	begin match t2 with 
-		 		| TyVar(id2, _) when not (occurs id2 t1) ->
-		 			[(id2, t1)]
-		 		| _ -> raise (TypeMismatch(loc, t2, t1, reasons))
-		end
+      begin match t2 with 
+            | TyVar(id2, _) when not (occurs id2 t1) ->
+		 			     [(id2, t1)]
+            | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
+      end
 ;;     
      
 let gensym =
