@@ -18,7 +18,6 @@ let print_env env =
 let print_subst subst =
   List.iter (fun (name, typ) -> debug_printf "\t%s => %s\n" name (string_of_typ typ)) subst;;
 
-
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 let mk_tyvar (label: string) : 'a typ = 
     TyVar(label, dummy_span)
@@ -279,7 +278,7 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
       end 
     | TyCon _   -> (env, some)
     | TyArr _   -> failwith "generalize_typ: TyArr not implemented - higher order function is not implemented"
-    | TyBlank _ -> failwith "generalize_typ: TyBlank not implemented"
+    | TyBlank _ -> failwith "generalize_typ: TyBlank - should unblank first"
     | TyApp _   -> failwith "generalize_typ: TyApp - impossible case"
   in
   match t with 
@@ -308,7 +307,6 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       in
       (* lookup function scheme from funenv *)
       let scheme = find_pos funenv fun_name loc in
-      (*let () = Printf.printf ";infer_app %s has scheme %s\n" fun_name (string_of_scheme scheme) in*)
       (* fun_ty: type of the function *)
       let fun_ty = instantiate scheme in
       (* generate a new type variable as return type *)
@@ -338,14 +336,19 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
   | ELet(binds, aexpr, loc) -> 
     let (new_env, binds_subst) = 
         List.fold_left 
-        (fun (env, subst) (typbind, expr, _) -> 
+        (fun (env, subst) (typbind, expr, loc') -> 
+            (* type the binding *)
             let (binding_subst, binding_typ, expr) = infer_exp funenv env expr reasons in
-            let (name, typ, _) = typbind in (* TODO : check given typ *)
-            let subst_so_far = compose_subst subst binding_subst in
+            (* typ is the user provided type annotation, maybe blank *)
+            let (name, typ, _) = typbind in
+            let typ = unblank typ in
+            (* unification *)
+            let subst0 = unify binding_typ typ loc' reasons in 
+            let subst_so_far = compose_subst (compose_subst subst0 subst) binding_subst in
             let binding_typ = apply_subst_typ subst_so_far binding_typ in
+            (* add new binding type to environment *)
             let new_env = StringMap.add name binding_typ env in
-                (* unification ? *)
-            (new_env, subst_so_far))
+                (new_env, subst_so_far))
         (env, []) binds 
     in
     let (body_subst, body_typ, aexpr) = infer_exp funenv new_env aexpr reasons in
@@ -400,13 +403,12 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
             List.fold_left2 
             (fun env (arg_name, _) arg_typ ->
               StringMap.add arg_name arg_typ env
-            ) env arg_names arg_typs (* TODO : throw error if arg_names and arg_typs have different length *)
+            ) env arg_names arg_typs 
+            (* note: arg_names and arg_typs must have same length, which is assured by well-fromedness check *)
       in
      (* 3. type the function body *)
       let (b_subst, b_typ, b) = infer_exp funenv new_env b reasons in
-      (*let () = Printf.printf ";body of %s is typed: %s: \n" f_name (string_of_typ b_typ); in*)
      (* 4. unify the type of function body with type of the function definition *)
-      let f_typ = apply_subst_typ b_subst f_typ in
       let ret_typ = apply_subst_typ b_subst ret_typ in
       let unif_subst = unify b_typ ret_typ loc reasons in
       let final_subst = compose_subst b_subst unif_subst in

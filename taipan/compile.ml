@@ -145,9 +145,20 @@ let anf (p : tag program) : unit aprogram =
        let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup)
     | EApp(funname, args, _) ->
+       let (args_imm, args_setup) = 
+          List.fold_left
+          (fun (args_imm, args_setup) arg -> 
+            let (arg_imm, arg_setup) = helpI arg in 
+                (arg_imm::args_imm, arg_setup @ args_setup)
+          )
+          ([], []) args
+       in
+       (CApp(funname, args_imm, ()), args_setup)
+(* This one does not work. Why ?? *)
+(*    | EApp(funname, args, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ()), List.concat new_setup)
-    | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
+*)    | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * (string * unit cexpr) list) =
     match e with

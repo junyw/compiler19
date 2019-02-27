@@ -1,0 +1,8 @@
+def fxyz(x, y, z):
+    if(id(x)): id(y)
+    else: id(z)
+and 
+def id(x): 
+	x
+
+fxyz(true, 4, 5)

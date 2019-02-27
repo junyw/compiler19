@@ -33,17 +33,16 @@ let t_any name value expected = name>::
 let t_typ name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:string_of_typ);;
 
-(* unify_opt: check if two types can be unified *)
-let unify_opt (t1 : 'a typ) (t2 : 'a typ) = 
-  try 
-    let _ = unify t1 t2 dummy_span [] in Ok(true)
-  with 
-    err -> Error(err)
-;;
-
 (* t_typ_eq: test two types are equal up to unification *)
 let t_typ_eq name value expected = name>::
-  (fun _ -> assert_equal (Ok(true)) (unify_opt expected value) ~printer:dump);;
+  (fun _ -> 
+    try 
+      let subst = unify value expected dummy_span [] in
+      let t1 = apply_subst_typ subst value in
+      let t2 = apply_subst_typ subst expected in
+        assert_equal t1 t2 ~printer:dump
+    with 
+      err -> assert_equal value expected ~printer:string_of_typ)
 ;;
 
 (* well-formedness tests *)
@@ -122,23 +121,18 @@ let mk_eprim1 (op : prim1) (x : 'a expr) =
 let mk_eprim2 (op : prim2) (x : 'a expr) (y : 'a expr) = 
   EPrim2(op, x, y, dummy_span)
 ;;
-
 let mk_typbind (name : string) (typ : 'a typ) = (name, typ, dummy_span);;
 let mk_bind typbind expr = (typbind, expr, dummy_span);;
 let mk_binding name typ expr = (mk_typbind name typ, expr, dummy_span);;
-
 let mk_let (bindings : 'a bind list) (body : 'a expr) : 'a expr = 
 	ELet(bindings, body, dummy_span)
 ;;
-
 let mk_if (cond : 'a expr) (thn : 'a expr) (els : 'a expr) : 'a expr =
   EIf(cond, thn, els, dummy_span)
 ;;
-
 let mk_app (f_name : string) (args : 'a expr list) =
   EApp(f_name, args, dummy_span)
 ;;
-
 let mk_prog declgroups body =
   Program(declgroups, body, (TyBlank(dummy_span)), dummy_span)
 
@@ -166,7 +160,6 @@ let type_prog funenv p: 'a typ =
     ret_typ
 ;;
 
-
 (* test utility functions for type inference *)
 let utility_tests = [
   (* type substitution tests *)
@@ -181,7 +174,7 @@ let utility_tests = [
     (apply_subst_typ [("X1", tX3); ("X2", tX3)] tX1toX2) 
     (mk_tyarr [tX3] tX3);
 
-    (* unification tests *)
+  (* unification tests *)
   t_any "unify_1"
     (unify tInt tInt dummy_span []) 
     [];
@@ -203,7 +196,7 @@ let utility_tests = [
     [("X3", tInt); ("X1", tInt); ("X2", tInt)];
 
   (* unify X1 -> Int and X2 -> X2 *)
-  (* [X1 => X2, X2 => Int] *)
+  (* [X1 => Int, X2 => Int] *)
   t_any "unify_6"
     (unify (mk_tyarr [tX1] tInt) (mk_tyarr [tX2] tX2)  dummy_span [])
     [("X2", tInt); ("X1", tInt)];
@@ -217,8 +210,6 @@ let utility_tests = [
   t_any "unify_8"
     (unify (mk_tyarr [tX2] tX2) (mk_tyarr [tInt] tX1)  dummy_span [])
     [("X1", tInt); ("X2", tInt)];
-
-  (* TODO: test unification failures *)
 
   (* generalization *)
   t_any "generalize_1"
@@ -244,6 +235,7 @@ let inference_tests = [
 
 	t_typ "ty_let_1"
 		(* let x = 1 in x *)
+    (* should have type Int *)
 		(type_expr funenv0 tyenv0 
 							(mk_let 
 								[ (mk_binding "x" tX1 (mk_num 1)) ]
@@ -252,6 +244,7 @@ let inference_tests = [
 
   t_typ "ty_if_1"
     (* if x == 1 then true else false *)
+    (* should have type Bool *)
     (type_expr initial_env tyenv1
       (mk_if 
         (mk_eprim2 Eq (mk_var "x") (mk_num 1))
@@ -261,46 +254,48 @@ let inference_tests = [
 
   t_typ "ty_prim2_1" 
     (* 1 + x *)
+    (* should have type Int *)
     (type_expr initial_env tyenv1 
         (mk_eprim2 Plus (mk_var "x") (mk_num 1)))
     tInt;
 
-
-  (* def f1(x): add1(x) *)
-  (* should type f1 as Int -> Int *)
 	t_typ "ty_abs_1"
-		(get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f1" ["x"] arrX2Y (mk_eprim1 Add1 (mk_var "x"))) []))
+    (* def f1(x): add1(x) *)
+    (* should type f1 as Int -> Int *)
+		(type_decl initial_env tyenv0 
+      (mk_fun "f1" ["x"] arrX2Y (mk_eprim1 Add1 (mk_var "x"))))
 		(mk_tyarr [tInt] tInt);
 
 
-  (* def f2(x): x + 6 *)
-  (* should type f2 as Int -> Int *)
   t_typ "ty_abs_2"
-    (get_2_3 (infer_decl initial_env tyenv0 (mk_fun "f2" ["x"] arrX2Y (mk_eprim2 Plus (mk_var "x") (mk_num 6))) []))
+    (* def f2(x): x + 6 *)
+    (* should type f2 as Int -> Int *)
+    (type_decl initial_env tyenv0 
+      (mk_fun "f2" ["x"] arrX2Y (mk_eprim2 Plus (mk_var "x") (mk_num 6))))
     (mk_tyarr [tInt] tInt);
 
-  (* def f3(x, y): isnum(print(x)) && isbool(y) *)
-  (* should type f3 as T1, T2 -> Bool *)
   t_typ_eq "ty_abs_3"
+    (* def fxy(x, y): isnum(print(x)) && isbool(y) *)
+    (* should type fxy as T1, T2 -> Bool *)
     (type_decl initial_env tyenv0 
-      (mk_fun "f3" ["x"; "y"] arrXY2Z 
+      (mk_fun "fxy" ["x"; "y"] arrXY2Z 
         (mk_eprim2 And
           (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
           (mk_eprim1 IsBool (mk_var "y"))
       ))) 
     (mk_tyarr [tX1; tX2] tBool);
   
-  (* def f4(x): x == 1 *)
-  (* should type f4 as Int -> Bool *)
   t_typ "polymorphic_1"
+    (* def f4(x): x == 1 *)
+    (* should type f4 as Int -> Bool *)
     (type_decl initial_env tyenv0
       (mk_fun "f4" ["x"] arrX2Y
         (mk_eprim2 Eq (mk_var "x") (mk_num 1))))
     (mk_tyarr [tInt] tBool);
 
-  (* def f5(x): if x == 1: 10 else: 11 *)
-  (* should type f4 as Int -> Int *)
   t_typ "polymorphic_2"
+    (* def f5(x): if x == 1: 10 else: 11 *)
+    (* should type f4 as Int -> Int *)
     (type_decl initial_env tyenv0
       (mk_fun "f5" ["x"] arrX2Y
         (mk_if
@@ -309,25 +304,43 @@ let inference_tests = [
           (mk_num 11))))
     (mk_tyarr [tInt] tInt);
 
-  (* def f6(x): isNum(x) *)
-  (* should type f6 as T1 -> Bool *)
-  t_typ_eq "polymorphic_3"
+  t_typ_eq "polymorphic_3"  
+    (* def f6(x): isNum(x) *)
+    (* should type f6 as T1 -> Bool *)
     (type_decl initial_env tyenv0
       (mk_fun "f6" ["x"] arrX2Y
         (mk_eprim1 IsNum (mk_var "x"))))
     (mk_tyarr [tX1] tBool);
 
-  (* def f7(x): x *)
-  (* should type f7 as T1 -> T2 *)
   t_typ_eq "polymorphic_4"
+    (* def whatever1(x): x *)
+    (* should type whatever1 as T1 -> T2 *)
     (type_decl initial_env tyenv0
-      (mk_fun "f7" ["x"] arrX2Y
+      (mk_fun "whatever" ["x"] arrX2Y
         (mk_var "x")))
     (mk_tyarr [tX1] tX2);
 
-  (* def f8(x): if x: false else: true *)
-  (* should type f8 as Bool -> Bool *)
+  t_typ_eq "polymorphic_5"
+    (* def whatever2(x, y): x *)
+    (* should type whatever2 as T1 T2 -> T3 *)
+    (type_decl initial_env tyenv0
+      (mk_fun "whatever2" ["x"; "y"] arrXY2Z
+        (mk_var "x")))
+  (mk_tyarr [tX1; tX2] tX3);
+
+
+  t_typ_eq "polymorphic_6"
+    (* def identity(x): let y = x in y *)
+    (* should type identity as T1 -> T1 *)
+
+    (type_decl initial_env tyenv0
+      (mk_fun "identity" ["x"] arrX2Y
+        (mk_let [(mk_binding "y" tX3 (mk_var "x"))] (mk_var "y"))))
+    (mk_tyarr [tX1] tX1);
+
   t_typ "type_if_expr_1"
+    (* def f8(x): if x: false else: true *)
+    (* should type f8 as Bool -> Bool *)
     (type_decl initial_env tyenv0
       (mk_fun "f8" ["x"] arrX2Y
         (mk_if (mk_var "x")
@@ -335,46 +348,40 @@ let inference_tests = [
                (mk_bool true))))
     (mk_tyarr [tBool] tBool);
 
-  (*
-    def f(x):
-      x + 6
-
-    f(38)
-  *)
-  (* should type the final type of the program as Int *)
   t_typ "ty_prog_1"
-    (type_prog initial_env
-      (mk_prog
-        [[(mk_fun "f3" ["x"] arrX2Y 
-          (mk_eprim2 Plus
-            (mk_var "x")
-            (mk_num 6)))]] 
-        (mk_app "f3" [(mk_num 38)])))
-    tInt;
+  (* def f(x):
+      x + 6
+     f(38) *)
+  (* should type the final type of the program as Int *)
+  (type_prog initial_env
+    (mk_prog
+      [[(mk_fun "f3" ["x"] arrX2Y 
+        (mk_eprim2 Plus
+          (mk_var "x")
+          (mk_num 6)))]] 
+      (mk_app "f3" [(mk_num 38)])))
+  tInt;
 
-  (*
-    def f(x, y):
-      isnum(print(x)) && isbool(y)
-
-    def g(z):
-      f(z, 5)
-
-    g(7)
+  t_typ "ty_prog_2"
+  (* def f(x, y):
+       isnum(print(x)) && isbool(y)
+     def g(z):
+       f(z, 5)
+     g(7) 
   *)
   (* should type the final type as Bool *)
-  t_typ "ty_prog_2"
-    (type_prog initial_env
-      (mk_prog
-        (* declarations *)
-        [[(mk_fun "f4" ["x"; "y"] arrXY2Z 
-            (mk_eprim2 And
-              (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
-              (mk_eprim1 IsBool (mk_var "y"))))];
-          [(mk_fun "g1" ["z"] arrX2Y
+  (type_prog initial_env
+    (mk_prog
+      (* declarations *)
+      [[(mk_fun "f4" ["x"; "y"] arrXY2Z 
+        (mk_eprim2 And
+            (mk_eprim1 IsNum (mk_eprim1 Print (mk_var "x")))
+            (mk_eprim1 IsBool (mk_var "y"))))];
+        [(mk_fun "g1" ["z"] arrX2Y
             (mk_app "f4" [(mk_var "z"); (mk_num 5)]))]]
-        (* body *)
-        (mk_app "g1" [(mk_num 7)])))
-    tBool;
+      (* body *)
+      (mk_app "g1" [(mk_num 7)])))
+  tBool;
 
 
   (* Typing mutually recursive functions *)
@@ -510,31 +517,32 @@ let renaming_tests = [
 
 let typed_fun_tests = [
   t "typed_fun_1" {|
-    def max(x: Int, y: Int) -> Int:
+    def typed_max(x: Int, y: Int) -> Int:
         if(x > y): x else: y
 
-    max(1, 2) * max(2, 1)
+    typed_max(1, 2) * typed_max(2, 1)
   |} "4";
 
   t "typed_fun_2" {|
-    def NAND(a: Bool, b: Bool) -> Bool:
+    def typed_nand(a: Bool, b: Bool) -> Bool:
       !(a && b)
     and 
-    def XOR(a: Bool, b: Bool) -> Bool:
-      NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
+    def typed_xor(a: Bool, b: Bool) -> Bool:
+      typed_nand(typed_nand(a, typed_nand(a, b)), 
+                 typed_nand(b, typed_nand(a, b)))
 
-    let a = print(XOR(true, true)) in 
-    let b = print(XOR(true, false)) in
-    let c = print(XOR(false, true)) in
-      print(XOR(false, false))
+    let a = print(typed_xor(true, true)) in 
+    let b = print(typed_xor(true, false)) in
+    let c = print(typed_xor(false, true)) in
+      print(typed_xor(false, false))
   |} "false\ntrue\ntrue\nfalse\nfalse";
 
   t "typed_fun_3" {|
-    def q(x: Int) -> Int:
+    def typed_q(x: Int) -> Int:
       let a = 1, b = -1, c = -2 in
         (a * x * x) + (b * x) + c
 
-    (q(0) == -2) && (q(-1) == 0) && (q(2) == 0)
+    (typed_q(0) == -2) && (typed_q(-1) == 0) && (typed_q(2) == 0)
   |} "true";
 
 ];;
@@ -569,16 +577,16 @@ let fun_tests = [
   |} "4";
 
   t "fun_2" {|
-    def NAND(a, b):
+    def nand(a, b):
       !(a && b)
     and
-    def XOR(a, b):
-      NAND(NAND(a, NAND(a, b)), NAND(b, NAND(a, b)))
+    def xor(a, b):
+      nand(nand(a, nand(a, b)), nand(b, nand(a, b)))
 
-    let a = print(XOR(true, true)) in 
-    let b = print(XOR(true, false)) in
-    let c = print(XOR(false, true)) in
-      print(XOR(false, false))
+    let a = print(xor(true, true)) in 
+    let b = print(xor(true, false)) in
+    let c = print(xor(false, true)) in
+      print(xor(false, false))
   |} "false\ntrue\ntrue\nfalse\nfalse";
 
   t "fun_3" {|
@@ -597,6 +605,28 @@ let fun_tests = [
       mult(x, x)
     square(3)
   |} "9";
+
+  t "id_1" {|
+    def id(x) : let y = x in x
+    id(true)
+  |} "true";
+
+  t "fxyz" 
+   {|
+      def fxyz(x, y, z):
+        if(id(x)): id(y)
+        else: id(z)
+      and 
+      def id(x): 
+        x
+
+      fxyz(true, 4, 5)
+   |} "4";
+
+  t "fxy" {| def fxy(x, y):
+                (y == 1)
+
+             fxy(true, 1) |} "true";
 
   t "recursive_1" {| 
       def factorial(n):
@@ -634,6 +664,41 @@ let fun_tests = [
       tail1(1000000, 0)  |} "1000000";
 ];;
 
+let arity_tests = [
+t "arity_0" {| def f():
+                 10
+                 f() |} "10";
+t "arity_1" {| def f(x, y, z):
+                 (x * x) + (y * y) + (z * z)
+             f(1, 2, 3)|} "14";
+t "arity_2" {| def f(a, b, c, d):
+                 (a * c) - (b * d) 
+             f(1, 2, 3, 4)|} "-5";
+t "arity_3" {| def f(a, b, c, d, e):
+                 e
+             f(1, 2, 3, 4, 5)|} "5";
+t "arity_4" {| def f(a, b, c, d, e, f):
+                 f
+             f(1, 2, 3, 4, 5, 6)|} "6";
+t "arity_5" {| def f(a, b, c, d, e, f, g):
+                 g
+             f(1, 2, 3, 4, 5, 6, 7)|} "7";
+];;
+
+let type_expr_tests = [
+  t "expr_add1" 
+    "let x: Int = 1 in x" "1";
+
+  te "expr_err_1" 
+     "let x: Bool = 1 in x" 
+     "Type error at expr_err_1, 1:4-1:11: expected Bool but got Int";
+
+  te "expr_err_2" 
+     "let x = 1, y: Bool = x in y" 
+     "Type error at expr_err_2, 1:11-1:18: expected Bool but got Int";
+
+];;
+
 let wellformedness_tests = 
   wf_tests
 ;;
@@ -641,6 +706,7 @@ let wellformedness_tests =
 let typing_tests = 
     utility_tests 
   @ inference_tests 
+  @ type_expr_tests
   @ type_error
 ;;
 let language_tests = 
@@ -648,6 +714,7 @@ let language_tests =
   @ renaming_tests
   @ typed_fun_tests
   @ fun_tests
+  @ arity_tests
 ;;
 let all_tests = 
     wellformedness_tests
