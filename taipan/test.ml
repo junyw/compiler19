@@ -295,6 +295,17 @@ let inference_tests = [
         (mk_eprim2 Eq (mk_var "x") (mk_num 1))))
     (mk_tyarr [tInt] tBool);
 
+  (* def f5(x): if x == 1 then: 10 else: 11 *)
+  (* should type f4 as Int -> Int *)
+  t_typ "polymorphic_2"
+    (type_decl initial_env tyenv0
+      (mk_fun "f5" ["x"] arrX2Y
+        (mk_if
+          (mk_eprim2 Eq (mk_var "x") (mk_num 1))
+          (mk_num 10)
+          (mk_num 11))))
+    (mk_tyarr [tInt] tInt);
+
   (*
     def f(x):
       x + 6
