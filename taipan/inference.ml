@@ -201,23 +201,23 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
   else 
     match t1 with 
     | TyVar(id1, _) when not (occurs id1 t2) -> 
-      	[(id1, t2)]
+       [(id1, t2)]
     | TyArr(typs, typ, _) -> 
-    	begin match t2 with 
-			   | TyArr(typs2, typ2, _) -> 
+        begin match t2 with  
+          | TyArr(typs2, typ2, _) -> 
             (* unify argument types *)
             let subst1 = 
-                List.fold_left2
-                (fun subst typ typ2 -> 
-                    let subst0 = unify typ typ2 loc reasons in
-                        compose_subst subst subst0)
-                [] typs typs2 
+              List.fold_left2
+              (fun subst typ typ2 -> 
+                   let subst0 = unify typ typ2 loc reasons in
+                    compose_subst subst subst0 
+              ) [] typs typs2 
             in
             (* unify the return type *)
             let typ = apply_subst_typ subst1 typ in
             let typ2 = apply_subst_typ subst1 typ2 in
 			   		let subst2 = unify typ typ2 loc reasons in
-			   		compose_subst subst2 subst1
+			   		    compose_subst subst2 subst1
 			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 	     end
     | _ -> 
