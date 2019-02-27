@@ -143,6 +143,18 @@ let utility_tests = [
 		(unify (mk_tyarr [tInt; tInt] tInt) tX1X2toX3 dummy_span [])
 		[("X1", tInt); ("X2", tInt); ("X3", tInt)];
 
+  (* unify X1 -> Int and X2 -> X2 *)
+  t_any "unify_6"
+    (unify (mk_tyarr [tX1] tInt) (mk_tyarr [tX2] tX2)  dummy_span [])
+    [("X2", tInt); ("X1", tInt)];
+  
+  (* unify Int -> X1 and X2 -> X2 *)
+  t_any "unify_7"
+    (unify (mk_tyarr [tInt] tX1) (mk_tyarr [tX2] tX2)  dummy_span [])
+    [("X2", tInt); ("X1", tInt)];
+
+
+
 	(* TODO: test unification failures *)
 ];;
 
@@ -332,13 +344,24 @@ let inference_tests = [
 
 let type_error = [
 
-  te "ty_add1_error" "add1(true)" "Type error at ty_add1_error, 1:0-1:10: expected Int but got Bool";
-  te "ty_not_error_1" "!(3)" "Type error at ty_not_error_1, 1:0-1:4: expected Bool but got Int";
-  te "ty_logic_error_1" "1 && true" "Type error at ty_logic_error_1, 1:0-1:9: expected Bool but got Int";
-  te "ty_logic_error_2" "false && 1" "Type error at ty_logic_error_2, 1:0-1:10: expected Bool but got Int";
+  te "ty_add1_error" "add1(true)" 
+     "Type error at ty_add1_error, 1:0-1:10: expected Int but got Bool";
+  
+  te "ty_not_error_1" "!(3)" 
+     "Type error at ty_not_error_1, 1:0-1:4: expected Bool but got Int";
+  
+  te "ty_logic_error_1" "1 && true" 
+     "Type error at ty_logic_error_1, 1:0-1:9: expected Bool but got Int";
+  
+  te "ty_logic_error_2" "false && 1" 
+     "Type error at ty_logic_error_2, 1:0-1:10: expected Bool but got Int";
+  
   te "ty_compare_error_1" "true > 1" "Type error at ty_compare_error_1, 1:0-1:8: expected Int but got Bool";
+  
   te "ty_if_error_1" "if 54: true else: false" "Type error at ty_if_error_1, 1:0-1:23: expected Int but got Bool";
+  
   te "ty_if_error_2" "let x = 1 in (if x: true else: false)" "Type error at ty_if_error_2, 1:14-1:36: expected Int but got Bool";
+  
   te "ty_if_error_3" "if (let x = 1 in x): true else: false" "Type error at ty_if_error_3, 1:0-1:37: expected Int but got Bool";
 
 ];;
@@ -443,6 +466,27 @@ let typed_fun_tests = [
 ];;
 
 let fun_tests = [
+  t "funx_1" {|
+    def foo1(x):
+      x + 6
+
+    foo1(38)
+  |} "44";
+  
+  t "funx_02" {|
+    def foo2(x):
+      let y = 6 in x + y
+
+    foo2(38)
+  |} "44";
+
+  t "funx_03" {|
+    def foo3(x):
+      x == 1
+
+    foo3(38)
+  |} "false";
+
   t "fun_1" {|
     def max(x, y):
         if(x > y): x else: y
