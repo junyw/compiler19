@@ -203,21 +203,21 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
     | TyVar(id1, _) when not (occurs id1 t2) -> 
        [(id1, t2)]
     | TyArr(typs, typ, _) -> 
-        begin match t2 with  
+     begin match t2 with  
           | TyArr(typs2, typ2, _) -> 
             (* unify argument types *)
             let subst1 = 
-              List.fold_left2
-              (fun subst typ typ2 -> 
-                   let subst0 = unify typ typ2 loc reasons in
-                    compose_subst subst subst0 
-              ) [] typs typs2 
+                List.fold_left2
+                (fun subst typ typ2 -> 
+                    let subst0 = unify typ typ2 loc reasons in
+                        compose_subst subst subst0)
+                [] typs typs2 
             in
             (* unify the return type *)
             let typ = apply_subst_typ subst1 typ in
             let typ2 = apply_subst_typ subst1 typ2 in
 			   		let subst2 = unify typ typ2 loc reasons in
-			   		    compose_subst subst2 subst1
+			   		compose_subst subst2 subst1
 			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 	     end
     | _ -> 
@@ -314,18 +314,19 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       (* generate a new type variable as return type *)
       let ret_ty = TyVar(gensym "arg", loc) in
       (* type of the arguments *)
-      let args_typs = 
+      let (arg_substs, args_typs) = 
          List.fold_left 
-         (fun args_typs arg -> 
-            let (_, arg_typ, arg) = infer_exp funenv env arg reasons in (* there are no possible subst for arguments *)
-              args_typs@[arg_typ]
-         ) [] args
+         (fun (subst_so_far, args_typs) arg -> 
+            let (arg_subst, arg_typ, arg) = infer_exp funenv env arg reasons in 
+            (compose_subst arg_subst subst_so_far, args_typs@[arg_typ])
+         ) ([], []) args
       in
       (* type of the function call *)
       let app_typ = TyArr(args_typs, ret_ty, loc) in
+      let app_typ = apply_subst_typ arg_substs app_typ in
       (* unification *)
       let unif_subst1 = unify app_typ fun_ty loc reasons in
-      let final_subst = unif_subst1 (* ?? *) in
+      let final_subst = compose_subst unif_subst1 arg_substs in
       let final_typ = apply_subst_typ final_subst ret_ty in
       (final_subst, final_typ, e)   
   in
@@ -430,12 +431,12 @@ let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt 
       ) funenv g
     in
   (* 2. type the body of each function *)
-    let (env, f_typs) =
+    let (funenv, f_typs) =
       List.fold_left 
-      (fun (env, f_typs) (DFun(f_name, _, _, _, _) as decl) -> 
-         let (_, f_typ, _) = infer_decl funenv env decl [] in (* the new funenv is discarded because we want to keep function scheme as general as possible in this stage *)
-             (env, (f_name, f_typ)::f_typs)
-      ) (env, []) g
+      (fun (funenv, f_typs) (DFun(f_name, _, _, _, _) as decl) -> 
+         let (funenv', f_typ, _) = infer_decl funenv env decl [] in
+             (funenv', (f_name, f_typ)::f_typs)
+      ) (funenv, []) g
     in
   (* 3. generalize the scheme of all functions *)
     let funenv = 

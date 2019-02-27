@@ -288,13 +288,12 @@ let inference_tests = [
     (mk_tyarr [tX1; tX2] tBool);
   
   (* def f4(x): x == 1 *)
-  (* should type f4 as Bool -> Bool *)
+  (* should type f4 as Int -> Bool *)
   t_typ "polymorphic_1"
     (type_decl initial_env tyenv0
       (mk_fun "f4" ["x"] arrX2Y
         (mk_eprim2 Eq (mk_var "x") (mk_num 1))))
     (mk_tyarr [tInt] tBool);
-
 
   (*
     def f(x):
