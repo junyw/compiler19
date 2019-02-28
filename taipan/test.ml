@@ -623,10 +623,10 @@ let fun_tests = [
       fxyz(true, 4, 5)
    |} "4";
 
-  t "fxy" {| def fxy(x, y):
-                (y == 1)
+  t "f_boolint" {| def f_boolint(x, y):
+                (x == true) && (y == 1)
 
-             fxy(true, 1) |} "true";
+             f_boolint(true, 1) |} "true";
 
   t "recursive_1" {| 
       def factorial(n):
