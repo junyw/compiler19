@@ -11,7 +11,7 @@ type 'a envt = 'a StringMap.t;;
 type 'a subst = (string * 'a) list;;
 
 let print_funenv funenv =
-  StringMap.iter (fun name scheme -> debug_printf "\t%s => %s\n" name (string_of_scheme scheme)) funenv;;
+  StringMap.iter (fun name scheme -> printf "\t%s => %s\n" name (string_of_scheme scheme)) funenv;;
 let print_env env =
   StringMap.iter (fun name typ -> debug_printf "\t%s => %s\n" name (string_of_typ typ)) env;;
 
@@ -387,7 +387,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
   | DFun(f_name, arg_names, scheme, b, loc) ->
      (* 1. type the arguments and return value. Create fresh type variables for arguments if there
          are no type annotations *)
-      let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in
+      (*let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in*)
       let scheme = match StringMap.find_opt f_name funenv with
                   | Some(scheme') -> scheme' (* in case that the scheme has been instantiated before *)
                   | None    -> scheme 
@@ -416,7 +416,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
       let funenv = apply_subst_funenv final_subst funenv in
      (* 5. generalize the type of the function to type sheme *)
       let scheme = generalize env f_typ in
-      let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in
+      (*let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in*)
 
       (StringMap.add f_name scheme funenv, f_typ, decl)
 ;;

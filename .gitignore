@@ -30,3 +30,7 @@ setup.log
 
 # Merlin configuring file for Vim and Emacs
 .merlin
+
+# IDEA configuring files
+.idea/
+*.iml

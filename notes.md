@@ -835,7 +835,7 @@ int list -> int * int list
 
 representation of nil : use tuple tag but the pointer part is all 0.
 
-Extend == to test structural equality.
+Extend `==` to test structural equality.
 
 ### Statement syntax for side effects
 Sequencing:
@@ -847,14 +847,47 @@ equivalent to ocaml syntax:
  let _ = e1 in e2
 ```
 
-to typecheck, 
+### High-order functions
+```
+def applyToFive(it):
+    it(5)
 
+def incr(x):
+    x + 1
 
+applyToFive(incr)
+```
+To pass a function as a value, we can identify a function with its starting address. 
+The code is translated to assembly:
+```assembly
+our_code_starts_here:
+    push incr
+    call applyToFive
+    ...
+```
+applyToFive is compiled to:
+```assembly
+applyToFive:
+    push EBP
+    mov EBP, ESP
+    mov EAX, [EBP+8] ;move the address of it to EAX
+    push 10  ;tagged value of 5
+    call EAX
+    add ESP 4
+    mov ESP, EBP
+    pop EBP
+    ret
+```
+However, this cannot be type-checked.
+We need the arity information of the function at run-time. We can represent the function
+as a 'tuple' of (arity, label).
 
+We need lambda expressions. Recursive calls.
 
+Now we have different calls for lambdas and top-level functions. 
+Distinguish EApp and EPrimApp.
 
+Instead of a 'tuple'  (arity, label), we also need other information.. we have a closure.
+Look at the function body, find all free variables, add to the 'tuple'-like structure - closure.
 
-
-
-
-
+We can use tuple to implement mutable variable. (ML)
