@@ -168,11 +168,15 @@ let anf (p : tag program) : unit aprogram =
        let (cond_imm, cond_setup) = helpI cond in
        (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
     | ELet([], body, _) -> helpC body
-    | ELet(_::_, body, _) -> raise (NotYetImplemented "Finish this")
-    (* | ELet(((bind, _, _), exp, _)::rest, body, pos) ->
-     *    let (exp_ans, exp_setup) = helpC exp in
-     *    let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
-     *    (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup) *)
+    | ELet((bind, expr, _)::rest, body, pos) -> 
+        begin match bind with 
+        | BBlank(typ, _) -> failwith "helpC: BBlank not implemented"
+        | BTuple(binds, _) -> failwith "helpC: BTuple not implemented"
+        | BName(id, typ, _) ->
+          let (exp_ans, exp_setup) = helpC expr in
+          let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
+          (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
+        end
     | EApp(funname, args, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ()), List.concat new_setup)
@@ -399,35 +403,20 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let tmp = sprintf "$fun_dec_%s" fun_name in
     let tmp_body = sprintf "$fun_dec_body_%s" fun_name in
     let num_of_args = List.length immexprs in
-    if is_tail && num_of_args == num_args 
-    then
-      let (_, push_args) = List.fold_right (fun imm_reg (i, instrs) -> 
-          (i + 1, 
-           [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs @ [ IPop(Sized(DWORD_PTR, RegOffset((word_size * i), EBP))) ])
-        ) imm_regs (2, [])
-      in
-        [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
-          ILineComment(sprintf "caller has %d arguments" num_args);
-          ILineComment(("tail call: " ^ (string_of_bool is_tail)));
-        ] 
-        @ push_args @
-        [
-          IJmp(tmp_body);
-        ]
-    else
-      let push_args = List.fold_right (fun imm_reg instrs -> 
-          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs
-        ) imm_regs []
-      in
-        [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
-          ILineComment(sprintf "caller has %d arguments" num_args);
-          ILineComment(("tail call: " ^ (string_of_bool is_tail)));
-        ] 
-        @ push_args @
-        [
-          ICall(tmp);
-          IAdd(Reg(ESP), Const(num_of_args * word_size));
-        ]
+    let push_args = List.fold_left 
+        (fun instrs imm_reg -> 
+          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
+        [] imm_regs
+    in
+      [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
+        ILineComment(sprintf "caller has %d arguments" num_args);
+        ILineComment(("tail call: " ^ (string_of_bool is_tail)));
+      ] 
+      @ push_args @
+      [
+        ICall(tmp);
+        IAdd(Reg(ESP), Const(num_of_args * word_size));
+      ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
 and compile_imm e env : arg =
   match e with
