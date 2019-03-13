@@ -152,7 +152,7 @@ let anf (p : tag program) : unit aprogram =
        let args = List.map (fun a ->
                       match a with
                       | BName(a, _, _) -> a
-                      | _ -> raise (NotYetImplemented("Finish this"))) args in
+                      | _ -> raise (NotYetImplemented("helpD: Finish this"))) args in
        ADFun(name, args, helpA body, ())
   and helpC (e : tag expr) : (unit cexpr * (string * unit cexpr) list) = 
     match e with
@@ -208,11 +208,15 @@ let anf (p : tag program) : unit aprogram =
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (ImmId(tmp, ()), (List.concat new_setup) @ [(tmp, CApp(funname, new_args, ()))])
     | ELet([], body, _) -> helpI body
-    | ELet(_::_, body, _) -> raise (NotYetImplemented "Finish this")
-    (* | ELet(((bind, _, _), exp, _)::rest, body, pos) ->
-     *    let (exp_ans, exp_setup) = helpC exp in
-     *    let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-     *    (body_ans, exp_setup @ [(bind, exp_ans)] @ body_setup) *)
+    | ELet((bind, expr, _)::rest, body, pos) ->
+        begin match bind with 
+        | BBlank(typ, _) -> failwith "helpI: BBlank not implemented"
+        | BTuple(binds, _) -> failwith "helpI: BTuple not implemented"
+        | BName(id, typ, _) ->
+          let (exp_ans, exp_setup) = helpC expr in
+          let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
+          (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
+        end
     | _ -> raise (NotYetImplemented "Finish the remaining cases")
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
