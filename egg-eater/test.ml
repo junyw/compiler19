@@ -301,8 +301,9 @@ let tuple_tests = [
   t "tuple_4" "let t4 = (1,2,true,false) in t4" "(1,2,true,false)";
   t "tnested_1" "let t = (1,2,(3,)) in t" "(1,2,(3,))";
   t "tnested_2" "let t = (1,2,(4,3)) in t" "(1,2,(4,3))";
-  t "tnested_3" {| let t0 = (4,3,2) in 
+(*  t "tnested_3" {| let t0 = (4,3,2) in 
                      let t = (1,2,t0) in t|} "(1,2,(4,3,2))";
+*)  
   t "tnested_get_1" {| let t = (1,2,(3,4,(5,6))) in 
                           t[2 of 3][2 of 3][0 of 2]|} "5";
 
@@ -325,9 +326,14 @@ let tuple_tests = [
 (*  t "tset_3" {| let three = (0, 0, 0) in
                   three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] |} "(1,2,3)";
 *)];;
+let seq_tests = [
+  t "blank_1" "let _ = 1 in 2" "2";
+  t "seq_1" "let x = 1; 2 in x" "2";
+];;
 
 let all_tests = []
   @ tuple_tests
+  @ seq_tests
   @ language_tests  
 ;;
 

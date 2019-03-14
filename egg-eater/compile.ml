@@ -167,16 +167,17 @@ let anf (p : tag program) : unit aprogram =
     | EIf(cond, _then, _else, _) ->
        let (cond_imm, cond_setup) = helpI cond in
        (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
+    
     | ELet([], body, _) -> helpC body
-    | ELet((bind, expr, _)::rest, body, pos) -> 
-        begin match bind with 
-        | BBlank(typ, _) -> failwith "helpC: BBlank not implemented"
-        | BTuple(binds, _) -> failwith "helpC: BTuple not implemented"
-        | BName(id, typ, _) ->
+    | ELet((BBlank _, exp, _)::rest, body, pos) ->
+      let (exp_ans, exp_setup) = helpI exp in (* NOTE: use of helpI *)
+      let (body_ans, body_setup) = helpC(ELet(rest, body, pos)) in
+      (body_ans, exp_setup @ body_setup) (* NOTE: no binding for exp_ans *)
+    | ELet((BName(id, typ, _), expr, _)::rest, body, pos) -> 
           let (exp_ans, exp_setup) = helpC expr in
           let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
           (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
-        end
+
     | EApp(funname, args, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ()), List.concat new_setup)
@@ -218,22 +219,31 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "app_%d" tag in
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (ImmId(tmp, ()), (List.concat new_setup) @ [(tmp, CApp(funname, new_args, ()))])
+    
     | ELet([], body, _) -> helpI body
-    | ELet((bind, expr, _)::rest, body, pos) ->
-        begin match bind with 
-        | BBlank(typ, _) -> failwith "helpI: BBlank not implemented"
-        | BTuple(binds, _) -> failwith "helpI: BTuple not implemented"
-        | BName(id, typ, _) ->
-          let (exp_ans, exp_setup) = helpC expr in
-          let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-          (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
-        end
+    | ELet((BBlank(_, _), exp, _)::rest, body, pos) ->
+       let (exp_ans, exp_setup) = helpI exp in (* NOTE: use of helpI *)
+       let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
+       (body_ans, exp_setup @ body_setup) (* NOTE: no binding for exp_ans *)
+    | ELet((BName(id, _, _), exp, _)::rest, body, pos) ->
+       let (exp_ans, exp_setup) = helpC exp in
+       let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
+       (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
+
     | ETuple(exprs, tag) -> 
         let tmp = sprintf "tuple_%d" tag in
         let (exprs_imm, exprs_setup) = List.split (List.map helpI exprs) in
         (ImmId(tmp, ()), (List.concat exprs_setup) @ [(tmp, CTuple(exprs_imm, ()))])
-    | EGetItem(expr, a, b, _) -> failwith "helpI: EGetItem not implemented"
-    | ESetItem(expr, a, b, expr2, _) -> failwith "helpI: ESetItem not implemented"
+    | EGetItem(expr, a, b, tag) -> 
+        let tmp = sprintf "get_%d" tag in
+        let (expr_imm, expr_setup) = helpI expr in
+        (ImmId(tmp, ()), expr_setup @ [(tmp, CGetItem(expr_imm, a, ()))])
+
+    | ESetItem(expr1, a, b, expr2, tag) -> 
+        let tmp = sprintf "set_%d" tag in
+        let (expr1_imm, expr1_setup) = helpI expr1 in
+        let (expr2_imm, expr2_setup) = helpI expr2 in
+        (ImmId(tmp, ()), expr1_setup @ expr2_setup @ [(tmp, CSetItem(expr1_imm, a, expr2_imm, ()))])
 
     | _ -> raise (NotYetImplemented "Finish the remaining cases")
   and helpA e : unit aexpr = 
@@ -255,9 +265,26 @@ let desugar (p : sourcespan program) : sourcespan program =
       next := !next + 1;
       sprintf "%s_%d" name (!next)) in
   let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for expressions"])
-  and helpD (d : sourcespan decl) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for definitions"])
+    match e with
+    | EAnnot(e, t, tag) -> helpE e
+    | ESeq(e1, e2, tag) -> 
+        ELet([(BBlank(TyBlank tag, tag), helpE e1, tag)], helpE e2, tag)
+    | ETuple(es, tag) -> ETuple(List.map helpE es, tag)
+    | EGetItem(e, idx, len, tag) -> EGetItem(helpE e, idx, len, tag)
+    | ESetItem(e, idx, len, newval, tag) -> ESetItem(helpE e, idx, len, helpE newval, tag)
+    | EPrim1(op, arg, tag) -> EPrim1(op, helpE arg, tag)
+    | EPrim2(op, left, right, tag) -> EPrim2(op, helpE left, helpE right, tag)
+    | EIf(c, t, f, tag) -> EIf(helpE c, helpE t, helpE f, tag)
+    | ENumber _ -> e
+    | EBool _ -> e
+    | ENil _ -> e
+    | EId(name, tag) -> e
+    | EApp(name, args, tag) -> EApp(name, List.map helpE args, tag)
+    | ELet(binds, body, tag) -> ELet(List.map (fun (bind, expr, tag) -> (bind, helpE expr, tag)) binds, helpE body, tag)
+  and helpD (decl : sourcespan decl) (* other parameters may be needed here *) =
+    match decl with
+    | DFun(name, args, scheme, body, tag) ->
+      DFun(name, args, scheme, helpE body, tag)
   and helpG (g : sourcespan decl list) (* other parameters may be needed here *) =
     Error([NotYetImplemented "Implement desugaring for definition groups"])
   and helpT (t : sourcespan typ) (* other parameters may be needed here *) =
@@ -268,8 +295,9 @@ let desugar (p : sourcespan program) : sourcespan program =
     Error([NotYetImplemented "Implement desugaring for type declarations"])
   in
   match p with
-  | Program(tydecls, decls, body, _) ->
-      p (* TODO: implement me *)
+  | Program(tydecls, decls, body, tag) ->
+      Program(tydecls, List.map (fun g -> List.map helpD g) decls, helpE body, tag)
+
 ;;
 
 
