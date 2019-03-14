@@ -180,7 +180,9 @@ let anf (p : tag program) : unit aprogram =
     | EApp(funname, args, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ()), List.concat new_setup)
-    | ETuple(exprs, _) -> failwith "helpC: ETuple not implemented"
+    | ETuple(exprs, _) -> 
+       let (exprs_imm, exprs_setup) = List.split (List.map helpI exprs) in
+       (CTuple(exprs_imm, ()),  List.concat exprs_setup)
     | EGetItem(expr, a, b, _) -> failwith "helpC: EGetItem not implemented"
     | ESetItem(expr, a, b, expr2, _) -> failwith "helpC: ESetItem not implemented"
     (* NOTE: You may need more cases here, for sequences and tuples *)
@@ -220,7 +222,10 @@ let anf (p : tag program) : unit aprogram =
           let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
           (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
         end
-    | ETuple(exprs, _) -> failwith "helpI: ETuple not implemented"
+    | ETuple(exprs, tag) -> 
+        let tmp = sprintf "tuple_%d" tag in
+        let (exprs_imm, exprs_setup) = List.split (List.map helpI exprs) in
+        (ImmId(tmp, ()), (List.concat exprs_setup) @ [(tmp, CTuple(exprs_imm, ()))])
     | EGetItem(expr, a, b, _) -> failwith "helpI: EGetItem not implemented"
     | ESetItem(expr, a, b, expr2, _) -> failwith "helpI: ESetItem not implemented"
 
@@ -453,6 +458,42 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         IAdd(Reg(ESP), Const(num_of_args * word_size));
       ]
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
+  | CTuple(immexprs, tag) -> 
+(*
+  The header stores the number of elements in the tuple. The value is not tagged.
+
+    (4 bytes)    (4 bytes)  (4 bytes)          (4 bytes)
+--------------------------------------------------------
+| # elements | element_0 | element_1 | ... | element_n |
+--------------------------------------------------------
+*)
+      let size = List.length immexprs in
+      (* store the size of the tuple *)
+      let header_instr = 
+        [ IMov(RegOffset(0, ESI), Sized(DWORD_PTR, Const(size))) ]
+      in
+      (* the elements of the tuple are already evaluated, 
+         move the values to the heap *)
+      let (_, mov_instr) = List.fold_left 
+        (fun (i, instrs) immexpr -> 
+          let e_reg = compile_imm immexpr env in
+          (i + 1, instrs 
+                @ [ IMov(RegOffset((word_size * i), ESI), Sized(DWORD_PTR, e_reg)) ])
+        ) (1, []) immexprs
+      in
+        header_instr
+      @ mov_instr
+      (* save the position of the tuple to EAX *)
+      @ [ IMov(Reg(EAX), Reg(ESI)) ]
+      (* tag the tuple *)
+      @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
+      (* bump the heap pointer *)
+      @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ]
+      (* realign the heap *)
+      @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
+
+  | CGetItem(immexpr, i, tag) -> failwith "compile_cexpr: CGetItem not implemented"
+  | CSetItem(immexpr, i, immexpr2, tag) -> failwith "compile_cexpr: CSetItem not implemented"
 and compile_imm e env : arg =
   match e with
   | ImmNum(n, _)      -> Const(n lsl 1)
@@ -529,14 +570,14 @@ global our_code_starts_here" in
         (* Set the global variable STACK_BOTTOM to EBP *)
         IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
 
-        (* Store the HEAP to ESI, and ensure that it is a multiple of 8*)
-        
+        (* Store the HEAP to ESI, and ensure that it is a multiple of 8 *)
+      
         (* Load ESI with the pass-in pointer *)
         IMov(Reg(ESI), RegOffset((word_size * 2), EBP));
         (* Add 7 to get above the next multiple of 8 *)
         IAdd(Reg(ESI), Const(7));
         (* Then round back down *)
-        IAdd(Reg(ESI), HexConst(0xfffffff8));
+        IAnd(Reg(ESI), HexConst(0xfffffff8));
 
         ILineComment("-----compiled code-----");
       ] in
