@@ -299,10 +299,12 @@ let tuple_tests = [
   t "tuple_2" "let t2 = (1,2) in t2" "(1,2)";
   t "tuple_3" "let t3 = (1,2,true) in t3" "(1,2,true)";
   t "tuple_4" "let t4 = (1,2,true,false) in t4" "(1,2,true,false)";
-  t "tuple_5" "let t = (1,2,(3,)) in t" "(1,2,(3,))";
-  t "tuple_6" "let t = (1,2,(4,3)) in t" "(1,2,(3,4))";
-  t "tuple_7" {| let t0 = (4,3,2) in 
+  t "tnested_1" "let t = (1,2,(3,)) in t" "(1,2,(3,))";
+  t "tnested_2" "let t = (1,2,(4,3)) in t" "(1,2,(4,3))";
+  t "tnested_3" {| let t0 = (4,3,2) in 
                      let t = (1,2,t0) in t|} "(1,2,(4,3,2))";
+  t "tnested_get_1" {| let t = (1,2,(3,4,(5,6))) in 
+                          t[2 of 3][2 of 3][0 of 2]|} "5";
 
   (*t "tuple_5" "let x = 1 in let t = (x, 2) in 1" "1";*)
 

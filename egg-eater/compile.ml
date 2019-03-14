@@ -509,7 +509,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* bump the heap pointer *)
       @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ]
       (* realign the heap *)
-      @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
+      (*@ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]*)
 
   | CGetItem(immexpr, i, tag) -> 
       let e_reg = compile_imm immexpr env in
