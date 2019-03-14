@@ -292,6 +292,8 @@ let language_tests =
 ;;
 
 let tuple_tests = [
+  t "istuple_0" "let t = 1 in istuple(t)" "false";
+  t "istuple_1" "let t = (1,) in istuple(t)" "true";
   t "tuple_0" "let t0 = () in 1" "1";
   t "tuple_1" "let t1 = (1,) in 1" "1";
   t "tuple_2" "let t2 = (1,2) in 1" "1";
@@ -310,7 +312,7 @@ let tuple_tests = [
 
 let all_tests = []
   @ tuple_tests
-  (*@ language_tests  *)
+  @ language_tests  
 ;;
 
 let suite =

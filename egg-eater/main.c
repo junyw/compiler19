@@ -10,6 +10,14 @@ extern int printstack(int val, int* EBP, int* ESP) asm("printstack");
 
 int* HEAP;
 
+/*
+Tagged values:
+Numbers: 0 in least significant bit
+Booleans: 111 in least three significant bits
+Tuples: 001 in least three significant bits
+*/
+
+const int TUPLE_TAG  = 0x00000111;
 const int BOOL_TAG   = 0x00000001;
 const int BOOL_TRUE  = 0xFFFFFFFF; // These must be the same values
 const int BOOL_FALSE = 0x7FFFFFFF; // as chosen in compile.ml
@@ -23,19 +31,18 @@ const int E_ARITH_OVERFLOW = 5;
 extern int STACK_BOTTOM;
 int STACK_BOTTOM = 0;
 
-
-bool is_tagged_value(int val) {
-  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE) return true;
-  return false;
-}
 void print_tagged_value(int val) {
   if ((val & BOOL_TAG) == 0) { 
+    // is number
     printf("%d", val >> 1);  // shift bits right to remove tag
   } else if (val == BOOL_TRUE) {
     printf("true");
   } else if (val == BOOL_FALSE) {
     printf("false");
-  } else {
+  } else if ((val & TUPLE_TAG) == TUPLE_TAG) {
+    // is tuple 
+    printf("TODO: print tuple content"); 
+  }else {
     printf("%#010x", val); 
   }
   return;
@@ -77,7 +84,7 @@ int printstack(int val, int* EBP, int* ESP) {
   return val; 
 }
 int print(int val) {
-  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE) {
+  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE || (val & TUPLE_TAG) == TUPLE_TAG) {
     print_tagged_value(val);
     printf("\n");
   } else {

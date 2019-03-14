@@ -338,8 +338,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
      | PrintB -> failwith "compile_cexpr: PrintB not implemented"
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
-          IAnd(Reg(EAX), Const(0x7FFFFFFF));
-          ICmp(Reg(EAX), Const(0x7FFFFFFF));
+          IAnd(Reg(EAX), HexConst(0x7FFFFFFF));
+          ICmp(Reg(EAX), HexConst(0x7FFFFFFF));
           IMov(Reg(EAX), const_true);
           IJe(done_label);
           IMov(Reg(EAX), const_false);
@@ -347,18 +347,28 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         ]
      | IsNum  -> 
         [ IMov(Reg(EAX), e_reg); 
-          IAnd(Reg(EAX), Const(0x00000001)); 
-          ICmp(Reg(EAX), Const(0));
+          IAnd(Reg(EAX), HexConst(0x00000001));  
+          ICmp(Reg(EAX), HexConst(0));
           IMov(Reg(EAX), const_true);
           IJe(done_label);
           IMov(Reg(EAX), const_false);
           ILabel(done_label);
         ];
-      | Not  ->
+     | IsTuple -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), HexConst(0x00000111));
+          ICmp(Reg(EAX), HexConst(0x00000111));
+          IMov(Reg(EAX), const_true);
+          IJe(done_label);
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ];
+     | Not ->
           assert_bool e_reg "$err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e_reg);
             IXor(Reg(EAX), Const(0x80000000));
           ]
+
      | PrintStack -> 
         [ ILineComment("calling c function");
           IPush(Sized(DWORD_PTR, Reg(ESP))); 
@@ -493,7 +503,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* save the position of the tuple to EAX *)
       @ [ IMov(Reg(EAX), Reg(ESI)) ]
       (* tag the tuple *)
-      @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
+      @ [ IAdd(Reg(EAX), HexConst(0x111)) ]
       (* bump the heap pointer *)
       @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ]
       (* realign the heap *)
@@ -505,7 +515,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         [ IMov(Reg(EAX), e_reg) ]
       (* TODO: check that EAX is indeed a tuple *)
       (* untag it *)
-      @ [ ISub(Reg(EAX), HexConst(0x1)) ]
+      @ [ ISub(Reg(EAX), HexConst(0x111)) ]
       (* TODO: check the index is within range *)
 
       (* get the index-th item *)
@@ -587,8 +597,6 @@ global our_code_starts_here" in
 
         (* Set the global variable STACK_BOTTOM to EBP *)
         IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
-
-        
       ] 
     in
 
