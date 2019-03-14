@@ -479,7 +479,12 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       let (_, mov_instr) = List.fold_left 
         (fun (i, instrs) immexpr -> 
           let e_reg = compile_imm immexpr env in
-          (i + 1, instrs 
+(*          let e_reg = match e_reg with 
+                      | Const _ 
+                      | HexConst _ -> Sized(DWORD_PTR, e_reg)
+                      | _ -> e_reg 
+          in
+*)          (i + 1, instrs 
                 @ [ IMov(RegOffset((word_size * i), ESI), Sized(DWORD_PTR, e_reg)) ])
         ) (1, []) immexprs
       in
@@ -502,7 +507,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* untag it *)
       @ [ ISub(Reg(EAX), HexConst(0x1)) ]
       (* TODO: check the index is within range *)
-      
+
       (* get the index-th item *)
       @ [ IMov(Reg(EAX), RegOffset((word_size * (index+1)), EAX))]
 
@@ -569,7 +574,7 @@ extern print
 extern printstack
 extern _STACK_BOTTOM
 global our_code_starts_here" in
-    let stack_setup = [
+    let prologue = [
         (* instructions for setting up stack here *)
         (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
            where N is the greatest number of variables we need at once *)
@@ -583,17 +588,20 @@ global our_code_starts_here" in
         (* Set the global variable STACK_BOTTOM to EBP *)
         IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
 
+        
+      ] 
+    in
+
+    let heap_start = [
         (* Store the HEAP to ESI, and ensure that it is a multiple of 8 *)
-      
         (* Load ESI with the pass-in pointer *)
         IMov(Reg(ESI), RegOffset((word_size * 2), EBP));
         (* Add 7 to get above the next multiple of 8 *)
         IAdd(Reg(ESI), Const(7));
         (* Then round back down *)
         IAnd(Reg(ESI), HexConst(0xfffffff8));
-
-        ILineComment("-----compiled code-----");
-      ] in
+       ] 
+    in
     let err_handling (err_type : string) (err_code : int) : instruction list = 
         [ ILabel(err_type);
           IPush(Reg(EAX));
@@ -604,8 +612,11 @@ global our_code_starts_here" in
           IRet;
         ]
     in
-    let postlude = 
-          [ ILineComment("-----postlude-----");
+    let comp_body = 
+          [ ILineComment("-----compiled code-----"); ] 
+        @ (compile_aexpr aexpr 1 [] 0 false) in
+    let epilogue = 
+          [ ILineComment("-----epilogue-----");
             IMov(Reg(ESP), Reg(EBP)); 
             IPop(Reg(EBP));
             IRet; 
@@ -618,8 +629,7 @@ global our_code_starts_here" in
         @ err_handling "$err_arith_overflow"     err_ARITH_OVERFLOW
 
     in
-    let body = (compile_aexpr aexpr 1 [] 0 false) in
-    let as_assembly_string = (to_asm (fun_decs @ stack_setup @ body @ postlude)) in
+    let as_assembly_string = (to_asm (fun_decs @ prologue @ heap_start @ comp_body @ epilogue)) in
     sprintf "%s%s\n" prelude as_assembly_string
 
 

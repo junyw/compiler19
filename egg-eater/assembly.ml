@@ -6,10 +6,12 @@ let word_size = 4
 
 type reg =
   | EAX
+  | ECX
   | EDX
   | ESP
   | EBP
   | ESI
+  | CL
 
 type size =
   | DWORD_PTR
@@ -21,17 +23,36 @@ type arg =
   | HexConst of int
   | Reg of reg
   | RegOffset of int * reg (* int is # words of offset *)
+  | RegOffsetReg of reg * reg * int * int
   | Sized of size * arg
+  | LabelContents of string
   | Variable of string
 
 type instruction =
   | IMov of arg * arg
+
   | IAdd of arg * arg
   | ISub of arg * arg
   | IMul of arg * arg
+
+  | IShl of arg * arg
+  | IShr of arg * arg
+  | ISar of arg * arg
+
+  | IAnd of arg * arg
+  | IOr of arg * arg
+  | IXor of arg * arg
+
   | ILabel of string
+  | IPush of arg
+  | IPop of arg
+  | ICall of string
+  | IRet
+
   | ICmp of arg * arg
+  | ITest of arg * arg
   | IJo of string
+  | IJno of string
   | IJe of string
   | IJne of string
   | IJl of string
@@ -41,17 +62,7 @@ type instruction =
   | IJmp of string
   | IJz of string
   | IJnz of string
-  | IRet
-  | IAnd of arg * arg
-  | IOr of arg * arg
-  | IXor of arg * arg
-  | IShl of arg * arg
-  | IShr of arg * arg
-  | ISar of arg * arg
-  | IPush of arg
-  | IPop of arg
-  | ICall of string
-  | ITest of arg * arg
+
   | ILineComment of string
   | IInstrComment of instruction * string
 
@@ -59,10 +70,12 @@ type instruction =
 let r_to_asm (r : reg) : string =
   match r with
   | EAX -> "eax"
+  | ESP -> "esp" (* stack pointer *)
+  | EBP -> "ebp" (* base pointer *)
+  | ESI -> "esi" (* heap pointer *)
+  | ECX -> "ecx" 
   | EDX -> "edx"
-  | ESP -> "esp"
-  | EBP -> "ebp"
-  | ESI -> "esi"
+  | CL -> "cl"
 
 let rec arg_to_asm (a : arg) : string =
   match a with
@@ -74,10 +87,14 @@ let rec arg_to_asm (a : arg) : string =
        sprintf "[%s+%d]" (r_to_asm r) n
      else
        sprintf "[%s-%d]" (r_to_asm r) (-1 * n)
+  | RegOffsetReg(r1, r2, mul, off) ->
+     sprintf "[%s + %s * %d + %d]"
+             (r_to_asm r1) (r_to_asm r2) mul off
   | Sized(size, a) ->
      sprintf "%s %s"
              (match size with | DWORD_PTR -> "DWORD" | WORD_PTR -> "WORD" | BYTE_PTR -> "BYTE")
              (arg_to_asm a)
+  | LabelContents s -> sprintf "[%s]" s
   | Variable(id) -> sprintf "[%s]" id
 ;;
 
@@ -96,25 +113,27 @@ let rec i_to_asm (i : instruction) : string =
   | ILabel(name) ->
      name ^ ":"
   | IJo(label) ->
-     sprintf "  jo %s" label
+     sprintf "  jo near %s" label
+  | IJno(label) ->
+     sprintf "  jno near %s" label
   | IJe(label) ->
-     sprintf "  je %s" label
+     sprintf "  je near %s" label
   | IJne(label) ->
-     sprintf "  jne %s" label
+     sprintf "  jne near %s" label
   | IJl(label) ->
-     sprintf "  jl %s" label
+     sprintf "  jl near %s" label
   | IJle(label) ->
-     sprintf "  jle %s" label
+     sprintf "  jle near %s" label
   | IJg(label) ->
-     sprintf "  jg %s" label
+     sprintf "  jg near %s" label
   | IJge(label) ->
-     sprintf "  jge %s" label
+     sprintf "  jge near %s" label
   | IJmp(label) ->
-     sprintf "  jmp %s" label
+     sprintf "  jmp near %s" label
   | IJz(label) ->
-     sprintf "  jz %s" label
+     sprintf "  jz near %s" label
   | IJnz(label) ->
-     sprintf "  jnz %s" label
+     sprintf "  jnz near %s" label
   | IAnd(dest, value) ->
      sprintf "  and %s, %s" (arg_to_asm dest) (arg_to_asm value)
   | IOr(dest, value) ->
