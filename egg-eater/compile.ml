@@ -183,7 +183,9 @@ let anf (p : tag program) : unit aprogram =
     | ETuple(exprs, _) -> 
        let (exprs_imm, exprs_setup) = List.split (List.map helpI exprs) in
        (CTuple(exprs_imm, ()),  List.concat exprs_setup)
-    | EGetItem(expr, a, b, _) -> failwith "helpC: EGetItem not implemented"
+    | EGetItem(expr, a, b, _) -> 
+        let (expr_imm, expr_setup) = helpI expr in
+        (CGetItem(expr_imm, a, ()), expr_setup)
     | ESetItem(expr, a, b, expr2, _) -> failwith "helpC: ESetItem not implemented"
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
@@ -492,7 +494,18 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* realign the heap *)
       @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
 
-  | CGetItem(immexpr, i, tag) -> failwith "compile_cexpr: CGetItem not implemented"
+  | CGetItem(immexpr, index, tag) -> 
+      let e_reg = compile_imm immexpr env in
+      (* get the tuple *)
+        [ IMov(Reg(EAX), e_reg) ]
+      (* TODO: check that EAX is indeed a tuple *)
+      (* untag it *)
+      @ [ ISub(Reg(EAX), HexConst(0x1)) ]
+      (* TODO: check the index is within range *)
+      
+      (* get the index-th item *)
+      @ [ IMov(Reg(EAX), RegOffset((word_size * (index+1)), EAX))]
+
   | CSetItem(immexpr, i, immexpr2, tag) -> failwith "compile_cexpr: CSetItem not implemented"
 and compile_imm e env : arg =
   match e with

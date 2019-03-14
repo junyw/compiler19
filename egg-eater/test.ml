@@ -297,6 +297,10 @@ let tuple_tests = [
   t "tuple_2" "let t2 = (1,2) in 1" "1";
   t "tuple_3" "let t3 = (1,2,3) in 1" "1";
   t "tuple_4" "let t4 = (1,2,3,4) in 1" "1";
+  t "tget_0" "let t1 = (1,2,3,4) in t1[0 of 4]" "1";
+  t "tget_1" "let t1 = (1,2,3,4) in t1[1 of 4]" "2";
+  t "tget_2" "let t1 = (1,2,3,4) in t1[2 of 4]" "3";
+  t "tget_3" "let t1 = (1,2,3,4) in t1[3 of 4]" "4";
 
 ];;
 
