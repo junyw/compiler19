@@ -41,7 +41,14 @@ void print_tagged_value(int val) {
     printf("false");
   } else if ((val & TUPLE_TAG) == TUPLE_TAG) {
     // is tuple 
-    printf("TODO: print tuple content"); 
+    int* p = (int*)(val - 0x111);
+    int size = *p;
+    printf("(");
+    for(int i = 0; i < size; i++) {
+      print_tagged_value(*(p+(i+1)));
+      if(size < 2 || i != size - 1) printf(",");
+    }
+    printf(")");
   }else {
     printf("%#010x", val); 
   }

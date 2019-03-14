@@ -17,6 +17,7 @@ type phase =
   | Source of string
   | Parsed of sourcespan program
   | WellFormed of sourcespan program
+  | Desugared of sourcespan program
   | TypeChecked of sourcespan program
   | Renamed of tag program
   | Tagged of tag program
@@ -28,6 +29,7 @@ type phase =
 let source s = Source s
 let parsed p = Parsed p
 let well_formed p = WellFormed p
+let desugared p = Desugared p
 let renamed p = Renamed p
 let tagged p = Tagged p
 let type_checked p = TypeChecked p
@@ -90,12 +92,12 @@ let add_phase
      | err -> Error([Failure("Unexpected compile error: " ^ Printexc.to_string err)], trace)
 ;;
 
-
 (* Stringifies a list of phases, for debug printing purposes *)
 let print_trace (trace : phase list) : string list =
   let phase_name p = match p with
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
+    | Desugared _ -> "Desugared"
     | WellFormed _ -> "Well-formed"
     | Renamed  _ -> "Renamed"
     | Tagged _ -> "Tagged"
@@ -105,6 +107,7 @@ let print_trace (trace : phase list) : string list =
   let string_of_phase p = match p with
     | Source s -> s
     | Parsed p
+    | Desugared p
     | WellFormed p -> string_of_program p
     | Renamed p -> string_of_program p
     | TypeChecked p -> ast_of_program p

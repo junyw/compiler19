@@ -294,11 +294,11 @@ let language_tests =
 let tuple_tests = [
   t "istuple_0" "let t = 1 in istuple(t)" "false";
   t "istuple_1" "let t = (1,) in istuple(t)" "true";
-  t "tuple_0" "let t0 = () in 1" "1";
-  t "tuple_1" "let t1 = (1,) in 1" "1";
-  t "tuple_2" "let t2 = (1,2) in 1" "1";
-  t "tuple_3" "let t3 = (1,2,3) in 1" "1";
-  t "tuple_4" "let t4 = (1,2,3,4) in 1" "1";
+  t "tuple_0" "let t0 = () in t0" "()";
+  t "tuple_1" "let t1 = (1,) in t1" "(1,)";
+  t "tuple_2" "let t2 = (1,2) in t2" "(1,2)";
+  t "tuple_3" "let t3 = (1,2,3) in t3" "(1,2,3)";
+  t "tuple_4" "let t4 = (1,2,3,4) in t4" "(1,2,3,4)";
   (*t "tuple_5" "let x = 1 in let t = (x, 2) in 1" "1";*)
   t "tget_0" "let t1 = (1,2,3,4) in t1[0 of 4]" "1";
   t "tget_1" "let t1 = (1,2,3,4) in t1[1 of 4]" "2";
