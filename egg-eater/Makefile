@@ -25,7 +25,7 @@ output/%.o: output/%.s
 	nasm -f $(FORMAT) -o $@ $<
 
 .PRECIOUS: output/%.s
-output/%.s: input/%.taipan main
+output/%.s: input/%.egg main
 	./main $< > $@
 
 clean:

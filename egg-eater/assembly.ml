@@ -9,6 +9,7 @@ type reg =
   | EDX
   | ESP
   | EBP
+  | ESI
 
 type size =
   | DWORD_PTR
@@ -61,6 +62,7 @@ let r_to_asm (r : reg) : string =
   | EDX -> "edx"
   | ESP -> "esp"
   | EBP -> "ebp"
+  | ESI -> "esi"
 
 let rec arg_to_asm (a : arg) : string =
   match a with

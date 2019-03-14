@@ -5,6 +5,7 @@ open Lexing
 open Exprs
 open Errors
 open Phases
+open Inference
 
 let show_trace = ref false
 let filename_set = ref false

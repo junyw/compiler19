@@ -290,8 +290,14 @@ let language_tests =
   @ fun_tests
   @ arity_tests
 ;;
-let all_tests = 
-   language_tests  
+
+let tuple_tests = [
+  t "tuple_1" "let one = (1,) in one[0 of 1]" "1";
+];;
+
+let all_tests = []
+  @ tuple_tests
+   (*language_tests  *)
 ;;
 
 let suite =

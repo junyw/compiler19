@@ -180,6 +180,9 @@ let anf (p : tag program) : unit aprogram =
     | EApp(funname, args, _) ->
        let (new_args, new_setup) = List.split (List.map helpI args) in
        (CApp(funname, new_args, ()), List.concat new_setup)
+    | ETuple(exprs, _) -> failwith "helpC: ETuple not implemented"
+    | EGetItem(expr, a, b, _) -> failwith "helpC: EGetItem not implemented"
+    | ESetItem(expr, a, b, expr2, _) -> failwith "helpC: ESetItem not implemented"
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
@@ -217,6 +220,10 @@ let anf (p : tag program) : unit aprogram =
           let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
           (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
         end
+    | ETuple(exprs, _) -> failwith "helpI: ETuple not implemented"
+    | EGetItem(expr, a, b, _) -> failwith "helpI: EGetItem not implemented"
+    | ESetItem(expr, a, b, expr2, _) -> failwith "helpI: ESetItem not implemented"
+
     | _ -> raise (NotYetImplemented "Finish the remaining cases")
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
@@ -228,6 +235,30 @@ let anf (p : tag program) : unit aprogram =
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   match p with
   | Program(tydecls, decls, body, _) -> Ok(p) (* TODO *)
+;;
+
+let desugar (p : sourcespan program) : sourcespan program =
+  let gensym =
+    let next = ref 0 in
+    (fun name ->
+      next := !next + 1;
+      sprintf "%s_%d" name (!next)) in
+  let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
+    Error([NotYetImplemented "Implement desugaring for expressions"])
+  and helpD (d : sourcespan decl) (* other parameters may be needed here *) =
+    Error([NotYetImplemented "Implement desugaring for definitions"])
+  and helpG (g : sourcespan decl list) (* other parameters may be needed here *) =
+    Error([NotYetImplemented "Implement desugaring for definition groups"])
+  and helpT (t : sourcespan typ) (* other parameters may be needed here *) =
+    Error([NotYetImplemented "Implement desugaring for types"])
+  and helpS (s : sourcespan scheme) (* other parameters may be needed here *) =
+    Error([NotYetImplemented "Implement desugaring for typeschemes"])
+  and helpTD (t : sourcespan tydecl) (* other parameters may be needed here *) =
+    Error([NotYetImplemented "Implement desugaring for type declarations"])
+  in
+  match p with
+  | Program(tydecls, decls, body, _) ->
+      raise (NotYetImplemented "Implement desugaring for programs")
 ;;
 
 
@@ -498,6 +529,15 @@ global our_code_starts_here" in
         (* Set the global variable STACK_BOTTOM to EBP *)
         IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
 
+        (* Store the HEAP to ESI, and ensure that it is a multiple of 8*)
+        
+        (* Load ESI with the pass-in pointer *)
+        IMov(Reg(ESI), RegOffset((word_size * 2), EBP));
+        (* Add 7 to get above the next multiple of 8 *)
+        IAdd(Reg(ESI), Const(7));
+        (* Then round back down *)
+        IAdd(Reg(ESI), HexConst(0xfffffff8));
+
         ILineComment("-----compiled code-----");
       ] in
     let err_handling (err_type : string) (err_code : int) : instruction list = 
@@ -533,7 +573,7 @@ global our_code_starts_here" in
    The final pipeline phase needs to return a string,
    but everything else is up to you. *)
 
-(* Add a typechecking phase somewhere in here! *)
+(* Add a desugaring phase somewhere in here, as well as your typechecker *)
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
@@ -541,6 +581,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  (*|>  debug*)
+  |>  debug
   |> (add_phase result compile_prog)
 ;;
