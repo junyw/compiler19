@@ -186,7 +186,11 @@ let anf (p : tag program) : unit aprogram =
     | EGetItem(expr, a, b, _) -> 
         let (expr_imm, expr_setup) = helpI expr in
         (CGetItem(expr_imm, a, ()), expr_setup)
-    | ESetItem(expr, a, b, expr2, _) -> failwith "helpC: ESetItem not implemented"
+    | ESetItem(expr1, a, b, expr2, _) -> 
+        let (expr1_imm, expr1_setup) = helpI expr1 in
+        let (expr2_imm, expr2_setup) = helpI expr2 in
+        (CSetItem(expr1_imm, a, expr2_imm, ()), expr1_setup @ expr2_setup)
+
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
@@ -489,16 +493,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       let (_, mov_instr) = List.fold_left 
         (fun (i, instrs) immexpr -> 
           let e_reg = compile_imm immexpr env in
-(*          let e_reg = match e_reg with 
-                      | Const _ 
-                      | HexConst _ -> Sized(DWORD_PTR, e_reg)
-                      | _ -> e_reg 
-          in
-*)          (i + 1, instrs 
-                @ [ IMov(RegOffset((word_size * i), ESI), Sized(DWORD_PTR, e_reg)) ])
+          
+          (i + 1, instrs 
+                @ [ IMov(Reg(EAX), e_reg);
+                    IMov(RegOffset((word_size * i), ESI), Reg(EAX)); ])
         ) (1, []) immexprs
       in
-        header_instr
+        [ ILineComment(("creating tuple of length " ^ (string_of_int size))) ]
+      @ header_instr
       @ mov_instr
       (* save the position of the tuple to EAX *)
       @ [ IMov(Reg(EAX), Reg(ESI)) ]
@@ -509,7 +511,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* realign the heap *)
       @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
 
-  | CGetItem(immexpr, index, tag) -> 
+  | CGetItem(immexpr, i, tag) -> 
       let e_reg = compile_imm immexpr env in
       (* get the tuple *)
         [ IMov(Reg(EAX), e_reg) ]
@@ -518,10 +520,27 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       @ [ ISub(Reg(EAX), HexConst(0x111)) ]
       (* TODO: check the index is within range *)
 
-      (* get the index-th item *)
-      @ [ IMov(Reg(EAX), RegOffset((word_size * (index+1)), EAX))]
+      (* get the i-th item *)
+      @ [ IMov(Reg(EAX), RegOffset((word_size * (i+1)), EAX))]
 
-  | CSetItem(immexpr, i, immexpr2, tag) -> failwith "compile_cexpr: CSetItem not implemented"
+  | CSetItem(immexpr1, i, immexpr2, tag) -> 
+      let e_reg1 = compile_imm immexpr1 env in
+      let e_reg2 = compile_imm immexpr2 env in
+      (* get the tuple *)
+        [ IMov(Reg(EAX), e_reg1) ]
+      (* TODO: check that EAX is indeed a tuple *)
+      (* untag it *)
+      @ [ ISub(Reg(EAX), HexConst(0x111)) ]
+      (* TODO: check the index is within range *)
+
+      (* get the new value *)
+      @ [ IMov(Reg(ECX), e_reg2) ]
+      (* mutate the tuple *)
+      @ [ IMov(RegOffset((word_size * (i+1)), EAX), Reg(ECX)) ]
+      (* leave the tuple as the result *)
+      @ [ IAdd(Reg(EAX), HexConst(0x111)) ]
+
+
 and compile_imm e env : arg =
   match e with
   | ImmNum(n, _)      -> Const(n lsl 1)
@@ -654,6 +673,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  |>  debug
+  (*|>  debug*)
   |> (add_phase result compile_prog)
 ;;
