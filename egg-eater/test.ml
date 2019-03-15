@@ -314,8 +314,8 @@ let tuple_tests = [
 
   t "tuple_5" "let x = 1 in let t = (x, 2) in 1" "1";
 
-  (* content equality *)
-  (*t "teq_1" "(1,2) == (1, 2)" "true";*)
+  (* reference equality *)
+  t "teq_1" "let t = (4, 5) in t == t" "true";
 
   t "tget_0" "let t1 = (1,2,3,4) in t1[0 of 4]" "1";
   t "tget_1" "let t1 = (1,2,3,4) in t1[1 of 4]" "2";
@@ -323,6 +323,9 @@ let tuple_tests = [
   t "tget_3" "let t1 = (1,2,3,4) in t1[3 of 4]" "4";
   t "tset_1" {| let t = (0,0,0) in
                     t[1 of 3 := 2] |} "(0,2,0)";
+
+  t "tprint_1" "print((4, (true, 3)))" "(4,(true,3))\n(4,(true,3))";
+
 (*  t "tset_2" {| let three = (0, 0, 0) in
                   let _ = three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] in
                     let pair = (0, 0) in
@@ -334,11 +337,20 @@ let tuple_tests = [
 let seq_tests = [
   t "blank_1" "let _ = 1 in 2" "2";
   t "seq_1" "let x = 1; 2 in x" "2";
+  t "seq_2" "let t = (1, 2) in t[0 of 2 := 10]; (1, t)" "(1,(10,2))";
+];;
+let destructuring_tests = [
+  t "des_1" "let (a, b, c) = (1, 2, 3) in b" "2";
+  t "des_2" "let (_, b, c) = (1, 2, 3) in c" "3";
+  t "des_3" "let ((x, y), b, c) = ((1, 2), 3, 4) in y" "2";
+  t "des_4" "let (a, (b, (c, d))) = (1, (2, (3, 4))) in (d - c) * a" "1";
+
 ];;
 
 let all_tests = []
   @ tuple_tests
   @ seq_tests
+  @ destructuring_tests
   @ language_tests  
 ;;
 

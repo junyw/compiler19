@@ -280,7 +280,26 @@ let desugar (p : sourcespan program) : sourcespan program =
     | ENil _ -> e
     | EId(name, tag) -> e
     | EApp(name, args, tag) -> EApp(name, List.map helpE args, tag)
-    | ELet(binds, body, tag) -> ELet(List.map (fun (bind, expr, tag) -> (bind, helpE expr, tag)) binds, helpE body, tag)
+    | ELet(binds, body, tag) -> 
+        let rec helpB ((bind, expr, tag) : 'a binding) : 'a binding list = 
+          match bind with
+          | BBlank(typ, _)    -> [(bind, helpE expr, tag)]
+          | BName(id, typ, _) -> [(bind, helpE expr, tag)]
+          | BTuple(binds, _)  -> 
+            let expr' = helpE expr in
+            let n = List.length binds in
+            let (_, binds') = 
+              List.fold_left 
+              (fun (i, binds') bind ->
+                match bind with
+                | BBlank(typ, _)    -> (i + 1, binds')
+                | BName(id, typ, _) -> (i + 1, binds' @ [(bind, EGetItem(expr', i, n, tag), tag)])
+                | BTuple(binds, _)  -> (i + 1, binds' @ (helpB (bind, EGetItem(expr', i, n, tag), tag))) 
+              ) (0, []) binds 
+            in
+            binds'
+        in
+          ELet(List.concat @@ List.map helpB binds, helpE body, tag)
   and helpD (decl : sourcespan decl) (* other parameters may be needed here *) =
     match decl with
     | DFun(name, args, scheme, body, tag) ->
