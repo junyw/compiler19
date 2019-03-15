@@ -324,16 +324,17 @@ let tuple_tests = [
   t "tset_1" {| let t = (0,0,0) in
                     t[1 of 3 := 2] |} "(0,2,0)";
 
-  t "tprint_1" "print((4, (true, 3)))" "(4,(true,3))\n(4,(true,3))";
 
-(*  t "tset_2" {| let three = (0, 0, 0) in
+  t "tset_2" {| let three = (0, 0, 0) in
                   let _ = three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] in
                     let pair = (0, 0) in
                       pair[0 of 2 := three[1 of 3 := 10]] |} "((1,10,3),0)";
-*)
-(*  t "tset_3" {| let three = (0, 0, 0) in
+
+  t "tset_3" {| let three = (0, 0, 0) in
                   three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] |} "(1,2,3)";
-*)
+  
+  t "tprint_1" "print((4, (true, 3)))" "(4,(true,3))\n(4,(true,3))";
+
   t "link_1" {| def link(first, rest):
                     (first, rest)
                 link(1, false) |} "(1,false)";
@@ -357,6 +358,10 @@ let destructuring_tests = [
                        (x1 + n, y1 + n) 
 
                    add_to_pairs((1, 2), -1) |} "(0,1)";
+  t "des_fun_3" {| def reverse((x, (y, z))):
+                        (z, (y, x))
+                   reverse((1, (2, 3))) |} "(3,(2,1))";
+
 
 ];;
 

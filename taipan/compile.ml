@@ -5,7 +5,6 @@ open Exprs
 open Assembly
 open Errors
 (* Add at least one of these two *)
-(* open TypeCheck *)
 open Inference 
        
 type 'a envt = (string * 'a) list
