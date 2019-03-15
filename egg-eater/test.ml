@@ -29,6 +29,61 @@ let teq name actual expected = name>::fun _ ->
 let t_any name value expected = name>::
   (fun _ -> assert_equal expected value ~printer:dump);;
 
+(* well-formedness tests *)
+let wf_errs = [
+  te "duplicate_1" {| def f(x, x):
+                          x
+                      0  |}  
+      "The identifier x, redefined at <duplicate_1, 1:10-1:11>";
+  
+  te "duplicate_2" {| let x = 1, x = 2 in x |} 
+     "The identifier x, redefined at <duplicate_2, 1:12-1:13>";
+  
+  te "duplicate_3" {| let x = (let y = 1, y = 2 in y) in x |} 
+     "The identifier y, redefined at <duplicate_3, 1:21-1:22>";
+
+  te "fun_duplicate_1" {| def foo(x): 
+                              x
+                          def foo(y):
+                              y
+                          1  |} 
+     "The function name foo, redefined at <fun_duplicate_1, 3:26-4:31>, duplicates one at <fun_duplicate_1, 1:1-2:31>";
+  
+  te "unbound_1" {| x |}  
+     "The identifier x, used at <unbound_1, 1:1-1:2>, is not in scope";
+  
+  te "unbound_2" {| def f(x):
+                        y
+                    0 |}  
+     "The identifier y, used at <unbound_2, 2:24-2:25>, is not in scope";
+ 
+  te "overflow_1" "1073741824" 
+     "The number literal 1073741824, used at <overflow_1, 1:0-1:10>, is not supported in this language";
+
+  te "unbound_fun_1" {| f(1) |} 
+     "The function name f, used at <unbound_fun_1, 1:1-1:5>, is not in scope";
+  
+  te "arity_mismatch_1" {| def f(x, y):
+                                x + y
+                            f(1) |} 
+     "The function called at <arity_mismatch_1, 3:28-3:32> expected an arity of 2, but received 1 arguments";
+
+  (* the following program should report 3 errors *)
+  te "errors_1" {| def f(x, x):
+                       y
+                   f(1) |} 
+  "The identifier x, redefined at <errors_1, 1:10-1:11>, duplicates one at <errors_1, 1:7-1:8>
+The identifier y, used at <errors_1, 2:23-2:24>, is not in scope
+The function called at <errors_1, 3:19-3:23> expected an arity of 2, but received 1 arguments";
+  
+];;
+
+let runtime_errs = [
+  (* integer overflow *)
+  te "runtime_overflow_1" "add1(1073741823)" "Error: Integer overflow";
+  te "runtime_overflow_2" "10737418 * 120" "Error: Integer overflow";
+
+];;
 
 let expr_tests = [
   (* arithmetic tests *)
@@ -36,8 +91,6 @@ let expr_tests = [
   t "expr_2" "1 + 2" "3";
   t "expr_3" "1 * 2 + 3" "5";
   t "times_1" "1073741823 * 1" "1073741823";
-  te "runtime_overflow_1" "add1(1073741823)" "Error: Integer overflow";
-  te "runtime_overflow_2" "10737418 * 120" "Error: Integer overflow";
   t "add1_1" "add1(1)" "2";
   t "sub1_1" "sub1(1)" "0";
   t "isnum_1" "isnum(1)" "true";
@@ -366,6 +419,8 @@ let destructuring_tests = [
 ];;
 
 let all_tests = []
+  @ wf_errs
+  @ runtime_errs
   @ tuple_tests
   @ seq_tests
   @ destructuring_tests

@@ -273,6 +273,13 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
     in
     errs 
   in
+  (* pull the argument names out to a list *)
+  let rec arg_to_names (arg : 'a bind) = 
+    match arg with 
+    | BBlank(_, _) -> []
+    | BName(id, _, loc)  -> [(id, loc)] 
+    | BTuple(binds, _) -> List.concat @@ List.map arg_to_names binds
+  in
   let rec wf_E e (env : (string * sourcespan) list) (fun_env : (string * sourcespan decl) list) : exn list =
       match e with
       | EBool _ -> []
@@ -285,33 +292,32 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           | None   -> [ UnboundId(x, loc) ]
           | Some _ -> []
         end
-      | ESeq(expr1, expr2, loc) -> []  (* TODO *)
+      | ENil _ -> failwith "wf_E: ENil not implemented"
+      | ESeq(expr1, expr2, loc) -> wf_E expr1 env fun_env @ wf_E expr2 env fun_env
       | ETuple(exprs, loc) -> []  (* TODO *)
       | EGetItem(expr, a, b, loc) -> [] (* TODO *)
       | ESetItem(expr1, a, b, expr2, loc) -> [] (* TODO *)
-
       | EPrim1(_, e, _)      -> wf_E e env fun_env
       | EPrim2(_, l, r, _)   -> wf_E l env fun_env @ wf_E r env fun_env
       | EIf(c, t, f, _)      -> wf_E c env fun_env @ wf_E t env fun_env @ wf_E f env fun_env
-      | ELet(binds, body, _) -> []
-(*        let name_locs = 
-          List.map 
-          (fun binding -> 
-            let (tybind, _, loc) = binding in 
-            let (binding_name, _, _) = tybind in
-                (binding_name, loc)) 
-          binds
+      | ELet(bindings, body, _) ->
+        (* pull out the binding identifiers *)
+        let binding_names = 
+          List.concat @@ List.map 
+          (fun (bind, _, loc) -> 
+            arg_to_names bind
+          ) bindings
         in
-          (check_duplicates name_locs err_duplicate_id)
-*)          (* check bindings *)
-(*        @  let (errors, new_env)  = 
+          (check_duplicates binding_names err_duplicate_id)
+        (* check bindings *)
+        @  let (errors, new_env)  = 
               List.fold_left 
-              (fun (errors, env) ((id, _, _), binding_body, loc)  -> 
-                 (errors @ wf_E binding_body env fun_env , (id, loc)::env)) 
-              ([], env) binds
+              (fun (errors, env) (bind, expr, loc)  -> 
+                 (errors @ wf_E expr env fun_env , env @ (arg_to_names bind))) 
+              ([], env) bindings
            in errors
-*)          (* check body *)
-        (*@ wf_E body new_env fun_env *)
+       (* check body *)
+         @ wf_E body new_env fun_env 
       | EApp(f, args, loc) -> 
         begin match find_opt fun_env f with
           | None -> (* function not defined *)
@@ -328,8 +334,11 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   and wf_D d (fun_env : (string * sourcespan decl) list): exn list =
     match d with
     | DFun(fun_name, args, _, body, _) ->
-      (*check_duplicates args err_duplicate_id*) 
-       (*wf_E body args fun_env*) []
+        let arg_names = List.concat @@ List.map arg_to_names args 
+        in
+            check_duplicates arg_names err_duplicate_id 
+          @ wf_E body arg_names fun_env
+
   (* wf_G: check well-formedness of a declgroup *)
   and wf_G g : exn list =
     let g_fun_env : (string * sourcespan decl) list = 
@@ -339,16 +348,6 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   in
   match p with
   | Program(typdecls, decls, body, _) -> 
-      let (errs, _) = 
-        List.fold_left 
-        (fun (errs, args_list) (arg_name, source2) -> 
-          match (find_opt args_list arg_name) with
-          | Some(duplicate_source) -> (errs @ [ (mk_error arg_name source2 duplicate_source) ], args_list)
-          | None -> (errs, args_list @ [ (arg_name, source2) ])
-        ) ([], []) decls
-      in (* TODO *)
-      errs 
-
     let fun_env : (string * sourcespan decl) list = 
         List.flatten @@
           List.map 
@@ -637,7 +636,6 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
     (* the label of the function declaration *)
     let tmp = sprintf "$fun_dec_%s" fun_name in
-    let tmp_body = sprintf "$fun_dec_body_%s" fun_name in
     let num_of_args = List.length immexprs in
     let push_args = List.fold_left 
         (fun instrs imm_reg -> 
@@ -727,6 +725,7 @@ and compile_imm e env : arg =
   | ImmBool(true, _)  -> const_true
   | ImmBool(false, _) -> const_false
   | ImmId(x, _)       -> (find env x)
+  | ImmNil _ -> failwith "compile_imm: ImmNil not implemented" (* TODO *)
 
 and compile_decl (d : tag adecl) : instruction list =
   match d with 
