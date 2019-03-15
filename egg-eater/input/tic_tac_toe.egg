@@ -1,0 +1,124 @@
+def make_row():
+	(0, 0, 0)
+and
+def make_board():
+	(make_row(), make_row(), make_row())
+and 
+def print_board((row1, row2, row3)):
+	print(row1);
+	print(row2);
+	print(row3);
+	0
+and
+def set_row_val(row, y, val):
+	if y == 0: row[0 of 3 := val]
+	else:
+		if y == 1: row[1 of 3 := val]
+		else: row[2 of 3 := val]
+and
+def get_row_val(row, y):
+	if y == 0: row[0 of 3]
+	else:
+		if y == 1: row[1 of 3]
+		else: row[2 of 3]
+and
+def get_row((row1, row2, row3), x):
+	if x == 0: row1
+	else:
+		if x == 1: row2
+		else: row3
+and
+def get_board_val(board, x, y):
+	let row = get_row(board, x) in
+		get_row_val(row, y)
+and
+def set_board((row1, row2, row3), x, y, val):
+	if x == 0: set_row_val(row1, y, val)
+	else:
+		if x == 1: set_row_val(row2, y, val)
+		else: set_row_val(row3, y, val)
+and 
+def set_diag(diag, x, y, player):
+  	if x == y: 
+  		diag[0 of 1 := (diag[0 of 1] + player)]
+  	else: 0
+and
+def set_adiag(adiag, x, y, player):
+  	if x == (2 - y): 
+  		adiag[0 of 1 := (adiag[0 of 1] + player)]
+  	else: 0
+and
+def is_valid_pos(board, x, y):
+	if (x < 0) || (x > 2) || (y < 0) || (y > 2): false
+	else: get_board_val(board, x, y) == 0
+and
+def make_move(board, counters, x, y, player):
+    let (row_cts, col_cts, diag_ct, adiag_ct) = counters in
+		set_board(board, x, y, (if player == -1 : 2 else: 1));
+		set_row_val(row_cts, x, get_row_val(row_cts, x) + player);
+		set_row_val(col_cts, y, get_row_val(col_cts, y) + player);
+		set_diag(diag_ct, x, y, player);
+		set_adiag(adiag_ct, x, y, player);
+		0		
+and
+def get_user_input():
+  input(0)
+and
+def get_user_move(board):
+  let x = get_user_input() in
+  let y = get_user_input() in 
+  	if is_valid_pos(board, x, y): (x, y)
+  	else: get_user_move(board)
+and
+def find_valid_pos(board):
+	if is_valid_pos(board, 1, 1): (1,1)
+	else:
+	if is_valid_pos(board, 0, 0): (0,0)
+	else:
+	if is_valid_pos(board, 0, 2): (0,2)
+    else:
+    if is_valid_pos(board, 2, 0): (2,0)
+	else: 
+	if is_valid_pos(board, 2, 2): (2,2)
+	else: 
+	if is_valid_pos(board, 1, 0): (1,0)
+	else: 
+	if is_valid_pos(board, 0, 1): (0,1)
+	else: 
+	if is_valid_pos(board, 1, 2): (1,2)
+	else:
+	if is_valid_pos(board, 2, 1): (2,1)
+	else: (-1, -1)
+and
+def get_computer_move(board):
+	find_valid_pos(board)
+and
+def init_game():
+	let empty_board = make_board() in
+	let counters = (make_row(), make_row(), (0,), (0,)) in
+		play_game(empty_board, 0, 1, counters)
+and
+def check_winner((row_cts, col_cts, diag_ct, adiag_ct), x, y, player):
+	if (get_row_val(row_cts, x) == (3 * player)) || (get_row_val(col_cts, y) == (3 * player)) || (diag_ct[0 of 1] == (3 * player)) || (adiag_ct[0 of 1] == (3 * player)): player
+	else: 0
+and
+def play_game(board, round, player, counters):
+  if round == 10: 0
+  else: 
+    let move = (if player == 1: get_user_move(board) 
+                else: get_computer_move(board)) in
+    let (x, y) = move in
+  		make_move(board, counters, x, y, player);
+  		print_board(board);
+  		print((if player == -1 : 2 else: 1));
+  		let winner = check_winner(counters, x, y, player) in
+  		  if winner == 0:
+  	    	let next_player = (if player == 1: -1 else: 1) in
+  			  play_game(board, round + 1, next_player, counters)
+  		  else:
+  		  	if winner == -1 : 2 else: 1
+
+let board = make_board() in
+	init_game()
+
+

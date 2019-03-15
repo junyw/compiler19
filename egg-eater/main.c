@@ -96,7 +96,9 @@ int input(int val) {
   // the argument is discarded
   // get an user input as an integer
   int n;
+  printf("Please input an integer value: ");
   scanf ("%d",&n);
+  printf("You entered: %d\n", n);
 
   return n << 1;
 }
