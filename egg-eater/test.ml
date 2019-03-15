@@ -299,15 +299,20 @@ let tuple_tests = [
   t "tuple_2" "let t2 = (1,2) in t2" "(1,2)";
   t "tuple_3" "let t3 = (1,2,true) in t3" "(1,2,true)";
   t "tuple_4" "let t4 = (1,2,true,false) in t4" "(1,2,true,false)";
+  
+  t "tnested_0" {| let t1 = (1,2,3) in 
+                      let t2 = (t1,4) in
+                        t2[1 of 2] |} "4";
+
   t "tnested_1" "let t = (1,2,(3,)) in t" "(1,2,(3,))";
   t "tnested_2" "let t = (1,2,(4,3)) in t" "(1,2,(4,3))";
-(*  t "tnested_3" {| let t0 = (4,3,2) in 
-                     let t = (1,2,t0) in t|} "(1,2,(4,3,2))";
-*)  
+  t "tnested_3" {| let t0 = (4,3,2) in 
+                     let t = (1,2,t0) in t |} "(1,2,(4,3,2))";
+  
   t "tnested_get_1" {| let t = (1,2,(3,4,(5,6))) in 
                           t[2 of 3][2 of 3][0 of 2]|} "5";
 
-  (*t "tuple_5" "let x = 1 in let t = (x, 2) in 1" "1";*)
+  t "tuple_5" "let x = 1 in let t = (x, 2) in 1" "1";
 
   (* content equality *)
   (*t "teq_1" "(1,2) == (1, 2)" "true";*)
@@ -316,13 +321,13 @@ let tuple_tests = [
   t "tget_1" "let t1 = (1,2,3,4) in t1[1 of 4]" "2";
   t "tget_2" "let t1 = (1,2,3,4) in t1[2 of 4]" "3";
   t "tget_3" "let t1 = (1,2,3,4) in t1[3 of 4]" "4";
-(*  t "tnested_0" {| let t1 = (1,2,3) in 
-                      let t2 = (t1,4) in
-                        t2[1 of 2] |} "4";
-*)
   t "tset_1" {| let t = (0,0,0) in
                     t[1 of 3 := 2] |} "(0,2,0)";
-                  
+(*  t "tset_2" {| let three = (0, 0, 0) in
+                  let _ = three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] in
+                    let pair = (0, 0) in
+                      pair[0 of 2 := three[1 of 3 := 10]] |} "((1,10,3),0)";
+*)
 (*  t "tset_3" {| let three = (0, 0, 0) in
                   three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] |} "(1,2,3)";
 *)];;

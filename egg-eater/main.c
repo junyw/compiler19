@@ -5,6 +5,7 @@
 
 extern int our_code_starts_here() asm("our_code_starts_here");
 extern int print(int val) asm("print");
+extern int input() asm("input");
 extern void error(int errCode, int val) asm("error");
 extern int printstack(int val, int* EBP, int* ESP) asm("printstack");
 
@@ -17,7 +18,6 @@ Booleans: 111 in least three significant bits
 Tuples: 001 in least three significant bits
 */
 
-const int TUPLE_TAG  = 0x00000111;
 const int BOOL_TAG   = 0x00000001;
 const int BOOL_TRUE  = 0xFFFFFFFF; // These must be the same values
 const int BOOL_FALSE = 0x7FFFFFFF; // as chosen in compile.ml
@@ -39,9 +39,9 @@ void print_tagged_value(int val) {
     printf("true");
   } else if (val == BOOL_FALSE) {
     printf("false");
-  } else if ((val & TUPLE_TAG) == TUPLE_TAG) {
+  } else if ((val & BOOL_TAG) == 1) {
     // is tuple 
-    int* p = (int*)(val - 0x111);
+    int* p = (int*)(val - 0x1);
     int size = *p;
     printf("(");
     for(int i = 0; i < size; i++) {
@@ -49,7 +49,7 @@ void print_tagged_value(int val) {
       if(size < 2 || i != size - 1) printf(",");
     }
     printf(")");
-  }else {
+  } else {
     printf("%#010x", val); 
   }
   return;
@@ -90,8 +90,14 @@ int printstack(int val, int* EBP, int* ESP) {
   printf("- End of printstack\n");
   return val; 
 }
+
+int input() {
+  // TODO
+  return 123;
+}
+
 int print(int val) {
-  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE || (val & TUPLE_TAG) == TUPLE_TAG) {
+  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE || (val & BOOL_TAG) == 1) {
     print_tagged_value(val);
     printf("\n");
   } else {

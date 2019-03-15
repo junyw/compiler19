@@ -389,7 +389,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
      | IsTuple -> 
         [ IMov(Reg(EAX), e_reg); 
           IAnd(Reg(EAX), HexConst(0x00000111));
-          ICmp(Reg(EAX), HexConst(0x00000111));
+          ICmp(Reg(EAX), HexConst(0x00000001));
           IMov(Reg(EAX), const_true);
           IJe(done_label);
           IMov(Reg(EAX), const_false);
@@ -533,11 +533,11 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* save the position of the tuple to EAX *)
       @ [ IMov(Reg(EAX), Reg(ESI)) ]
       (* tag the tuple *)
-      @ [ IAdd(Reg(EAX), HexConst(0x111)) ]
+      @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
       (* bump the heap pointer *)
       @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ]
       (* realign the heap *)
-      (*@ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]*)
+      @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
 
   | CGetItem(immexpr, i, tag) -> 
       let e_reg = compile_imm immexpr env in
@@ -545,7 +545,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         [ IMov(Reg(EAX), e_reg) ]
       (* TODO: check that EAX is indeed a tuple *)
       (* untag it *)
-      @ [ ISub(Reg(EAX), HexConst(0x111)) ]
+      @ [ ISub(Reg(EAX), HexConst(0x1)) ]
       (* TODO: check the index is within range *)
 
       (* get the i-th item *)
@@ -558,7 +558,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         [ IMov(Reg(EAX), e_reg1) ]
       (* TODO: check that EAX is indeed a tuple *)
       (* untag it *)
-      @ [ ISub(Reg(EAX), HexConst(0x111)) ]
+      @ [ ISub(Reg(EAX), HexConst(0x1)) ]
       (* TODO: check the index is within range *)
 
       (* get the new value *)
@@ -566,7 +566,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* mutate the tuple *)
       @ [ IMov(RegOffset((word_size * (i+1)), EAX), Reg(ECX)) ]
       (* leave the tuple as the result *)
-      @ [ IAdd(Reg(EAX), HexConst(0x111)) ]
+      @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
 
 
 and compile_imm e env : arg =
