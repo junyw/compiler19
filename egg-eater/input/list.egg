@@ -1,21 +1,21 @@
 def link(first, rest):
   (first, rest)
-
+and
 def length(l):
   if l == false: 0
   else:
     1 + length(l[1 of 2])
-
+and
 def sum(l):
   if l == false: 0
   else:
   	l[0 of 2] + sum(l[1 of 2])
-
+and
 def append(l1, l2):
   if l1 == false: l2
   else:
   	link(l1[0 of 2], append(l1[1 of 2], l2))
-
+and
 def reverse(l):
   if l == false: l
   else:
