@@ -13,6 +13,7 @@ type prim1 =
   | IsTuple
   | Not
   | PrintStack
+  | Input 
 
 type prim2 =
   | Plus
@@ -26,7 +27,6 @@ type prim2 =
   | LessEq
   | Eq
   | EqB
-
 
 type 'a typ =
   | TyBlank of 'a

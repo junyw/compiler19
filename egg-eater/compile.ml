@@ -501,23 +501,33 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
      let e_reg = compile_imm immexpr env in
      let done_label = sprintf "$eprim1_done_%d" tag in
      begin match op with
-     | Add1  -> assert_num e_reg "$err_arith_not_num" @
-                [ IMov(Reg(EAX), e_reg);
-                  IAdd(Reg(EAX), Const(1 lsl 1)); 
-                  (* check overflow *) 
-                  IJo("$err_arith_overflow");
-                ] 
-     | Sub1  -> assert_num e_reg "$err_arith_not_num" @
-                [ IMov(Reg(EAX), e_reg); 
-                  IAdd(Reg(EAX), Const(~-1 lsl 1));
-                  (* check overflow *) 
-                  IJo("$err_arith_overflow");
-                ] 
-     | Print -> [ ILineComment("calling c function");
-                  IPush(Sized(DWORD_PTR, e_reg)); 
-                  ICall("print");
-                  IAdd(Reg(ESP), Const(1*4));
-                ]
+     | Input -> 
+        (* argument is discarded *)
+        [ ILineComment("calling c function");
+          IPush(Sized(DWORD_PTR, e_reg)); 
+          ICall("input");
+          IAdd(Reg(ESP), Const(1*4));
+        ]
+     | Add1  -> 
+        assert_num e_reg "$err_arith_not_num" @
+        [ IMov(Reg(EAX), e_reg);
+          IAdd(Reg(EAX), Const(1 lsl 1)); 
+          (* check overflow *) 
+          IJo("$err_arith_overflow");
+        ] 
+     | Sub1  -> 
+        assert_num e_reg "$err_arith_not_num" @
+        [ IMov(Reg(EAX), e_reg); 
+          IAdd(Reg(EAX), Const(~-1 lsl 1));
+          (* check overflow *) 
+          IJo("$err_arith_overflow");
+        ] 
+     | Print -> 
+        [ ILineComment("calling c function");
+          IPush(Sized(DWORD_PTR, e_reg)); 
+          ICall("print");
+          IAdd(Reg(ESP), Const(1*4));
+        ]
      | PrintB -> failwith "compile_cexpr: PrintB not implemented"
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
@@ -547,11 +557,10 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ILabel(done_label);
         ];
      | Not ->
-          assert_bool e_reg "$err_logic_not_boolean" 
+        assert_bool e_reg "$err_logic_not_boolean" 
         @ [ IMov(Reg(EAX), e_reg);
             IXor(Reg(EAX), Const(0x80000000));
           ]
-
      | PrintStack -> 
         [ ILineComment("calling c function");
           IPush(Sized(DWORD_PTR, Reg(ESP))); 
@@ -779,6 +788,7 @@ let rec compile_prog (anfed : tag aprogram) : string =
     "section .text
 extern error
 extern print
+extern input
 extern printstack
 extern _STACK_BOTTOM
 global our_code_starts_here" in

@@ -5,9 +5,10 @@
 
 extern int our_code_starts_here() asm("our_code_starts_here");
 extern int print(int val) asm("print");
-extern int input() asm("input");
-extern void error(int errCode, int val) asm("error");
+extern int input(int val) asm("input");
 extern int printstack(int val, int* EBP, int* ESP) asm("printstack");
+extern bool equal(int val1, int val2) asm("equal");
+extern void error(int errCode, int val) asm("error");
 
 int* HEAP;
 
@@ -91,9 +92,13 @@ int printstack(int val, int* EBP, int* ESP) {
   return val; 
 }
 
-int input() {
-  // TODO
-  return 123;
+int input(int val) {
+  // the argument is discarded
+  // get an user input as an integer
+  int n;
+  scanf ("%d",&n);
+
+  return n << 1;
 }
 
 int print(int val) {

@@ -5,6 +5,7 @@ open Pretty
 (* TODO: Define any additional exceptions you want *)
 exception ParseError of string (* parse-error message *)
 exception UnboundId of string * sourcespan (* name, where used *)
+exception UnboundTyId of string * sourcespan (* name, where used *)
 exception UnboundFun of string * sourcespan (* name of fun, where used *)
 exception ShadowId of string * sourcespan * sourcespan (* name, where used, where defined *)
 exception DuplicateId of string * sourcespan * sourcespan (* name, where used, where defined *)
@@ -12,7 +13,9 @@ exception DuplicateFun of string * sourcespan * sourcespan (* name, where used, 
 exception Overflow of int * sourcespan (* value, where used *)
 exception Arity of int * int * sourcespan (* intended arity, actual arity, where called *)
 exception NotYetImplemented of string (* TODO: Message to show *)
+exception Unsupported of string * sourcespan
 exception InternalCompilerError of string (* Major failure: message to show *)
+exception OccursCheck of string * sourcespan typ * sourcespan
 
 
 type reason =
@@ -36,10 +39,16 @@ let print_errors (exns : exn list) : string list =
       | ParseError msg -> msg
       | NotYetImplemented msg ->
          "Not yet implemented: " ^ msg
+      | Unsupported(msg, loc) ->
+         sprintf "Unsupported: %s at <%s>" msg (string_of_sourcespan loc)
       | InternalCompilerError msg ->
          "Internal Compiler Error: " ^ msg
+      | OccursCheck(tyvar, t, loc) ->
+         sprintf "Infinite types: '%s occurs in %s at <%s>" tyvar (string_of_typ t) (string_of_sourcespan loc)
       | UnboundId(x, loc) ->
          sprintf "The identifier %s, used at <%s>, is not in scope" x (string_of_sourcespan loc)
+      | UnboundTyId(x, loc) ->
+         sprintf "The type name %s, used at <%s>, is not in scope" x (string_of_sourcespan loc)
       | UnboundFun(x, loc) ->
          sprintf "The function name %s, used at <%s>, is not in scope" x (string_of_sourcespan loc)
       | ShadowId(x, loc, existing) ->
@@ -73,11 +82,17 @@ let print_errors (exns : exn list) : string list =
            | EPrim1(_, _, t) -> t
            | EPrim2(_, _, _, t) -> t
            | EIf(_, _, _, t) -> t
+           | ENil(_, t) -> t
            | ENumber(_, t) -> t
            | EBool(_, t) -> t
            | EId(_, t) -> t
            | EApp(_, _, t) -> t
-           | EAnnot(_, _, t) -> t in
+           | EAnnot(_, _, t) -> t
+           | ETuple(_, t) -> t
+           | EGetItem(_, _, _, t) -> t
+           | ESetItem(_, _, _, _, t) -> t
+           | ESeq(_, _, t) -> t
+         in
          let print_reason r =
            match r with
            | InferExp e -> sprintf "\ttrying to infer type for %s at %s"
@@ -93,4 +108,3 @@ let print_errors (exns : exn list) : string list =
          sprintf "%s" (Printexc.to_string e)
     ) exns
 ;;
-
