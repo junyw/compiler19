@@ -333,7 +333,11 @@ let tuple_tests = [
 *)
 (*  t "tset_3" {| let three = (0, 0, 0) in
                   three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] |} "(1,2,3)";
-*)];;
+*)
+  t "link_1" {| def link(first, rest):
+                    (first, rest)
+                link(1, false) |} "(1,false)";
+];;
 let seq_tests = [
   t "blank_1" "let _ = 1 in 2" "2";
   t "seq_1" "let x = 1; 2 in x" "2";
@@ -344,6 +348,15 @@ let destructuring_tests = [
   t "des_2" "let (_, b, c) = (1, 2, 3) in c" "3";
   t "des_3" "let ((x, y), b, c) = ((1, 2), 3, 4) in y" "2";
   t "des_4" "let (a, (b, (c, d))) = (1, (2, (3, 4))) in (d - c) * a" "1";
+
+  t "des_fun_1" {| def add_pairs((x1, y1), (x2, y2)):
+                       (x1 + x2, y1 + y2) 
+
+                   add_pairs((1, 2), (3, 4)) |} "(4,6)";
+  t "des_fun_2" {| def add_to_pairs((x1, y1), n):
+                       (x1 + n, y1 + n) 
+
+                   add_to_pairs((1, 2), -1) |} "(0,1)";
 
 ];;
 

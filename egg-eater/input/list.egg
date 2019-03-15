@@ -1,0 +1,27 @@
+def link(first, rest):
+  (first, rest)
+
+def length(l):
+  if l == false: 0
+  else:
+    1 + length(l[1 of 2])
+
+def sum(l):
+  if l == false: 0
+  else:
+  	l[0 of 2] + sum(l[1 of 2])
+
+def append(l1, l2):
+  if l1 == false: l2
+  else:
+  	link(l1[0 of 2], append(l1[1 of 2], l2))
+
+def reverse(l):
+  if l == false: l
+  else:
+  	append(reverse(l[1 of 2]), link(l[0 of 2], false))
+
+let list1 = link(1, link(2, link(3, false))) in
+  let list2 = link(4, link(5, link(6, false)))
+  	in reverse(append(list1, list2))
+

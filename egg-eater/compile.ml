@@ -303,7 +303,27 @@ let desugar (p : sourcespan program) : sourcespan program =
   and helpD (decl : sourcespan decl) (* other parameters may be needed here *) =
     match decl with
     | DFun(name, args, scheme, body, tag) ->
-      DFun(name, args, scheme, helpE body, tag)
+      (* def add-pairs((x1, y1), (x2, y2)):
+              (x1 + x2, y1 + y2)
+        
+        should be desugared to:
+
+        def add_pairs(p1, p2):
+          let (x1, y1) = p1, (x2, y2) = p2 in
+              (x1 + x2, y1 + y2)
+      *)
+      let (args', new_bindings) = 
+        List.fold_left
+        (fun (args', new_bindings) bind -> 
+          match bind with 
+          | BBlank _ -> failwith "helpD: BBlank not allowed"
+          | BName _  -> (args' @ [bind], new_bindings)
+          | BTuple(binds, tag')  -> 
+              let tmp = gensym "arg" in
+                (args' @ [BName(tmp, TyBlank(tag')(* TODO: type? *), tag')], new_bindings @ [(bind, EId(tmp, tag), tag)])
+        ) ([], []) args
+      in
+        DFun(name, args', scheme, helpE (ELet(new_bindings, body, tag)), tag)
   and helpG (g : sourcespan decl list) (* other parameters may be needed here *) =
     Error([NotYetImplemented "Implement desugaring for definition groups"])
   and helpT (t : sourcespan typ) (* other parameters may be needed here *) =
