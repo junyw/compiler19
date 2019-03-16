@@ -156,6 +156,7 @@ def play_game(board, round, player, counters):
   		make_move(board, counters, x, y, player);
   		print_board(board);
   		print((if player == -1 : 2 else: 1));
+  		print(move);
   		let winner = check_winner(counters, x, y, player) in
   		  if winner == 0:
   	    	let next_player = flip_player(player) in
@@ -163,7 +164,6 @@ def play_game(board, round, player, counters):
   		  else:
   		  	if winner == -1 : 2 else: 1
 
-let board = make_board() in
-	init_game()
+init_game()
 
 
