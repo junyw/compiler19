@@ -105,13 +105,17 @@ let expr_tests = [
   t "and_1" "true && true" "true";
   t "or_1" "true || true" "true";
   t "greater_1" "2 > 1" "true";
+  t "greater_2" "2 > -1" "true";
+  t "greater_3" "1 > 1" "false";
+
   t "greaterEq_1" "2 >= 1" "true";
   t "less_1" "1 < 2" "true";
   t "less_2" "1 < 0" "false";
   t "lessEq_1" "1 <= 2" "true"; 
   t "eq_1" "1 == 1" "true";
   t "eq_2" "1 == 0" "false";  
-  
+  t "eq_3" "false == false" "true";
+
   (* print tests *)
   t "print_1" "print(41)" "41\n41";
   t "print_2" "print(true)" "true\ntrue";

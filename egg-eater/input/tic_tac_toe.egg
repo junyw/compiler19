@@ -1,3 +1,11 @@
+def link(first, rest):
+  (first, rest)
+and
+def append(l1, l2):
+  if l1 == false: l2
+  else:
+  	link(l1[0 of 2], append(l1[1 of 2], l2))
+and
 def make_row():
 	(0, 0, 0)
 and
@@ -61,6 +69,15 @@ def make_move(board, counters, x, y, player):
 		set_adiag(adiag_ct, x, y, player);
 		0		
 and
+def reverse_move(board, counters, x, y, player): 
+    let (row_cts, col_cts, diag_ct, adiag_ct) = counters in
+		set_board(board, x, y, 0);
+		set_row_val(row_cts, x, get_row_val(row_cts, x) - player);
+		set_row_val(col_cts, y, get_row_val(col_cts, y) - player);
+		set_diag(diag_ct, x, y, 0 - player);
+		set_adiag(adiag_ct, x, y, 0 - player);
+		0		
+and
 def get_user_input():
   input(0)
 and
@@ -70,28 +87,50 @@ def get_user_move(board):
   	if is_valid_pos(board, x, y): (x, y)
   	else: get_user_move(board)
 and
-def find_valid_pos(board):
-	if is_valid_pos(board, 1, 1): (1,1)
-	else:
-	if is_valid_pos(board, 0, 0): (0,0)
-	else:
-	if is_valid_pos(board, 0, 2): (0,2)
-    else:
-    if is_valid_pos(board, 2, 0): (2,0)
-	else: 
-	if is_valid_pos(board, 2, 2): (2,2)
-	else: 
-	if is_valid_pos(board, 1, 0): (1,0)
-	else: 
-	if is_valid_pos(board, 0, 1): (0,1)
-	else: 
-	if is_valid_pos(board, 1, 2): (1,2)
-	else:
-	if is_valid_pos(board, 2, 1): (2,1)
-	else: (-1, -1)
+def get_max_move(l):
+	if l == false: (-2,(-1,-1))
+    else: 
+    	let pair1 = l[0 of 2] in
+    	let pair2 = get_max_move(l[1 of 2]) in
+    		let (r1, m1) = pair1, (r2, m2) = pair2 in
+    			if (r1 > r2): pair1
+    			else: pair2
 and
-def get_computer_move(board):
-	find_valid_pos(board)
+def rate_pos(board, counters, (x, y), player, depth):
+	if !(is_valid_pos(board, x, y)): -2
+	else:
+		make_move(board, counters, x, y, player);
+		if (check_winner(counters, x, y, player) == player): 
+			reverse_move(board, counters, x, y, player); 
+			1
+	    else:
+	    	let opponent = flip_player(player) in
+	    	let rated_opponent_move = get_best_move(board, counters, opponent, depth - 1) in
+	    		reverse_move(board, counters, x, y, player); 
+	    		0 - rated_opponent_move[0 of 2]
+and
+def rate_positions(l, board, counters, player, depth):
+    if depth == 0: false
+    else:
+		if l == false: false
+	    else:
+	    	let (x, y) = l[0 of 2] in
+	    	let rate = rate_pos(board, counters, (x, y), player, depth) in
+	    	let rated = (rate, (x, y)) in
+	    		link(rated, rate_positions(l[1 of 2], board, counters, player, depth))
+and
+def get_computer_move(board, counters, player):
+	let max_depth = 2 in
+	let (_, best_move) = get_best_move(board, counters, player, max_depth) in
+		best_move
+and
+def get_best_move(board, counters, player, depth):
+	if (depth == 0): (0, (-1, -1))
+    else:
+		let candidates = link((0,0),link((0,1),link((0,2),link((1,0),link((1,1),link((1,2),link((2,0),link((2,1),link((2,2), false))))))))) in
+		let rated = rate_positions(candidates, board, counters, player, depth) in
+		let rated_move = get_max_move(rated) in
+			rated_move
 and
 def init_game():
 	let empty_board = make_board() in
@@ -99,21 +138,27 @@ def init_game():
 		play_game(empty_board, 0, 1, counters)
 and
 def check_winner((row_cts, col_cts, diag_ct, adiag_ct), x, y, player):
-	if (get_row_val(row_cts, x) == (3 * player)) || (get_row_val(col_cts, y) == (3 * player)) || (diag_ct[0 of 1] == (3 * player)) || (adiag_ct[0 of 1] == (3 * player)): player
+	if (get_row_val(row_cts, x) == (3 * player)) || 
+	   (get_row_val(col_cts, y) == (3 * player)) || 
+	   (diag_ct[0 of 1] == (3 * player)) || 
+	   (adiag_ct[0 of 1] == (3 * player)): player
 	else: 0
+and
+def flip_player(player):
+	if player == 1: -1 else: 1
 and
 def play_game(board, round, player, counters):
   if round == 10: 0
   else: 
     let move = (if player == 1: get_user_move(board) 
-                else: get_computer_move(board)) in
+                else: get_computer_move(board, counters, player)) in
     let (x, y) = move in
   		make_move(board, counters, x, y, player);
   		print_board(board);
   		print((if player == -1 : 2 else: 1));
   		let winner = check_winner(counters, x, y, player) in
   		  if winner == 0:
-  	    	let next_player = (if player == 1: -1 else: 1) in
+  	    	let next_player = flip_player(player) in
   			  play_game(board, round + 1, next_player, counters)
   		  else:
   		  	if winner == -1 : 2 else: 1
