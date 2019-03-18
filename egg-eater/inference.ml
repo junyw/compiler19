@@ -86,6 +86,7 @@ let initial_env : sourcespan scheme envt =
       ("IsNum",  any2bool);
       ("IsBool", any2bool);
       ("IsTuple", any2bool);
+      ("Input", any2any);
 
       (* prim2 functions *)      
       ("Plus",  intint2int);
@@ -242,6 +243,20 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
 			   		compose_subst subst2 subst1
 			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 	     end
+    | TyTup(typs1, _) -> 
+     begin match t2 with  
+          | TyVar(id2, _) when not (occurs id2 t1) -> [(id2, t1)]
+          | TyTup(typs2, _) -> 
+                (* unify argument types *)
+                let subst = 
+                    List.fold_left2
+                    (fun subst typ typ2 -> 
+                        let subst0 = unify typ typ2 loc reasons in
+                            compose_subst subst subst0)
+                    [] typs1 typs2 
+                in subst
+          | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
+     end
     | _ -> 
       begin match t2 with 
             | TyVar(id2, _) when not (occurs id2 t1) ->
@@ -363,25 +378,36 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
     | EBool(v, loc) -> ([], tBool, e, env)
     | EId(x, loc) ->  ([], find_pos env x loc, e, env)
     | ELet(bindings, aexpr, loc) -> 
-      let rec infer_tuple (bind, expr, loc') 
+      let rec infer_tuple (bind, expr, loc) env
           : (sourcespan typ subst * sourcespan typ * sourcespan expr * sourcespan typ envt) = 
         let (subst, typ, expr) = infer_exp' funenv env expr reasons in
         begin match bind with
         | BTuple(binds, _) -> 
           let (tuple_subst, tuple_typ, _, env) = infer_exp funenv env expr reasons in
-          let tuple_exprs = match expr with
-              | ETuple(exprs, a) -> exprs
-              | _ -> failwith "infer_tuple: impossible type"
-          in
-          let env' =
-            List.fold_left2 
-            (fun env bind t_expr -> 
-                  match bind with
-                  | BTuple(binds, loc') -> let (_, _, _, env') = infer_tuple (bind, t_expr, loc') in env'
-                  | BBlank(typ, _)   -> env
-                  | BName(name, typ, _) -> StringMap.add name typ env
-            ) env binds tuple_exprs
-          in (subst, typ, expr, env')
+          let tuple_typ = unblank tuple_typ in
+          begin match expr with
+                | ETuple(tuple_exprs, a) -> 
+                  let env' =
+                    List.fold_left2 
+                    (fun env bind t_expr -> 
+                          match bind with
+                          | BTuple(binds, loc') -> let (_, _, _, env') = infer_tuple (bind, t_expr, loc') env in env'
+                          | BBlank(typ, _)   -> env
+                          | BName(name, typ, _) -> StringMap.add name (unblank typ) env
+                    ) env binds tuple_exprs
+                  in (subst, tuple_typ, expr, env')
+                | EId _ -> 
+                  let env' =
+                    List.fold_left 
+                    (fun env bind -> 
+                          match bind with
+                          | BTuple(binds, loc') -> let (_, _, _, env') = infer_tuple (bind, expr(*?*), loc') env in env'
+                          | BBlank(typ, _)   -> env
+                          | BName(name, typ, _) -> StringMap.add name (unblank typ) env
+                    ) env binds
+                  in (subst, tuple_typ, expr, env')
+                | _ -> failwith ("infer_tuple: impossible type" ^ (string_of_expr_with string_of_sourcespan expr))
+          end
         | BBlank(typ, loc)   -> ([], TyBlank(loc), expr, env)
         | BName(name, typ', _) -> 
           (* TODO *)
@@ -406,7 +432,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
                 let new_env = StringMap.add name binding_typ env in
                     (new_env, subst_so_far)
               | BTuple(binds, _) ->  
-                let (subst, typ, expr, env') = infer_tuple (bind, expr, loc') in
+                let (subst, typ, expr, env') = infer_tuple (bind, expr, loc') env in
                 (env', subst) 
           )
           (env, []) bindings 
@@ -443,20 +469,21 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
         begin match tuple_typ with
               | TyTup(typs, _) -> 
                 ([], List.nth typs a, e, env)
-              | _ -> failwith "infer_exp': EGetItem impossible type"
+              | _ -> ([], tuple_typ, e, env)
         end
     | ESetItem(expr1, a, b, expr2, loc) ->
       let (_, tuple_typ, _) = infer_exp' funenv env expr1 reasons in
         begin match tuple_typ with
               | TyTup(typs, loc) -> 
                 let typ = List.nth typs a in
+                let typ = unblank typ in
                 let (expr2_subst, expr2_typ, expr2) = infer_exp' funenv env expr2 reasons in
                 let subst0 = unify expr2_typ typ loc reasons in 
                 
                 let subst_so_far = compose_subst subst0 expr2_subst in
                 let typ = apply_subst_typ subst_so_far typ in
                 ([], typ, e, env)
-              | _ -> failwith "infer_exp: EGetItem impossible type"
+              | _ -> ([], tuple_typ, e, env)
         end
 
     | EPrim1(op, expr, loc)         -> let (a, b, c) = infer_app e in (a, b, c, env)
@@ -492,7 +519,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
 
      (* 1. type the arguments and return value. Create fresh type variables for arguments if there
          are no type annotations *)
-      let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in
+      (*let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in*)
       let scheme = match StringMap.find_opt f_name funenv with
                   | Some(scheme') -> scheme' (* in case that the scheme has been instantiated before *)
                   | None    -> scheme 
@@ -530,7 +557,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
       let funenv = apply_subst_funenv final_subst funenv in
      (* 5. generalize the type of the function to type sheme *)
       let scheme = generalize env f_typ in
-      let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in
+      (*let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in*)
 
       (StringMap.add f_name scheme funenv, f_typ, decl)
 ;;
