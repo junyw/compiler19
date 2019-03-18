@@ -1,1 +1,1 @@
-let x: Bool = 1 in x
+let (_, b, c) = (1, 2, 3) in c

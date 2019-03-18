@@ -85,6 +85,7 @@ let initial_env : sourcespan scheme envt =
       ("Not",    bool2bool);
       ("IsNum",  any2bool);
       ("IsBool", any2bool);
+      ("IsTuple", any2bool);
 
       (* prim2 functions *)      
       ("Plus",  intint2int);
@@ -103,7 +104,7 @@ let rec find_pos (ls : 'a envt) x pos : 'a =
   try
     StringMap.find x ls
   with
-  | Not_found -> failwith (sprintf "Name %s not found at %s" x (string_of_sourcespan pos))
+  | Not_found -> failwith (sprintf "inference.ml: find_pos Name %s not found at %s" x (string_of_sourcespan pos))
 ;;
 
 
@@ -199,7 +200,7 @@ let ty_err t1 t2 loc reasons = TypeMismatch(loc, t2, t1, reasons)
 
 
 let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason list) : 'a typ subst =
-  let is_same_typ_var t1 t2 = match t1 with
+  let rec is_same_typ_var t1 t2 = match t1 with
     | TyVar(id1, _) -> 
       begin match t2 with 
             | TyVar(id2, _) -> String.equal id1 id2
@@ -207,9 +208,15 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
       end
     | TyCon(id1, _) ->
         begin match t2 with 
-                | TyCon(id2, _) -> String.equal id1 id2
-                | _ -> false
+              | TyCon(id2, _) -> String.equal id1 id2
+              | _ -> false
         end
+    | TyTup(typs1, _) ->
+        begin match t2 with 
+              | TyTup(typs2, _) -> List.fold_left (fun a b -> a && b) true (List.map2 is_same_typ_var typs1 typs2)
+              | _ -> false
+        end
+
     | _ -> false 
   in
   if is_same_typ_var t1 t2 then []
@@ -312,9 +319,8 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
   | _ -> failwith "generalize: impossible case"
 ;;
 
-
 let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
-        : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
+        : (sourcespan typ subst * sourcespan typ * sourcespan expr * sourcespan typ envt) (* unification, result typ, rebuilt expr *)=
   (* infer_app: infer type of function call, including primitive function calls *)
   let infer_app (e : 'a expr)  
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) =
@@ -335,7 +341,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       let (arg_substs, args_typs) = 
          List.fold_left 
          (fun (subst_so_far, args_typs) arg -> 
-            let (arg_subst, arg_typ, arg) = infer_exp funenv env arg reasons in 
+            let (arg_subst, arg_typ, arg, _) = infer_exp funenv env arg reasons in 
             (compose_subst arg_subst subst_so_far, args_typs@[arg_typ])
          ) ([], []) args
       in
@@ -348,75 +354,136 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       let final_typ = apply_subst_typ final_subst ret_ty in
       (final_subst, final_typ, e)   
   in
-  match e with
-  | ENumber(v, loc) -> ([], tInt, e)
-  | EBool(v, loc) -> ([], tBool, e)
-  | EId(x, loc) ->  ([], find_pos env x loc, e)
-  | ELet(bindings, aexpr, loc) -> 
-    let (new_env, binds_subst) = 
-        List.fold_left 
-        (fun (env, subst) (bind, expr, loc') -> 
-            match bind with
-            | BBlank(typ, _) -> (env, subst) (* TODO *)
-            | BName(name, typ, _) -> 
-              (* type the binding *)
-              let (binding_subst, binding_typ, expr) = infer_exp funenv env expr reasons in
-              (* typ is the user provided type annotation, maybe blank *)
-              let typ = unblank typ in
-              (* unification *)
-              let subst0 = unify binding_typ typ loc' reasons in 
-              let subst_so_far = compose_subst (compose_subst subst0 subst) binding_subst in
-              let binding_typ = apply_subst_typ subst_so_far binding_typ in
-              (* add new binding type to environment *)
-              let new_env = StringMap.add name binding_typ env in
-                  (new_env, subst_so_far)
-            | BTuple(binds, _) ->  (env, subst) (* TODO *)
-        )
-        (env, []) bindings 
-    in
-    let (body_subst, body_typ, aexpr) = infer_exp funenv new_env aexpr reasons in
-    let subst_so_far = compose_subst binds_subst body_subst in
-    let body_typ = apply_subst_typ subst_so_far body_typ in
-    (subst_so_far, body_typ, e)
-  
-  | ESeq(expr1, expr2, loc) ->
-    let (expr1_subst, expr1_typ, expr1) = infer_exp funenv env expr1 reasons in
-    let env = apply_subst_env expr1_subst env in
-    let (expr2_subst, expr2_typ, expr2) = infer_exp funenv env expr2 reasons in
-    let env = apply_subst_env expr2_subst env in
-    let subst_so_far = compose_subst expr1_subst expr2_subst in
-    let expr1_typ = apply_subst_typ subst_so_far expr1_typ in
-    let expr2_typ = apply_subst_typ subst_so_far expr2_typ in
-    (subst_so_far, expr2_typ, e)
-(* TODO *)
-(*  | ETuple(exprs, loc) ->
-  | EGetItem(expr, a, b, loc) -> 
-  | ESetItem(expr1, a, b, expr2, loc) -> 
-*)
-  | EPrim1(op, expr, loc)         -> infer_app e
-  | EPrim2(op, expr1, expr2, loc) -> infer_app e
-  | EApp(fun_name, args, loc)     -> infer_app e
-  | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
-  | EIf(c, t, f, loc) ->
-    let (c_subst, c_typ, c) = infer_exp funenv env c reasons in
-    let env = apply_subst_env c_subst env in
-    let (t_subst, t_typ, t) = infer_exp funenv env t reasons in
-    let env = apply_subst_env t_subst env in
-    let (f_subst, f_typ, f) = infer_exp funenv env f reasons in
-    (* Compose the substitutions together *)
-    let subst_so_far = compose_subst (compose_subst c_subst t_subst) f_subst in
-    (* rewrite the types *)
-    let c_typ = apply_subst_typ subst_so_far c_typ in
-    let t_typ = apply_subst_typ subst_so_far t_typ in
-    let f_typ = apply_subst_typ subst_so_far f_typ in
-    (* unify condition with Bool *)
-    let unif_subst1 = unify c_typ tBool loc reasons in
-    (* unify two branches *)
-    let unif_subst2 = unify t_typ f_typ loc reasons in
-    (* compose all substitutions *)
-    let final_subst = compose_subst (compose_subst subst_so_far unif_subst1) unif_subst2 in
-    let final_typ = apply_subst_typ final_subst t_typ in
-    (final_subst, final_typ, e)
+  let rec infer_exp' (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
+        : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
+        let (a, b, c, _) = infer_exp funenv env e reasons in (a, b, c)
+  in
+    match e with
+    | ENumber(v, loc) -> ([], tInt, e, env)
+    | EBool(v, loc) -> ([], tBool, e, env)
+    | EId(x, loc) ->  ([], find_pos env x loc, e, env)
+    | ELet(bindings, aexpr, loc) -> 
+      let rec infer_tuple (bind, expr, loc') 
+          : (sourcespan typ subst * sourcespan typ * sourcespan expr * sourcespan typ envt) = 
+        let (subst, typ, expr) = infer_exp' funenv env expr reasons in
+        begin match bind with
+        | BTuple(binds, _) -> 
+          let (tuple_subst, tuple_typ, _, env) = infer_exp funenv env expr reasons in
+          let tuple_exprs = match expr with
+              | ETuple(exprs, a) -> exprs
+              | _ -> failwith "infer_tuple: impossible type"
+          in
+          let env' =
+            List.fold_left2 
+            (fun env bind t_expr -> 
+                  match bind with
+                  | BTuple(binds, loc') -> let (_, _, _, env') = infer_tuple (bind, t_expr, loc') in env'
+                  | BBlank(typ, _)   -> env
+                  | BName(name, typ, _) -> StringMap.add name typ env
+            ) env binds tuple_exprs
+          in (subst, typ, expr, env')
+        | BBlank(typ, loc)   -> ([], TyBlank(loc), expr, env)
+        | BName(name, typ', _) -> 
+          (* TODO *)
+          ([], typ, expr, StringMap.add name typ' env)
+        end
+      in
+      let (new_env, binds_subst) = 
+          List.fold_left 
+          (fun (env, subst) (bind, expr, loc') -> 
+              match bind with
+              | BBlank(typ, _) -> (env, subst) (* TODO *)
+              | BName(name, typ, _) -> 
+                (* type the binding *)
+                let (binding_subst, binding_typ, expr) = infer_exp' funenv env expr reasons in
+                (* typ is the user provided type annotation, maybe blank *)
+                let typ = unblank typ in
+                (* unification *)
+                let subst0 = unify binding_typ typ loc' reasons in 
+                let subst_so_far = compose_subst (compose_subst subst0 subst) binding_subst in
+                let binding_typ = apply_subst_typ subst_so_far binding_typ in
+                (* add new binding type to environment *)
+                let new_env = StringMap.add name binding_typ env in
+                    (new_env, subst_so_far)
+              | BTuple(binds, _) ->  
+                let (subst, typ, expr, env') = infer_tuple (bind, expr, loc') in
+                (env', subst) 
+          )
+          (env, []) bindings 
+      in
+      let (body_subst, body_typ, aexpr) = infer_exp' funenv new_env aexpr reasons in
+      let subst_so_far = compose_subst binds_subst body_subst in
+      let body_typ = apply_subst_typ subst_so_far body_typ in
+      (subst_so_far, body_typ, e, new_env)
+    
+    | ESeq(expr1, expr2, loc) ->
+      let (expr1_subst, expr1_typ, expr1) = infer_exp' funenv env expr1 reasons in
+      let env = apply_subst_env expr1_subst env in
+      let (expr2_subst, expr2_typ, expr2) = infer_exp' funenv env expr2 reasons in
+      let subst_so_far = compose_subst expr1_subst expr2_subst in
+      let expr2_typ = apply_subst_typ subst_so_far expr2_typ in
+      (subst_so_far, expr2_typ, e, env)
+
+    | ETuple(exprs, loc) ->
+          let (env, subst, typs) =
+            List.fold_left 
+            (fun (env, subst, typs) expr -> 
+                  (* type the expression *)
+                  let (expr_subst, expr_typ, expr, env') = infer_exp funenv env expr reasons in
+                  let subst_so_far = compose_subst expr_subst subst in
+                  let env = apply_subst_env subst_so_far env' in
+                  let expr_typ = apply_subst_typ subst_so_far expr_typ in
+                  (env, subst_so_far, typs @ [expr_typ])
+            )
+            (env, [], []) exprs 
+          in (subst, TyTup(typs, loc), e, env)
+
+    | EGetItem(expr, a, b, loc) -> 
+      let (_, tuple_typ, _) = infer_exp' funenv env expr reasons in
+        begin match tuple_typ with
+              | TyTup(typs, _) -> 
+                ([], List.nth typs a, e, env)
+              | _ -> failwith "infer_exp': EGetItem impossible type"
+        end
+    | ESetItem(expr1, a, b, expr2, loc) ->
+      let (_, tuple_typ, _) = infer_exp' funenv env expr1 reasons in
+        begin match tuple_typ with
+              | TyTup(typs, loc) -> 
+                let typ = List.nth typs a in
+                let (expr2_subst, expr2_typ, expr2) = infer_exp' funenv env expr2 reasons in
+                let subst0 = unify expr2_typ typ loc reasons in 
+                
+                let subst_so_far = compose_subst subst0 expr2_subst in
+                let typ = apply_subst_typ subst_so_far typ in
+                ([], typ, e, env)
+              | _ -> failwith "infer_exp: EGetItem impossible type"
+        end
+
+    | EPrim1(op, expr, loc)         -> let (a, b, c) = infer_app e in (a, b, c, env)
+    | EPrim2(op, expr1, expr2, loc) -> let (a, b, c) = infer_app e in (a, b, c, env)
+    | EApp(fun_name, args, loc)     -> let (a, b, c) = infer_app e in (a, b, c, env)
+    | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
+    | EIf(c, t, f, loc) ->
+      let (c_subst, c_typ, c) = infer_exp' funenv env c reasons in
+      let env = apply_subst_env c_subst env in
+      let (t_subst, t_typ, t) = infer_exp' funenv env t reasons in
+      let env = apply_subst_env t_subst env in
+      let (f_subst, f_typ, f) = infer_exp' funenv env f reasons in
+      (* Compose the substitutions together *)
+      let subst_so_far = compose_subst (compose_subst c_subst t_subst) f_subst in
+      (* rewrite the types *)
+      let c_typ = apply_subst_typ subst_so_far c_typ in
+      let t_typ = apply_subst_typ subst_so_far t_typ in
+      let f_typ = apply_subst_typ subst_so_far f_typ in
+      (* unify condition with Bool *)
+      let unif_subst1 = unify c_typ tBool loc reasons in
+      (* unify two branches *)
+      let unif_subst2 = unify t_typ f_typ loc reasons in
+      (* compose all substitutions *)
+      let final_subst = compose_subst (compose_subst subst_so_far unif_subst1) unif_subst2 in
+      let final_typ = apply_subst_typ final_subst t_typ in
+      (final_subst, final_typ, e, env)
+    | ENil _ -> failwith "infer_exp: ENil not implemented"
 ;;
 
 let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme envt * sourcespan typ * sourcespan decl =
@@ -425,7 +492,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
 
      (* 1. type the arguments and return value. Create fresh type variables for arguments if there
          are no type annotations *)
-      (*let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in*)
+      let () = Printf.printf ";scheme of %s (before typed): %s\n" f_name (string_of_scheme scheme); in
       let scheme = match StringMap.find_opt f_name funenv with
                   | Some(scheme') -> scheme' (* in case that the scheme has been instantiated before *)
                   | None    -> scheme 
@@ -437,19 +504,24 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
         | TyArr(arg_typs, ret_typ, _) -> (arg_typs, ret_typ)
         | _ -> failwith "infer_decl: impossible type" 
       in
-      let new_env =
+      let rec build_env env arg_binds arg_typs = 
             List.fold_left2 
             (fun env arg_bind arg_typ ->
               match arg_bind with
             | BBlank(typ, _) -> env (* TODO *)
             | BName(arg_name, typ, _) -> StringMap.add arg_name arg_typ env
-            | BTuple(binds, _) -> env (* TODO *)
+            | BTuple(binds, _) -> 
+                begin match arg_typ with
+                | TyTup(typs, _) -> List.fold_left (fun env bind -> build_env env binds typs) env binds
+                | _ -> failwith "build_env: impossible type"
+                end
             ) 
             env arg_binds arg_typs 
-            (* note: arg_binds and arg_typs must have same length, which is assured by well-fromedness check *)
+      in  
+      let new_env = build_env env arg_binds arg_typs
       in
      (* 3. type the function body *)
-      let (b_subst, b_typ, b) = infer_exp funenv new_env b reasons in
+      let (b_subst, b_typ, b, _) = infer_exp funenv new_env b reasons in
      (* 4. unify the type of function body with type of the function definition *)
       let ret_typ = apply_subst_typ b_subst ret_typ in
       let unif_subst = unify b_typ ret_typ loc reasons in
@@ -458,7 +530,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
       let funenv = apply_subst_funenv final_subst funenv in
      (* 5. generalize the type of the function to type sheme *)
       let scheme = generalize env f_typ in
-      (*let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in*)
+      let () = Printf.printf ";scheme of %s (after typed): %s\n" f_name (string_of_scheme scheme); in
 
       (StringMap.add f_name scheme funenv, f_typ, decl)
 ;;
@@ -504,7 +576,7 @@ let infer_prog funenv env (p : sourcespan program) : ('a typ * sourcespan progra
         ) funenv declgroups
       in
       (* 2. type the body *)
-      let (unification, ret_typ, rebuilt_expr) = infer_exp funenv env body [] 
+      let (unification, ret_typ, rebuilt_expr, _) = infer_exp funenv env body [] 
       in 
         (* TODO: handle typedecls *)
         (ret_typ, p)
