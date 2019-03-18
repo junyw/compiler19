@@ -1,6 +1,8 @@
 %{
 open Exprs
 
+let make_namebind(name, typ, loc) =
+  if name = "_" then BBlank(typ, loc) else BName(name, typ, loc)
 %}
 
 %token <int> NUM
@@ -148,10 +150,13 @@ binds :
   | bind COMMA binds { $1::$3 }
 
 bind :
-  | ID { BName($1, TyBlank(Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()), (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
-  | ID COLON typ { BName($1, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | namebind { $1 }  
   | LPARENNOSPACE binds RPAREN { BTuple($2, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
   | LPARENSPACE binds RPAREN { BTuple($2, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+
+namebind :
+  | ID %prec SEMI { make_namebind($1, TyBlank(Parsing.symbol_start_pos (), Parsing.symbol_end_pos ()), (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | ID COLON typ { make_namebind($1, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
 
 typ :
   | ID { TyCon($1, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
@@ -193,6 +198,7 @@ tydecls :
   | tydecl tydecls { $1 :: $2 }
 
 program :
-  | tydecls decls expr EOF { Program($1, $2, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+| tydecls decls expr COLON typ EOF { Program($1, $2, EAnnot($3, $5, (Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 5)), (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }  
+| tydecls decls expr EOF { Program($1, $2, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
 
 %%

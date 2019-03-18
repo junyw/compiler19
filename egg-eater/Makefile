@@ -8,7 +8,7 @@ endif
 endif
 
 PKGS=oUnit,extlib,unix
-BUILD=ocamlbuild -r -use-ocamlfind 
+BUILD=ocamlbuild -r -use-ocamlfind -ocamlyacc 'ocamlyacc -v'
 
 main: *.ml parser.mly lexer.mll
 	$(BUILD) -package $(PKGS) main.native
