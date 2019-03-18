@@ -431,6 +431,18 @@ let type_expr_tests = [
      "let x = 1, y: Bool = x in y" 
      "Type error at expr_err_2, 1:11-1:18: expected Bool but got Int";
 
+  te "ty_err_1" 
+  {| def equal_a(a):
+        a == 1
+     equal_a(true) 
+  |} "Type error at ty_err_1, 3:5-3:18: expected Int but got Bool";
+
+  te "ty_err_2" 
+  {| def equal_a(a):
+        a == 1 && a == true
+     equal_a(1) 
+  |} "Type error at ty_err_2, 2:8-2:19: expected Bool but got Int";
+
 ];;
 
 
