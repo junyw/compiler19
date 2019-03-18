@@ -245,6 +245,8 @@ let anf (p : tag program) : unit aprogram =
         let (expr2_imm, expr2_setup) = helpI expr2 in
         (ImmId(tmp, ()), expr1_setup @ expr2_setup @ [(tmp, CSetItem(expr1_imm, a, expr2_imm, ()))])
 
+    | ENil(typ, tag) -> (ImmNil(()), [])
+    
     | _ -> raise (NotYetImplemented "Finish the remaining cases")
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
@@ -292,7 +294,7 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
           | None   -> [ UnboundId(x, loc) ]
           | Some _ -> []
         end
-      | ENil _ -> failwith "wf_E: ENil not implemented"
+      | ENil _ -> []
       | ESeq(expr1, expr2, loc) -> wf_E expr1 env fun_env @ wf_E expr2 env fun_env
       | ETuple(exprs, loc) -> []  (* TODO *)
       | EGetItem(expr, a, b, loc) -> [] (* TODO *)
@@ -735,7 +737,7 @@ and compile_imm e env : arg =
   | ImmBool(true, _)  -> const_true
   | ImmBool(false, _) -> const_false
   | ImmId(x, _)       -> (find env x)
-  | ImmNil _ -> failwith "compile_imm: ImmNil not implemented" (* TODO *)
+  | ImmNil _ -> HexConst(0x00000001) (* an invalid pointer tagged as tuple *)
 
 and compile_decl (d : tag adecl) : instruction list =
   match d with 

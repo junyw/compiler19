@@ -37,6 +37,7 @@ let mk_scheme (ids : string list) typ =
 
 let tInt = TyCon("Int", dummy_span)
 let tBool = TyCon("Bool", dummy_span)
+let tNil = TyCon("Nil", dummy_span)
 
 (*  forall,  Int -> Int *)
 let int2int = SForall([], mk_tyarr [tInt] tInt, dummy_span)
@@ -200,7 +201,7 @@ let bind (tyvarname : string) (t : 'a typ) : 'a typ subst =
 let ty_err t1 t2 loc reasons = TypeMismatch(loc, t2, t1, reasons)
 
 
-let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason list) : 'a typ subst =
+let rec unify tyenv (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason list) : 'a typ subst =
   let rec is_same_typ_var t1 t2 = match t1 with
     | TyVar(id1, _) -> 
       begin match t2 with 
@@ -232,14 +233,14 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
             let subst1 = 
                 List.fold_left2
                 (fun subst typ typ2 -> 
-                    let subst0 = unify typ typ2 loc reasons in
+                    let subst0 = unify tyenv typ typ2 loc reasons in
                         compose_subst subst subst0)
                 [] typs typs2 
             in
             (* unify the return type *)
             let typ = apply_subst_typ subst1 typ in
             let typ2 = apply_subst_typ subst1 typ2 in
-			   		let subst2 = unify typ typ2 loc reasons in
+			   		let subst2 = unify tyenv typ typ2 loc reasons in
 			   		compose_subst subst2 subst1
 			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 	     end
@@ -251,7 +252,7 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason l
                 let subst = 
                     List.fold_left2
                     (fun subst typ typ2 -> 
-                        let subst0 = unify typ typ2 loc reasons in
+                        let subst0 = unify tyenv typ typ2 loc reasons in
                             compose_subst subst subst0)
                     [] typs1 typs2 
                 in subst
@@ -334,7 +335,7 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
   | _ -> failwith "generalize: impossible case"
 ;;
 
-let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
+let rec infer_exp (tyenv : sourcespan typ envt) (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
         : (sourcespan typ subst * sourcespan typ * sourcespan expr * sourcespan typ envt) (* unification, result typ, rebuilt expr *)=
   (* infer_app: infer type of function call, including primitive function calls *)
   let infer_app (e : 'a expr)  
@@ -356,7 +357,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       let (arg_substs, args_typs) = 
          List.fold_left 
          (fun (subst_so_far, args_typs) arg -> 
-            let (arg_subst, arg_typ, arg, _) = infer_exp funenv env arg reasons in 
+            let (arg_subst, arg_typ, arg, _) = infer_exp tyenv funenv env arg reasons in 
             (compose_subst arg_subst subst_so_far, args_typs@[arg_typ])
          ) ([], []) args
       in
@@ -364,14 +365,14 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       let app_typ = TyArr(args_typs, ret_ty, loc) in
       let app_typ = apply_subst_typ arg_substs app_typ in
       (* unification *)
-      let unif_subst1 = unify app_typ fun_ty loc reasons in
+      let unif_subst1 = unify tyenv app_typ fun_ty loc reasons in
       let final_subst = compose_subst unif_subst1 arg_substs in
       let final_typ = apply_subst_typ final_subst ret_ty in
       (final_subst, final_typ, e)   
   in
   let rec infer_exp' (funenv : sourcespan scheme envt) (env : sourcespan typ envt) (e : sourcespan expr) reasons
         : (sourcespan typ subst * sourcespan typ * sourcespan expr) (* unification, result typ, rebuilt expr *)=
-        let (a, b, c, _) = infer_exp funenv env e reasons in (a, b, c)
+        let (a, b, c, _) = infer_exp tyenv funenv env e reasons in (a, b, c)
   in
     match e with
     | ENumber(v, loc) -> ([], tInt, e, env)
@@ -383,7 +384,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
         let (subst, typ, expr) = infer_exp' funenv env expr reasons in
         begin match bind with
         | BTuple(binds, _) -> 
-          let (tuple_subst, tuple_typ, _, env) = infer_exp funenv env expr reasons in
+          let (tuple_subst, tuple_typ, _, env) = infer_exp tyenv funenv env expr reasons in
           let tuple_typ = unblank tuple_typ in
           begin match expr with
                 | ETuple(tuple_exprs, a) -> 
@@ -425,7 +426,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
                 (* typ is the user provided type annotation, maybe blank *)
                 let typ = unblank typ in
                 (* unification *)
-                let subst0 = unify binding_typ typ loc' reasons in 
+                let subst0 = unify tyenv binding_typ typ loc' reasons in 
                 let subst_so_far = compose_subst (compose_subst subst0 subst) binding_subst in
                 let binding_typ = apply_subst_typ subst_so_far binding_typ in
                 (* add new binding type to environment *)
@@ -455,7 +456,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
             List.fold_left 
             (fun (env, subst, typs) expr -> 
                   (* type the expression *)
-                  let (expr_subst, expr_typ, expr, env') = infer_exp funenv env expr reasons in
+                  let (expr_subst, expr_typ, expr, env') = infer_exp tyenv funenv env expr reasons in
                   let subst_so_far = compose_subst expr_subst subst in
                   let env = apply_subst_env subst_so_far env' in
                   let expr_typ = apply_subst_typ subst_so_far expr_typ in
@@ -478,7 +479,7 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
                 let typ = List.nth typs a in
                 let typ = unblank typ in
                 let (expr2_subst, expr2_typ, expr2) = infer_exp' funenv env expr2 reasons in
-                let subst0 = unify expr2_typ typ loc reasons in 
+                let subst0 = unify tyenv expr2_typ typ loc reasons in 
                 
                 let subst_so_far = compose_subst subst0 expr2_subst in
                 let typ = apply_subst_typ subst_so_far typ in
@@ -503,17 +504,17 @@ let rec infer_exp (funenv : sourcespan scheme envt) (env : sourcespan typ envt) 
       let t_typ = apply_subst_typ subst_so_far t_typ in
       let f_typ = apply_subst_typ subst_so_far f_typ in
       (* unify condition with Bool *)
-      let unif_subst1 = unify c_typ tBool loc reasons in
+      let unif_subst1 = unify tyenv c_typ tBool loc reasons in
       (* unify two branches *)
-      let unif_subst2 = unify t_typ f_typ loc reasons in
+      let unif_subst2 = unify tyenv t_typ f_typ loc reasons in
       (* compose all substitutions *)
       let final_subst = compose_subst (compose_subst subst_so_far unif_subst1) unif_subst2 in
       let final_typ = apply_subst_typ final_subst t_typ in
       (final_subst, final_typ, e, env)
-    | ENil _ -> failwith "infer_exp: ENil not implemented"
+    | ENil _ -> ([], tNil, e, env)
 ;;
 
-let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme envt * sourcespan typ * sourcespan decl =
+let infer_decl tyenv funenv env (decl : sourcespan decl) reasons : sourcespan scheme envt * sourcespan typ * sourcespan decl =
   match decl with
   | DFun(f_name, arg_binds, scheme, b, loc) ->
 
@@ -525,7 +526,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
                   | None    -> scheme 
       in
       let f_typ = instantiate scheme in
-     (* 2. add the type of the arguments to the type environment and type the body *)
+     (* 2. add the type of the arguments to the variable environment and type the body *)
       let (arg_typs, ret_typ) = 
         match f_typ with
         | TyArr(arg_typs, ret_typ, _) -> (arg_typs, ret_typ)
@@ -548,10 +549,10 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
       let new_env = build_env env arg_binds arg_typs
       in
      (* 3. type the function body *)
-      let (b_subst, b_typ, b, _) = infer_exp funenv new_env b reasons in
+      let (b_subst, b_typ, b, _) = infer_exp tyenv funenv new_env b reasons in
      (* 4. unify the type of function body with type of the function definition *)
       let ret_typ = apply_subst_typ b_subst ret_typ in
-      let unif_subst = unify b_typ ret_typ loc reasons in
+      let unif_subst = unify tyenv b_typ ret_typ loc reasons in
       let final_subst = compose_subst b_subst unif_subst in
       let f_typ = apply_subst_typ final_subst f_typ in
       let funenv = apply_subst_funenv final_subst funenv in
@@ -563,7 +564,7 @@ let infer_decl funenv env (decl : sourcespan decl) reasons : sourcespan scheme e
 ;;
 
 (* infer_group: inter types for function gourps that may be mutually recursive *)
-let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
+let infer_group tyenv funenv env (g : sourcespan decl list) : (sourcespan scheme envt * sourcespan decl list) =
   (* 1. first pull out the scheme of all functions in the group *)
     let funenv = 
       List.fold_left
@@ -577,7 +578,7 @@ let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt 
     let (funenv, f_typs) =
       List.fold_left 
       (fun (funenv, f_typs) (DFun(f_name, _, _, _, _) as decl) -> 
-         let (funenv', f_typ, _) = infer_decl funenv env decl [] in
+         let (funenv', f_typ, _) = infer_decl tyenv funenv env decl [] in
              (funenv', (f_name, f_typ)::f_typs)
       ) (funenv, []) g
     in
@@ -594,18 +595,26 @@ let infer_group funenv env (g : sourcespan decl list) : (sourcespan scheme envt 
 let infer_prog funenv env (p : sourcespan program) : ('a typ * sourcespan program) =
   match p with
   | Program(typedecls, declgroups, body, tag) ->
-      (* 1. type the declgroups *)
+      (* 1. process typedecls, add type aliases to tyenv *)
+      let tyenv =   
+        List.fold_left
+        (fun tyenv typedecl -> 
+          match typedecl with
+          | TyDecl(tyname, typs, loc) ->
+              StringMap.add tyname (TyTup(typs, loc)) tyenv
+        ) StringMap.empty typedecls
+      in
+      (* 2. type the declgroups *)
       let funenv = 
         List.fold_left 
         (fun funenv g ->
-          let (funenv', _) = infer_group funenv env g in
+          let (funenv', _) = infer_group tyenv funenv env g in
             funenv'
         ) funenv declgroups
       in
-      (* 2. type the body *)
-      let (unification, ret_typ, rebuilt_expr, _) = infer_exp funenv env body [] 
+      (* 3. type the body *)
+      let (unification, ret_typ, rebuilt_expr, _) = infer_exp tyenv funenv env body [] 
       in 
-        (* TODO: handle typedecls *)
         (ret_typ, p)
 ;;
 

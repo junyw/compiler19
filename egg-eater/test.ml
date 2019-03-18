@@ -405,6 +405,20 @@ let destructuring_tests = [
                    reverse((1, (2, 3))) |} "(3,(2,1))";
 ];;
 
+let recursive_data = [
+
+  t "nil_1" "istuple(nil: Nil)" "true";
+  t "recursive_1" {|
+    type intlist = (int * intlist)
+
+    def length(l : intlist):
+      if l == (nil : intlist): 0
+      else: 1 + length(l[1 of 2])
+
+    length((0, nil: Nil))
+  |} "1";
+];;
+
 let type_expr_tests = [
   t "expr_add1" 
     "let x: Int = 1 in x" "1";
@@ -427,6 +441,7 @@ let all_tests = []
   @ seq_tests
   @ destructuring_tests
   @ language_tests  
+  @ recursive_data
   @ type_expr_tests
 ;;
 
