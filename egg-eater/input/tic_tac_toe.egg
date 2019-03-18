@@ -134,6 +134,7 @@ def get_best_move(board, counters, player, depth):
 and
 def init_game():
 	let empty_board = make_board() in
+	print_board(empty_board);
 	let counters = (make_row(), make_row(), (0,), (0,)) in
 		play_game(empty_board, 0, 1, counters)
 and
@@ -147,8 +148,8 @@ and
 def flip_player(player):
 	if player == 1: -1 else: 1
 and
-def play_game(board, round, player, counters):
-  if round == 10: 0
+def play_game(board, step, player, counters):
+  if step == 10: 0
   else: 
     let move = (if player == 1: get_user_move(board) 
                 else: get_computer_move(board, counters, player)) in
@@ -160,7 +161,7 @@ def play_game(board, round, player, counters):
   		let winner = check_winner(counters, x, y, player) in
   		  if winner == 0:
   	    	let next_player = flip_player(player) in
-  			  play_game(board, round + 1, next_player, counters)
+  			  play_game(board, step + 1, next_player, counters)
   		  else:
   		  	if winner == -1 : 2 else: 1
 

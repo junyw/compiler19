@@ -435,19 +435,20 @@ let desugar (p : sourcespan program) : sourcespan program =
                 (args' @ [BName(tmp, TyBlank(tag')(* TODO: type? *), tag')], new_bindings @ [(bind, EId(tmp, tag), tag)])
         ) ([], []) args
       in
-        DFun(name, args', scheme, helpE (ELet(new_bindings, body, tag)), tag)
+        DFun(name, args', helpS scheme, helpE (ELet(new_bindings, body, tag)), tag)
   and helpG (g : sourcespan decl list) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for definition groups"])
+    List.map helpD g
   and helpT (t : sourcespan typ) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for types"])
+    t (* TODO *)
   and helpS (s : sourcespan scheme) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for typeschemes"])
+    s (* TODO *)
   and helpTD (t : sourcespan tydecl) (* other parameters may be needed here *) =
-    Error([NotYetImplemented "Implement desugaring for type declarations"])
+    match t with
+    | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
   in
   match p with
-  | Program(tydecls, decls, body, tag) ->
-      Program(tydecls, List.map (fun g -> List.map helpD g) decls, helpE body, tag)
+  | Program(tydecls, declgroups, body, tag) ->
+      Program(List.map helpTD tydecls, List.map helpG declgroups, helpE body, tag)
 
 ;;
 

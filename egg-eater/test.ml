@@ -325,21 +325,6 @@ t "arity_5" {| def f(a, b, c, d, e, f, g):
              f(1, 2, 3, 4, 5, 6, 7)|} "7";
 ];;
 
-let type_expr_tests = [
-  t "expr_add1" 
-    "let x: Int = 1 in x" "1";
-
-  te "expr_err_1" 
-     "let x: Bool = 1 in x" 
-     "Type error at expr_err_1, 1:4-1:11: expected Bool but got Int";
-
-  te "expr_err_2" 
-     "let x = 1, y: Bool = x in y" 
-     "Type error at expr_err_2, 1:11-1:18: expected Bool but got Int";
-
-];;
-
-
 let language_tests = 
     expr_tests 
   @ renaming_tests
@@ -418,9 +403,22 @@ let destructuring_tests = [
   t "des_fun_3" {| def reverse((x, (y, z))):
                         (z, (y, x))
                    reverse((1, (2, 3))) |} "(3,(2,1))";
+];;
 
+let type_expr_tests = [
+  t "expr_add1" 
+    "let x: Int = 1 in x" "1";
+
+  te "expr_err_1" 
+     "let x: Bool = 1 in x" 
+     "Type error at expr_err_1, 1:4-1:11: expected Bool but got Int";
+
+  te "expr_err_2" 
+     "let x = 1, y: Bool = x in y" 
+     "Type error at expr_err_2, 1:11-1:18: expected Bool but got Int";
 
 ];;
+
 
 let all_tests = []
   @ wf_errs
@@ -429,6 +427,7 @@ let all_tests = []
   @ seq_tests
   @ destructuring_tests
   @ language_tests  
+  @ type_expr_tests
 ;;
 
 let suite =
