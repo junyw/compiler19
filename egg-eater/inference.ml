@@ -186,82 +186,67 @@ let ftv_scheme (s : 'a scheme) : StringSet.t =
 let ftv_env (e : 'a typ envt) : StringSet.t = 
   failwith "Compute the free type variables of an environment here"
 ;;
-let occurs (name : string) (t : 'a typ) =
-  StringSet.mem name (ftv_type t)
-;;
-exception OccursCheck of string
-let bind (tyvarname : string) (t : 'a typ) : 'a typ subst =
+(*let bind (tyvarname : string) (t : 'a typ) : 'a typ subst =
   match t with
-  | TyVar(name, _) when tyvarname = name -> [] (* nothing to be done *)
+  | TyVar(name, _) when tyvarname = name -> []
   | _ ->
      if StringSet.mem tyvarname (ftv_type t)
      then raise (OccursCheck (sprintf "Infinite types: %s occurs in %s" tyvarname (string_of_typ t)))
      else [(tyvarname, t)]
 ;;
-let ty_err t1 t2 loc reasons = TypeMismatch(loc, t2, t1, reasons)
+
+*)
 
 
-let rec unify tyenv (t1 : 'a typ) (t2 : 'a typ) (loc : sourcespan) (reasons : reason list) : 'a typ subst =
-  let rec is_same_typ_var t1 t2 = match t1 with
+(* unify:
+   given two types t1 and t2, and a pre-existing substitution sub,
+   returns the most general substitution sub' which extends sub 
+   and makes two given types equal
+*)
+exception OccursCheck of string
+
+let rec unify (t1 : 'a typ) (t2 : 'a typ) (sub : 'a typ subst) (loc : sourcespan) (reasons : reason list) : 'a typ subst =  
+  let occurs (name : string) (t : 'a typ) =
+    StringSet.mem name (ftv_type t)
+  in
+  (* unfiy_typs: helper function that unify two list of types *)
+  let unfiy_typs (typs1 : 'a typ list) (typs2 : 'a typ list) (sub : 'a typ subst) loc reasons : 'a typ subst = 
+      List.fold_left2
+      (fun sub t1 t2 -> unify t1 t2 sub loc reasons)
+      sub typs1 typs2 
+  in
+    match t1 with 
     | TyVar(id1, _) -> 
-      begin match t2 with 
-            | TyVar(id2, _) -> String.equal id1 id2
-            | _ -> false
+      begin match t2 with
+            | TyVar(id2, _) when String.equal id1 id2 -> sub
+            | _ when not (occurs id1 t2) -> (* extend sub *) apply_subst_subst [(id1, t2)] sub
+            | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
+      end
+    | TyArr(typs1, t1, _) -> 
+      begin match t2 with  
+            | TyArr(typs2, t2, _) -> 
+              (* unify argument types *)
+              let sub = unfiy_typs typs1 typs2 sub loc reasons in 
+              (* unify the return type *)
+              let sub = unify t1 t2 sub loc reasons in
+              sub
+	    end
+    | TyTup(typs1, _) -> 
+      begin match t2 with  
+            | TyTup(typs2, _) -> 
+              (* unify tuple element types *)
+              unfiy_typs typs1 typs2 sub loc reasons 
       end
     | TyCon(id1, _) ->
         begin match t2 with 
-              | TyCon(id2, _) -> String.equal id1 id2
-              | _ -> false
-        end
-    | TyTup(typs1, _) ->
-        begin match t2 with 
-              | TyTup(typs2, _) -> List.fold_left (fun a b -> a && b) true (List.map2 is_same_typ_var typs1 typs2)
-              | _ -> false
+              | TyCon(id2, _) when String.equal id1 id2 ->  sub
+              | TyVar(id2, _) when not (occurs id2 t1)  ->  (* extend sub *) apply_subst_subst [(id2, t1)] sub
+              | _ -> (TypeMismatch(loc, t2, t1, reasons))
         end
 
-    | _ -> false 
-  in
-  if is_same_typ_var t1 t2 then []
-  else 
-    match t1 with 
-    | TyVar(id1, _) when not (occurs id1 t2) -> 
-       [(id1, t2)]
-    | TyArr(typs, typ, _) -> 
-     begin match t2 with  
-          | TyArr(typs2, typ2, _) -> 
-            (* unify argument types *)
-            let subst1 = 
-                List.fold_left2
-                (fun subst typ typ2 -> 
-                    let subst0 = unify tyenv typ typ2 loc reasons in
-                        compose_subst subst subst0)
-                [] typs typs2 
-            in
-            (* unify the return type *)
-            let typ = apply_subst_typ subst1 typ in
-            let typ2 = apply_subst_typ subst1 typ2 in
-			   		let subst2 = unify tyenv typ typ2 loc reasons in
-			   		compose_subst subst2 subst1
-			   | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
-	     end
-    | TyTup(typs1, _) -> 
-     begin match t2 with  
-          | TyVar(id2, _) when not (occurs id2 t1) -> [(id2, t1)]
-          | TyTup(typs2, _) -> 
-                (* unify argument types *)
-                let subst = 
-                    List.fold_left2
-                    (fun subst typ typ2 -> 
-                        let subst0 = unify tyenv typ typ2 loc reasons in
-                            compose_subst subst subst0)
-                    [] typs1 typs2 
-                in subst
-          | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
-     end
     | _ -> 
       begin match t2 with 
-            | TyVar(id2, _) when not (occurs id2 t1) ->
-		 			     [(id2, t1)]
+            | TyVar(id2, _) when not (occurs id2 t1) -> (* extend sub *) apply_subst_subst [(id2, t1)] sub
             | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
       end
 ;;     
@@ -276,7 +261,9 @@ let gensym =
 (* Eliminates all `TyBlank`s in a type, and replaces them with fresh type variables *)
 let rec unblank (t : 'a typ) : 'a typ =
   match t with
-  | TyBlank tag -> TyVar(gensym "blank", tag)
+  | TyBlank tag -> 
+      (* create fresh type variable *)
+      TyVar(gensym "blank", tag)
   | TyCon _ -> t
   | TyVar _ -> t
   | TyArr(args, ret, tag) ->
@@ -621,5 +608,5 @@ let infer_prog funenv env (p : sourcespan program) : ('a typ * sourcespan progra
 let type_synth (p : sourcespan program) : sourcespan program fallible =
   try
     let (_, p) = infer_prog initial_env StringMap.empty p in Ok(p)
-  with e -> Error([e])
+  with e -> Error([e]) 
 ;;
