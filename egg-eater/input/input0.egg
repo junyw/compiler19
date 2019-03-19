@@ -1,1 +1,4 @@
-input(0)
+def add(a, b):
+  a + b + 1
+
+add(1, 2)
