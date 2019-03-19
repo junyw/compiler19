@@ -208,7 +208,7 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (sub : 'a typ subst) (loc : sourcespan
     let t2 = apply_subst_typ sub t2 in
     match (t1, t2) with 
     | (TyVar(id1, _), TyVar(id2, _)) when (String.equal id1 id2) -> sub
-    | (TyVar(id1, _), t2) when not (occurs id1 t2) -> (* extend sub *) apply_subst_subst [(id1, t2)] sub
+    | (TyVar(id1, _), t2) when not (occurs id1 t2) -> (* extend sub *) (id1, t2)::sub
     | (_, TyVar(id2, _)) -> unify t2 t1 sub loc reasons
     | (TyArr(typs1, typ1, _), TyArr(typs2, typ2, _)) -> 
         (* unify argument types *)
@@ -287,12 +287,6 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
   | _ -> failwith "generalize: impossible case"
 ;;
 
-let id_of_typ (t : 'a typ) : string = 
-  match t with
-  | TyVar(x, _) -> x
-  | _ -> failwith "id_of_typ: error"
-;;
-
 (* find_pos: find type of vairable from environment, or find type scheme of function from funenv *)
 let rec find_pos (ls : 'a envt) x pos : 'a =
   try
@@ -318,6 +312,8 @@ let rec infer_exp
           (s  : 'a typ subst) 
           reasons
         : sourcespan typ subst =
+  let () = Printf.printf ";infer_exp %s %s\n" (string_of_typ t) (string_of_expr e) in
+
   (* infer_app: infer type of function call, including primitive function calls *)
   let infer_app (t : 'a typ) (e : 'a expr): sourcespan typ subst =
       let (fun_name, args, loc') =
@@ -347,18 +343,24 @@ let rec infer_exp
   in
   match e with
   | ENil _          -> s
-  | ENumber(v, loc) -> apply_subst_subst [(id_of_typ t, tInt)] s
-  | EBool(v, loc)   -> apply_subst_subst [(id_of_typ t, tBool)] s
+  | ENumber(v, loc) -> begin match t with 
+                        | TyVar(id, _) -> (id, tInt)::s
+                        | _ -> s
+                       end
+  | EBool(v, loc)   -> begin match t with 
+                        | TyVar(id, _) -> (id, tBool)::s
+                        | _ -> s
+                       end
   | EId(x, loc)     -> let a = find_pos env x loc in
                            unify a t s loc reasons
-  | ELet([], e, loc) -> infer_exp funenv env t e s reasons
+  | ELet([], e2, loc) -> infer_exp funenv env t e2 s reasons
   | ELet((x, e1, _)::rest, e2, loc) -> 
     begin match x with
     | BName(name, typ, _) -> 
         (* generate a fresh type for typ, if it is blank *)
         let a = unblank typ in
         (* type the binding *)
-        let s1 = infer_exp funenv env a e s reasons in
+        let s1 = infer_exp funenv env a e1 s reasons in
         (* type the rest *)
         infer_exp funenv (StringMap.add name (apply_subst_typ s1 a) (apply_subst_env s1 env)) t (ELet(rest, e2, loc)) s1 reasons
     | BTuple(binds, _) -> (* TODO *) failwith "infer_expr: ELet - tuple not implemented yet"
@@ -398,7 +400,7 @@ let rec infer_exp
   | EApp(fun_name, args, loc)     -> infer_app t e
   | EAnnot(expr, typ, loc) -> failwith "EAnnot: Finish implementing inferring types for expressions"
   | EIf(c_expr, t_expr, f_expr, loc) ->
-    let s = infer_exp funenv env t c_expr s reasons in
+    let s = infer_exp funenv env tBool c_expr s reasons in
     let s = infer_exp funenv env t t_expr s reasons in
         infer_exp funenv env t f_expr s reasons
 ;;
@@ -470,12 +472,11 @@ let infer_group funenv env (g : sourcespan decl list) (s : 'a typ subst)
     funenv
 ;;
 
-let infer_prog funenv env (p : sourcespan program)  (s : 'a typ subst) : 'a typ =
-  let () = Printf.printf "infer_prog" in
+let infer_prog funenv env (p : sourcespan program) : 'a typ =
   match p with
   | Program(typedecls, declgroups, body, tag) ->
       (* 1. process typedecls, add type aliases to substitution s *)
-      let s =   
+      let s =
         List.fold_left
         (fun s typedecl -> 
           match typedecl with
@@ -499,6 +500,8 @@ let infer_prog funenv env (p : sourcespan program)  (s : 'a typ subst) : 'a typ 
 
 let type_synth (p : sourcespan program) : sourcespan program fallible =
   try
-    let _ = infer_prog initial_env StringMap.empty p in Ok(p)
+    let t = infer_prog initial_env StringMap.empty p in
+    let () = Printf.printf ";type_synth %s\n" (string_of_typ t) in
+     Ok(p)
   with e -> Error([e]) 
 ;;
