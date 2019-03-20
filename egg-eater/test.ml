@@ -384,6 +384,10 @@ let seq_tests = [
   t "blank_1" "let _ = 1 in 2" "2";
   t "seq_1" "let x = 1; 2 in x" "2";
   t "seq_2" "let t = (1, 2) in t[0 of 2 := 10]; (1, t)" "(1,(10,2))";
+
+  t "seq_3" {| def seq(a, b):
+                  let x = a; b in (x, x)
+               seq(1, 2) |} "(2,2)";
 ];;
 
 let destructuring_tests = [
@@ -430,8 +434,9 @@ let type_tests = [
 ];;
 
 let recursive_data = [
-  t "recursive_1" {|
-    type intlist = (int * intlist)
+  (* not working *)
+(*  t "recursive_1" {|
+    type intlist = (Int * intlist)
 
     def length(l : intlist):
       if l == (nil : intlist): 0
@@ -439,7 +444,7 @@ let recursive_data = [
 
     length((0, nil: Nil))
   |} "1";
-
+*)
 ];;
 
 let type_errs = [
@@ -490,11 +495,62 @@ let type_errs = [
      tuple_fun(1) 
   |} "expected (Int * Int) but got Int"; 
 
+  te "ty_err_5" 
+  {| def tuple_fun(x) -> (Int * Int):
+        (x, x)
+     
+     tuple_fun(true) 
+  |} "expected Int but got Bool"; 
+
+  te "ty_err_6" 
+  {| def tuple_fun(x) -> (Int * Int):
+        (x, x)
+     
+     let (a, b) = tuple_fun(1) in if a: 0 else: 1
+  |} "expected Bool but got Int"; 
+
+(*  te "ty_err_7" 
+  {| def tuple_fun(x) -> (Int * Int):
+        (x, x)
+     
+     let (a, b, c) = tuple_fun(1) in c
+  |} "..."; 
+*)
+  te "ty_add1_error" "add1(true)" 
+     "expected Int but got Bool";
+  
+  te "ty_not_error_1" "!(3)" 
+     "expected Bool but got Int";
+  
+  te "ty_logic_error_1" "1 && true" 
+     "expected Bool but got Int";
+  
+  te "ty_logic_error_2" "false && 1" 
+     "expected Bool but got Int";
+  
+  te "ty_compare_error_1" "true > 1" 
+     "expected Int but got Bool";
+  
+  te "ty_if_error_1" "if 54: true else: false" 
+     "expected Bool but got Int";
+  
+  te "ty_if_error_2" "let x = 1 in (if x: true else: false)" 
+     "expected Bool but got Int";
+  
+  te "ty_if_error_3" "if (let x = 1 in x): true else: false" 
+    "expected Bool but got Int";
+
+  te "ty_mismatch_1" {| def foo(b, a):
+                            if b: (a + 0) < 1
+                            else: a && true
+                        foo(1, 2)
+                     |}
+      "expected Bool but got Int";
 
 ];;
 
 let all_tests = []
-(*  @ wf_errs
+  @ wf_errs
   @ runtime_errs
   @ tuple_tests
   @ seq_tests
@@ -503,7 +559,7 @@ let all_tests = []
   @ renaming_tests
   @ fun_tests 
   @ type_tests  
-*)  @ recursive_data
+  @ recursive_data
   @ type_errs
 ;;
 

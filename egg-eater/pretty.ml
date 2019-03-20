@@ -75,6 +75,7 @@ let rec string_of_typ (t : 'a typ) : string =
                            (ExtString.String.join ", " (List.map string_of_typ args))
   | TyVar(id, _) -> "'" ^ id
   | TyTup(tys, _) -> "(" ^ (ExtString.String.join " * " (List.map string_of_typ tys)) ^ ")"
+
 let string_of_scheme (s : 'a scheme) : string =
   match s with
   | SForall(vars, typ, _) -> sprintf "Forall %s, %s" (ExtString.String.join ", " vars) (string_of_typ typ)

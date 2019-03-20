@@ -109,6 +109,39 @@ let gensym =
     !count
   in fun str -> sprintf "%s_%d" str (next ());;
 
+(* free type variables of a type as the set of any type variables that appear within it *)
+let rec ftv_type (t : 'a typ) : StringSet.t =
+  match t with
+  | TyBlank _ -> StringSet.empty
+  | TyCon _ -> StringSet.empty
+  | TyVar(name, _) -> StringSet.singleton name
+  | TyArr(args, ret, _) ->
+    List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
+                    args
+                    (ftv_type ret)
+  | TyApp(typ, args, _) ->
+    List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
+                    args
+                    (ftv_type typ)
+  | TyTup(typs, tag) -> 
+    List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
+                    typs
+                    StringSet.empty
+;;
+
+
+let ftv_scheme (s : 'a scheme) : StringSet.t =
+  match s with
+  | SForall(args, typ, _) ->
+     StringSet.diff (ftv_type typ) (StringSet.of_list args)
+let ftv_env (e : 'a typ envt) : StringSet.t = 
+  failwith "Compute the free type variables of an environment here"
+;;
+let occurs (name : string) (t : 'a typ) =
+  StringSet.mem name (ftv_type t)
+;;
+
+
 (* subst_var_typ: converts each occurrence of the given type variable tyvar 
     or type constant (for type alias)
     into the desired type to_typ in the target type in_typ *)
@@ -116,7 +149,9 @@ let rec subst_var_typ (((tyvar : string), (to_typ : 'a typ)) as sub) (in_typ : '
   match in_typ with 
   | TyBlank _ -> in_typ 
   | TyCon(id, _) -> if String.equal tyvar id then to_typ else in_typ
-  | TyVar(tyvar1, _) -> if String.equal tyvar tyvar1 then to_typ else in_typ
+  | TyVar(tyvar1, _) ->
+      if String.equal tyvar tyvar1 then to_typ
+      else in_typ
   | TyArr(typs, typ, tag) ->
     let typs_subst = List.map (fun typ -> subst_var_typ sub typ) typs in
     let typ_subst = subst_var_typ sub typ in
@@ -159,35 +194,6 @@ let compose_subst (sub1 : 'a typ subst) (sub2 : 'a typ subst) : 'a typ subst =
   sub1 @ (apply_subst_subst sub1 sub2)
 ;;
 
-(* free type variables of a type as the set of any type variables that appear within it *)
-let rec ftv_type (t : 'a typ) : StringSet.t =
-  match t with
-  | TyBlank _ -> StringSet.empty
-  | TyCon _ -> StringSet.empty
-  | TyVar(name, _) -> StringSet.singleton name
-  | TyArr(args, ret, _) ->
-    List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
-                    args
-                    (ftv_type ret)
-  | TyApp(typ, args, _) ->
-    List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
-                    args
-                    (ftv_type typ)
-  | TyTup(typs, tag) -> 
-    List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
-                    typs
-                    StringSet.empty
-
-;;
-let ftv_scheme (s : 'a scheme) : StringSet.t =
-  match s with
-  | SForall(args, typ, _) ->
-     StringSet.diff (ftv_type typ) (StringSet.of_list args)
-let ftv_env (e : 'a typ envt) : StringSet.t = 
-  failwith "Compute the free type variables of an environment here"
-;;
-
-
 (* unify:
    given two types t1 and t2, and a pre-existing substitution sub,
    returns the most general substitution sub' which extends sub 
@@ -196,9 +202,8 @@ let ftv_env (e : 'a typ envt) : StringSet.t =
 exception OccursCheck of string
 
 let rec unify (t1 : 'a typ) (t2 : 'a typ) (sub : 'a typ subst) (loc : sourcespan) (reasons : reason list) : 'a typ subst =  
-  let occurs (name : string) (t : 'a typ) =
-    StringSet.mem name (ftv_type t)
-  in
+  (*let () = Printf.printf ";unify of %s -  %s\n" (string_of_typ t1) (string_of_typ t2) in*)
+
   (* unfiy_typs: helper function that unify two list of types *)
   let unfiy_typs (typs1 : 'a typ list) (typs2 : 'a typ list) (sub : 'a typ subst) loc reasons : 'a typ subst = 
       List.fold_left2
@@ -345,8 +350,10 @@ let rec infer_exp
           (unify typ t s1 loc' reasons)
       | _ -> failwith "infer_app: impossible type"
   in
+  (*let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in*)
+
   match e with
-  | ENil _          -> s
+  | ENil(typ, loc)  -> unify typ t s loc reasons
   | ENumber(v, loc) -> unify tInt t s loc reasons
 
   | EBool(v, loc)   -> unify tBool t s loc reasons
@@ -469,7 +476,7 @@ let infer_decl funenv env (t : 'a typ) (decl : sourcespan decl)  (s : 'a typ sub
 
 (*        let () =  List.iter (fun (name, typ) -> Printf.printf ";\t%s => %s\n" name (string_of_typ typ)) s in
 *)
-        let () = Printf.printf ";type of %s (after typed): %s\n" f_name (string_of_typ (apply_subst_typ s t)) in
+        (*let () = Printf.printf ";type of %s (after typed): %s\n" f_name (string_of_typ (apply_subst_typ s t)) in*)
 
         s
 
@@ -523,7 +530,11 @@ let infer_prog funenv env (p : sourcespan program) : 'a typ =
         (fun s typedecl -> 
           match typedecl with
           | TyDecl(tyname, typs, loc) ->
-              (tyname, TyTup(typs, loc))::s
+              let a = TyVar(tyname, loc) in
+              let b = TyTup(typs, loc) in
+              (* prevent loop forever *)
+              let b = apply_subst_typ [(tyname, a)] b in 
+              (tyname, b)::s
         ) [] typedecls
       in
       (* 2. type the declgroups *)

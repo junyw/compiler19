@@ -865,6 +865,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  |>  debug
+  (*|>  debug*)
   |> (add_phase result compile_prog)
 ;;
