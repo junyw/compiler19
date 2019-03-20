@@ -49,6 +49,13 @@ let rec find ls x =
   | [] -> raise (InternalCompilerError (sprintf "Name %s not found" x))
   | (y,v)::rest ->
      if y = x then v else find rest x
+;;
+let rec find_opt ls x =
+  match ls with
+  | [] -> None
+  | (y,v)::rest ->
+     if String.equal y x then Some(v) else find_opt rest x
+;;
 
 let count_vars e =
   let rec helpA e =
