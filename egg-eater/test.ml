@@ -370,7 +370,7 @@ let tuple_tests = [
   t "tset_2" {| let three = (0, 0, 0) in
                   let _ = three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] in
                     let pair = (0, 0) in
-                      pair[0 of 2 := three[1 of 3 := 10]] |} "((1,10,3),0)";
+                      pair[0 of 2 := three[1 of 3]] |} "(2,0)";
 
   t "tset_3" {| let three = (0, 0, 0) in
                   three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] |} "(1,2,3)";
@@ -425,23 +425,23 @@ let type_expr_tests = [
 
   te "expr_err_1" 
      "let x: Bool = 1 in x" 
-     "Type error at expr_err_1, 1:4-1:11: expected Bool but got Int";
+     "expected Bool but got Int";
 
   te "expr_err_2" 
      "let x = 1, y: Bool = x in y" 
-     "Type error at expr_err_2, 1:11-1:18: expected Bool but got Int";
+     "expected Bool but got Int";
 
   te "ty_err_1" 
   {| def equal_a(a):
         a == 1
      equal_a(true) 
-  |} "Type error at ty_err_1, 3:5-3:18: expected Int but got Bool";
+  |} "expected Int but got Bool";
 
   te "ty_err_2" 
   {| def equal_a(a):
         a == 1 && a == true
      equal_a(1) 
-  |} "Type error at ty_err_2, 2:8-2:19: expected Bool but got Int";
+  |} "expected Bool but got Int"; (* ? *)
 
 ];;
 
