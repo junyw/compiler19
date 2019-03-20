@@ -1,3 +1,7 @@
-def equal_a(a):
-        a == 1
-     equal_a(true) 
+type intlist = (Int * intlist)
+
+def length(l : intlist):
+  if l == (nil : intlist): 0
+  else: 1
+
+1

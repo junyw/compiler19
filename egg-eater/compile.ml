@@ -330,8 +330,8 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
               else []
         end
 
-      | EAnnot _ -> failwith "wf_E: EAnnot not implemented"
-
+      | EAnnot _ -> [] (* TODO *)
+      
   (* wf_D: check well-formedness of a decl *)
   and wf_D d (fun_env : (string * sourcespan decl) list): exn list =
     match d with
@@ -865,6 +865,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  (*|>  debug*)
+  |>  debug
   |> (add_phase result compile_prog)
 ;;

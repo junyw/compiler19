@@ -41,6 +41,10 @@ void print_tagged_value(int val) {
   } else if (val == BOOL_FALSE) {
     printf("false");
   } else if ((val & BOOL_TAG) == 1) {
+    if (val == BOOL_TAG) {
+      printf("nil");
+      return;
+    }
     // is tuple 
     int* p = (int*)(val - 0x1);
     int size = *p;

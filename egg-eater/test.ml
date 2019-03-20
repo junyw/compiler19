@@ -325,10 +325,8 @@ t "arity_5" {| def f(a, b, c, d, e, f, g):
              f(1, 2, 3, 4, 5, 6, 7)|} "7";
 ];;
 
-let language_tests = 
-    expr_tests 
-  @ renaming_tests
-  @ typed_fun_tests
+let fun_tests = 
+    typed_fun_tests
   @ fun_tests
   @ arity_tests
 ;;
@@ -381,11 +379,13 @@ let tuple_tests = [
                     (first, rest)
                 link(1, false) |} "(1,false)";
 ];;
+
 let seq_tests = [
   t "blank_1" "let _ = 1 in 2" "2";
   t "seq_1" "let x = 1; 2 in x" "2";
   t "seq_2" "let t = (1, 2) in t[0 of 2 := 10]; (1, t)" "(1,(10,2))";
 ];;
+
 let destructuring_tests = [
   t "des_1" "let (a, b, c) = (1, 2, 3) in b" "2";
   t "des_2" "let (_, b, c) = (1, 2, 3) in c" "3";
@@ -405,9 +405,31 @@ let destructuring_tests = [
                    reverse((1, (2, 3))) |} "(3,(2,1))";
 ];;
 
-let recursive_data = [
+let type_tests = [
+  
+  t "expr_add1" 
+    "let x: Int = 1 in x" "1";
 
   t "nil_1" "istuple(nil: Nil)" "true";
+
+  t "alias_1" {|
+    type pair = (Int * Int)
+    (1,1) : pair
+  |} "(1,1)";
+  
+  t "alias_2" {|
+    type pair = (Int * Bool)
+    type pair2 = (Bool * (Int * Bool))
+    def foo(x : pair) -> pair2 :
+        let (a, b) = x in
+          (b, (a, b))
+
+    foo((1, true))
+  |} "(true,(1,true))";
+
+];;
+
+let recursive_data = [
   t "recursive_1" {|
     type intlist = (int * intlist)
 
@@ -417,11 +439,10 @@ let recursive_data = [
 
     length((0, nil: Nil))
   |} "1";
+
 ];;
 
-let type_expr_tests = [
-  t "expr_add1" 
-    "let x: Int = 1 in x" "1";
+let type_errs = [
 
   te "expr_err_1" 
      "let x: Bool = 1 in x" 
@@ -443,18 +464,47 @@ let type_expr_tests = [
      equal_a(1) 
   |} "expected Bool but got Int"; (* ? *)
 
+  te "ty_err_3" 
+  {| def equal((x, y)):
+        x == 1 && y == true
+     equal(1) 
+  |} "expected (Int * Bool) but got Int";
+
+  te "ty_err_4" 
+  {| def equal((x, y)):
+        x == y
+     equal(1) 
+  |} "but got Int";
+
+  te "ty_err_4" 
+  {| def tuple_fun(x):
+        let (a : Int, b : Bool) = x in a
+     
+     tuple_fun((1, 1)) 
+  |} "expected Int but got Bool"; (* ? *)
+
+  te "ty_err_4" 
+  {| def tuple_fun(x):
+        let (a : Int, b : Int) = x in a == b
+     
+     tuple_fun(1) 
+  |} "expected (Int * Int) but got Int"; 
+
+
 ];;
 
-
 let all_tests = []
-  @ wf_errs
+(*  @ wf_errs
   @ runtime_errs
   @ tuple_tests
   @ seq_tests
   @ destructuring_tests
-  @ language_tests  
-  @ recursive_data
-  @ type_expr_tests
+  @ expr_tests 
+  @ renaming_tests
+  @ fun_tests 
+  @ type_tests  
+*)  @ recursive_data
+  @ type_errs
 ;;
 
 let suite =
