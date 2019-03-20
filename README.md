@@ -13,6 +13,12 @@ To run all tests
 $ make test
 $ ./test
 ```
+or with parameter:
+```bash
+make test
+./test -shards 4
+```
+
 
 To run programs in the input directory:
 ```bash

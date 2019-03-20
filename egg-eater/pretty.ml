@@ -13,8 +13,6 @@ let string_of_op1 op =
   match op with
   | Add1 -> "add1"
   | Sub1 -> "sub1"
-  | Print -> "print"
-  | PrintB -> "print?"
   | PrintStack -> "printStack"
   | Not -> "!"
   | IsNum -> "isnum"
@@ -26,8 +24,6 @@ let name_of_op1 op =
   match op with
   | Add1 -> "Add1"
   | Sub1 -> "Sub1"
-  | Print -> "Print"
-  | PrintB -> "PrintB"
   | PrintStack -> "PrintStack"
   | Not -> "Not"
   | IsNum -> "IsNum"

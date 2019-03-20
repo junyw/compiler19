@@ -40,7 +40,6 @@
 
 Known bugs: 
 desugar tuple pattern matching: should generate new immexpr
-type infer on tuple get/set (?)
-
+equals not working in some cases
 
 

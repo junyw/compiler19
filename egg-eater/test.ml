@@ -14,6 +14,8 @@ let is_osx = Conf.make_bool "osx" false "Set this flag to run on osx";;
 
 let t name program expected = name>::test_run program name expected;;
 
+let ti name program input expected = name>::test_run_stdin [] input program name expected;;
+
 let ta name program expected = name>::test_run_anf program name expected;;
 
 let te name program expected_err = name>::test_err program name expected_err;;
@@ -115,10 +117,6 @@ let expr_tests = [
   t "eq_1" "1 == 1" "true";
   t "eq_2" "1 == 0" "false";  
   t "eq_3" "false == false" "true";
-
-  (* print tests *)
-  t "print_1" "print(41)" "41\n41";
-  t "print_2" "print(true)" "true\ntrue";
 
   (* let tests *)
   t "let_1" "let x = 1 in x" "1";
@@ -354,6 +352,8 @@ let fun_tests =
 let tuple_tests = [
   t "istuple_0" "let t = 1 in istuple(t)" "false";
   t "istuple_1" "let t = (1,) in istuple(t)" "true";
+  t "istuple_2" "istuple((1,)) && istuple((1,2,3)) && istuple((1,(2, true)))" "true";
+
   t "tuple_0" "let t0 = () in t0" "()";
   t "tuple_1" "let t1 = (1,) in t1" "(1,)";
   t "tuple_2" "let t2 = (1,2) in t2" "(1,2)";
@@ -647,8 +647,23 @@ let type_errs = [
                      |}
       "expected Bool but got Int";
 ];;
-built_in_func = [
-  
+
+let built_in_func = [
+  (* print tests *)
+  t "print_1" "print(41)" "41\n41";
+  t "print_2" "print(true)" "true\ntrue";
+  t "print_3" "print((1, (true, 2))); 1" "(1,(true,2))\n1";
+
+  (* content equality *)
+  t "equals_1" "equals((), ())" "true";
+  (*t "equals_2" {| equals((1, 2, (true, 3)), (1, 2, (true, 3))) |} "true"; *)(* NOT WORKING *)
+  t "equals_3" {| equals((1, 2, (true, 3)), (1, 2, (true, 2))) |} "false";
+  t "equals_4" "equals(true, false)" "false";
+  t "equals_5" "equals(true, true)" "true";
+  t "equals_6" "equals(1, 1)" "true";
+
+  (* input *)
+  ti "input_1" "input()" "1" "Please input an integer value: You entered: 1\n1";
 ];;
 
 

@@ -31,7 +31,6 @@ rule token = parse
   | ":" { COLON }
   | "def" { DEF }
   | "and" { ANDDEF }
-  | "print" { PRINT }
   | "printStack" { PRINTSTACK }
   | "nil" { NIL }
   | "type" { TYPE }

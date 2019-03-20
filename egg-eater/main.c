@@ -6,8 +6,8 @@
 extern int our_code_starts_here() asm("our_code_starts_here");
 extern int print(int val) asm("print");
 extern int input(int val) asm("input");
+extern int equals(int val1, int val2) asm("equals");
 extern int printstack(int val, int* EBP, int* ESP) asm("printstack");
-extern bool equal(int val1, int val2) asm("equal");
 extern void error(int errCode, int val) asm("error");
 
 int* HEAP;
@@ -96,16 +96,6 @@ int printstack(int val, int* EBP, int* ESP) {
   return val; 
 }
 
-int myinput() {
-  // get an user input as an integer
-  int n;
-  printf("Please input an integer value: ");
-  scanf ("%d",&n);
-  printf("You entered: %d\n", n);
-
-  return n << 1;
-}
-
 int input(int val) {
   // the argument is discarded
   // get an user input as an integer
@@ -115,6 +105,44 @@ int input(int val) {
   printf("You entered: %d\n", n);
 
   return n << 1;
+}
+
+bool istuple(int val) {
+  if ((val & 0x00000111) == 0x00000001) { 
+    return true;
+  }
+  return false;
+}
+
+int equals(int val1, int val2) {
+  // print_tagged_value(val1);
+  // print_tagged_value(val2);
+  // printf("\n%#010x\n", val1);
+  // printf("\n%#010x\n", val2);
+  // content equality
+  if (istuple(val1) && istuple(val2)) {
+      // compare tuples - does not handle cyclic tuples
+      if ((val1 == BOOL_TAG) || (val2 == BOOL_TAG)) {
+        // if some tuple is nil
+        if (val1 == val2) return BOOL_TRUE; else return BOOL_FALSE;
+      } 
+      int* p1 = (int*)(val1 - 0x1);
+      int size1 = *p1;
+
+      int* p2 = (int*)(val2 - 0x1);
+      int size2 = *p2;
+
+      if (size1 != size2) return BOOL_FALSE;
+      
+      for(int i = 0; i < size1; i++) {
+        if (!equals(*(p1+(i+1)), *(p2+(i+1)))) return BOOL_FALSE;
+      }
+      return BOOL_TRUE;
+  } else if (val1 == val2) {
+    // not a tuple      
+    return BOOL_TRUE;
+  } 
+  return BOOL_FALSE;
 }
 
 int print(int val) {

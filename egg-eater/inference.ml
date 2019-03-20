@@ -39,10 +39,10 @@ let tyVarY = TyVar("Y", dummy_span)
 let unit2int = SForall([], mk_tyarr [] tInt, dummy_span)
 (* forall X, X -> Bool *)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
-(* forall X, X -> X *)
-let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)
 (* forall X Y, X -> Y *)
-let arrX2Y = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
+let any2any = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
+(* forall X Y, X Y -> Bool *)
+let anyany2bool = SForall(["X";"Y"], mk_tyarr [tyVarX; tyVarY] tBool, dummy_span)
 (*  forall,  Int * Int -> Bool *)
 let intint2bool = SForall([], mk_tyarr [tInt; tInt] tBool, dummy_span)
 (*  forall,  Bool -> Bool *)
@@ -61,12 +61,12 @@ let initial_env : sourcespan scheme envt =
       (* built-in functions *)
       ("input", unit2int);
       ("print", any2any);
+      ("equals", anyany2bool);
 
       (* prim1 functions *)      
       ("Add1", int2int);
       ("Sub1", int2int);
-      ("Print", arrX2Y); 
-      ("PrintStack", arrX2Y);
+      ("PrintStack", any2any);
       ("Not",    bool2bool);
       ("IsNum",  any2bool);
       ("IsBool", any2bool);

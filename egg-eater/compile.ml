@@ -9,6 +9,7 @@ open Inference
 let built_in = [
   ("input", 0);
   ("print", 1);
+  ("equals", 2);
 ];;
 
 type 'a envt = (string * 'a) list
@@ -262,12 +263,6 @@ let anf (p : tag program) : unit aprogram =
 let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
   let err_duplicate_id id source_used source_defined = DuplicateId(id, source_used, source_defined) in
   let err_duplicate_fun fun_name source_used source_defined = DuplicateFun(fun_name, source_used, source_defined) in
-  let rec find_opt ls x =
-    match ls with
-    | [] -> None
-    | (y,v)::rest ->
-       if String.equal y x then Some(v) else find_opt rest x
-  in
   let check_duplicates (args : (string * sourcespan) list) mk_error : exn list =
     let (errs, _) = 
         List.fold_left 
@@ -535,13 +530,6 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           (* check overflow *) 
           IJo("$err_arith_overflow");
         ] 
-     | Print -> 
-        [ ILineComment("calling c function");
-          IPush(Sized(DWORD_PTR, e_reg)); 
-          ICall("print");
-          IAdd(Reg(ESP), Const(1*4));
-        ]
-     | PrintB -> failwith "compile_cexpr: PrintB not implemented"
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
           IAnd(Reg(EAX), HexConst(0x7FFFFFFF));
@@ -655,9 +643,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
      | EqB -> failwith "compile_cexpr: EqB not implemented"
      end
   | CApp(fun_name, immexprs, tag) ->
+    (* check if it is built-in function *)
+    let tmp = 
+      match find_opt built_in fun_name with
+      | Some(arity) -> sprintf "%s" fun_name
+      | None -> sprintf "$fun_dec_%s" fun_name 
+    in
     let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
     (* the label of the function declaration *)
-    let tmp = sprintf "$fun_dec_%s" fun_name in
     let num_of_args = List.length immexprs in
     let push_args = List.fold_left 
         (fun instrs imm_reg -> 
@@ -673,6 +666,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         ICall(tmp);
         IAdd(Reg(ESP), Const(num_of_args * word_size));
       ]
+     
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
   | CTuple(immexprs, tag) -> 
 (*
@@ -802,40 +796,10 @@ let rec compile_prog (anfed : tag aprogram) : string =
 extern error
 extern print
 extern input
+extern equals
 extern printstack
 extern _STACK_BOTTOM
 global our_code_starts_here" in
-    (* built-in functions: functions implemented in C *)
-    let built_in_func = 
-      List.fold_left 
-        (fun instrs ((fun_name : string), (arity : int)) -> 
-            let tmp = sprintf "$fun_dec_%s" fun_name in
-            let prelude = [
-              (* save (previous, caller's) EBP on stack *)
-              IPush(Reg(EBP));
-              (* make current ESP the new EBP *)
-              IMov(Reg(EBP), Reg(ESP)); ]
-            in
-            let postlude = [
-              (* restore value of ESP to that just before call *)
-              IMov(Reg(ESP), Reg(EBP));
-              (* now, value at [ESP] is caller's (saved) EBP
-                  so: restore caller's EBP from stack [ESP] *)
-              IPop(Reg(EBP));
-              (* return to caller *)
-              IRet; ]
-            in
-              instrs
-            @ [ ILineComment(("built-in function " ^ fun_name));
-                ILineComment(("number of arguments " ^ (string_of_int arity)));
-                ILabel(tmp); ] 
-            @ prelude 
-            @ [ ICall(fun_name); ] 
-            @ postlude
-        ) 
-        [] 
-        built_in
-    in
     let prologue = [
         (* instructions for setting up stack here *)
         (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
@@ -851,7 +815,6 @@ global our_code_starts_here" in
         IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
       ] 
     in
-
     let heap_start = [
         (* Store the HEAP to ESI, and ensure that it is a multiple of 8 *)
         (* Load ESI with the pass-in pointer *)
@@ -891,7 +854,7 @@ global our_code_starts_here" in
     in
     let as_assembly_string = 
         (to_asm 
-          (built_in_func @ fun_decs @ prologue @ heap_start @ comp_body @ epilogue)) 
+          (fun_decs @ prologue @ heap_start @ comp_body @ epilogue)) 
     in
     sprintf "%s%s\n" prelude as_assembly_string
 
