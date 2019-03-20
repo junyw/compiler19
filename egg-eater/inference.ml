@@ -35,6 +35,8 @@ let tNil = TyCon("Nil", dummy_span)
 
 let tyVarX = TyVar("X", dummy_span)
 let tyVarY = TyVar("Y", dummy_span)
+(* forall () -> Int *)
+let unit2int = SForall([], mk_tyarr [] tInt, dummy_span)
 (* forall X, X -> Bool *)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
 (* forall X, X -> X *)
@@ -56,6 +58,10 @@ let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
 let initial_env : sourcespan scheme envt =
   List.fold_left (fun env (name, typ) -> StringMap.add name typ env) StringMap.empty [
 
+      (* built-in functions *)
+      ("input", unit2int);
+      ("print", any2any);
+
       (* prim1 functions *)      
       ("Add1", int2int);
       ("Sub1", int2int);
@@ -65,7 +71,6 @@ let initial_env : sourcespan scheme envt =
       ("IsNum",  any2bool);
       ("IsBool", any2bool);
       ("IsTuple", any2bool);
-      ("Input", any2any);
 
       (* prim2 functions *)      
       ("Plus",  intint2int);

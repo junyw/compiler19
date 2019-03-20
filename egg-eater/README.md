@@ -1,4 +1,4 @@
-# The Taipan Language
+# The Egg-eater Language
 
 ```
 <program>:
@@ -36,9 +36,11 @@
 
 ```
 
-# Type Inference 
 
 
+Known bugs: 
+desugar tuple pattern matching: should generate new immexpr
+type infer on tuple get/set (?)
 
 
 

@@ -646,8 +646,11 @@ let type_errs = [
                         foo(1, 2)
                      |}
       "expected Bool but got Int";
-
 ];;
+built_in_func = [
+  
+];;
+
 
 let all_tests = []
   @ wf_errs
@@ -661,6 +664,7 @@ let all_tests = []
   @ type_tests  
   @ recursive_data
   @ type_errs
+  @ built_in_func
 ;;
 
 let suite =

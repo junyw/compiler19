@@ -6,6 +6,11 @@ open Assembly
 open Errors
 open Inference 
        
+let built_in = [
+  ("input", 0);
+  ("print", 1);
+];;
+
 type 'a envt = (string * 'a) list
 
 let rec is_anf (e : 'a expr) : bool =
@@ -24,7 +29,6 @@ and is_imm e =
   | EId _ -> true
   | _ -> false
 ;;
-
 
 let const_true = HexConst (0xFFFFFFFF)
 let const_false = HexConst(0x7FFFFFFF)
@@ -321,15 +325,20 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
        (* check body *)
          @ wf_E body new_env fun_env 
       | EApp(f, args, loc) -> 
-        begin match find_opt fun_env f with
-          | None -> (* function not defined *)
-              [ UnboundFun(f, loc) ]
-          | Some(DFun(_, args', _, _, _)) -> (* wrong arity *)
-              if List.length args' != List.length args
-              then [ Arity(List.length args', List.length args, loc) ]
-              else []
+        (* first lookup from built-in functions, if not found lookup from user-defined functions *)
+        begin match find_opt built_in f with
+          | Some(arity) -> 
+              if List.length args != arity 
+              then [ Arity(List.length args, arity, loc) ] else []
+          | None -> 
+              begin match find_opt fun_env f with
+                | None -> (* function not defined *)
+                    [ UnboundFun(f, loc) ]
+                | Some(DFun(_, args', _, _, _)) -> (* wrong arity *)
+                    if List.length args' != List.length args
+                    then [ Arity(List.length args', List.length args, loc) ] else []
+              end
         end
-
       | EAnnot _ -> [] (* TODO *)
       
   (* wf_D: check well-formedness of a decl *)
@@ -796,6 +805,37 @@ extern input
 extern printstack
 extern _STACK_BOTTOM
 global our_code_starts_here" in
+    (* built-in functions: functions implemented in C *)
+    let built_in_func = 
+      List.fold_left 
+        (fun instrs ((fun_name : string), (arity : int)) -> 
+            let tmp = sprintf "$fun_dec_%s" fun_name in
+            let prelude = [
+              (* save (previous, caller's) EBP on stack *)
+              IPush(Reg(EBP));
+              (* make current ESP the new EBP *)
+              IMov(Reg(EBP), Reg(ESP)); ]
+            in
+            let postlude = [
+              (* restore value of ESP to that just before call *)
+              IMov(Reg(ESP), Reg(EBP));
+              (* now, value at [ESP] is caller's (saved) EBP
+                  so: restore caller's EBP from stack [ESP] *)
+              IPop(Reg(EBP));
+              (* return to caller *)
+              IRet; ]
+            in
+              instrs
+            @ [ ILineComment(("built-in function " ^ fun_name));
+                ILineComment(("number of arguments " ^ (string_of_int arity)));
+                ILabel(tmp); ] 
+            @ prelude 
+            @ [ ICall(fun_name); ] 
+            @ postlude
+        ) 
+        [] 
+        built_in
+    in
     let prologue = [
         (* instructions for setting up stack here *)
         (* move ESP to point to a location that is N words away (so N * 4 bytes for us), 
@@ -849,7 +889,10 @@ global our_code_starts_here" in
         @ err_handling "$err_arith_overflow"     err_ARITH_OVERFLOW
 
     in
-    let as_assembly_string = (to_asm (fun_decs @ prologue @ heap_start @ comp_body @ epilogue)) in
+    let as_assembly_string = 
+        (to_asm 
+          (built_in_func @ fun_decs @ prologue @ heap_start @ comp_body @ epilogue)) 
+    in
     sprintf "%s%s\n" prelude as_assembly_string
 
 
