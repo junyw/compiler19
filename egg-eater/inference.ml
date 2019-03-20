@@ -21,58 +21,36 @@ let print_funenv funenv =
   StringMap.iter (fun name scheme -> printf "\t%s => %s\n" name (string_of_scheme scheme)) funenv;;
 let print_env env =
   StringMap.iter (fun name typ -> debug_printf "\t%s => %s\n" name (string_of_typ typ)) env;;
-
 let print_subst subst =
   List.iter (fun (name, typ) -> debug_printf "\t%s => %s\n" name (string_of_typ typ)) subst;;
 
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
-let mk_tyvar (label: string) : 'a typ = 
-    TyVar(label, dummy_span)
-;;
 let mk_tyarr left right : 'a typ = 
     TyArr(left, right, dummy_span)
 ;;
-let mk_scheme (ids : string list) typ =
-    SForall(ids, typ, dummy_span)
 
 let tInt = TyCon("Int", dummy_span)
 let tBool = TyCon("Bool", dummy_span)
 let tNil = TyCon("Nil", dummy_span)
 
-(*  forall,  Int -> Int *)
-let int2int = SForall([], mk_tyarr [tInt] tInt, dummy_span)
-
-(*  forall,  Int * Int -> Int *)
-let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
-
-(*  forall,  Int -> Bool *)
-let int2bool = SForall([], mk_tyarr [tInt] tBool, dummy_span)
-
-(*  forall,  Bool -> Bool *)
-let bool2bool = SForall([], mk_tyarr [tBool] tBool, dummy_span)
-
-(*  forall,  Bool * Bool -> Bool *)
-let boolbool2bool = SForall([], mk_tyarr [tBool; tBool] tBool, dummy_span)
-
-(*  forall,  Int * Int -> Bool *)
-let intint2bool = SForall([], mk_tyarr [tInt; tInt] tBool, dummy_span)
-
 let tyVarX = TyVar("X", dummy_span)
 let tyVarY = TyVar("Y", dummy_span)
-let tyVarZ = TyVar("Z", dummy_span)
-
 (* forall X, X -> Bool *)
 let any2bool = SForall(["X"], mk_tyarr [tyVarX] tBool, dummy_span)
-
 (* forall X, X -> X *)
 let any2any = SForall(["X"], mk_tyarr [tyVarX] tyVarX, dummy_span)
-
 (* forall X Y, X -> Y *)
 let arrX2Y = SForall(["X";"Y"], mk_tyarr [tyVarX] tyVarY, dummy_span)
-
-(* forall X Y Z, X Y -> Z *)
-let arrXY2Z = SForall(["X";"Y";"Z"], mk_tyarr [tyVarX; tyVarY] tyVarZ, dummy_span)
-
+(*  forall,  Int * Int -> Bool *)
+let intint2bool = SForall([], mk_tyarr [tInt; tInt] tBool, dummy_span)
+(*  forall,  Bool -> Bool *)
+let bool2bool = SForall([], mk_tyarr [tBool] tBool, dummy_span)
+(*  forall,  Bool * Bool -> Bool *)
+let boolbool2bool = SForall([], mk_tyarr [tBool; tBool] tBool, dummy_span)
+(*  forall,  Int -> Int *)
+let int2int = SForall([], mk_tyarr [tInt] tInt, dummy_span)
+(*  forall,  Int * Int -> Int *)
+let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
 
 (* initial function environment *)
 let initial_env : sourcespan scheme envt =
@@ -113,7 +91,7 @@ let gensym =
 let rec ftv_type (t : 'a typ) : StringSet.t =
   match t with
   | TyBlank _ -> StringSet.empty
-  | TyCon _ -> StringSet.empty
+  | TyCon(name, _) -> StringSet.singleton name
   | TyVar(name, _) -> StringSet.singleton name
   | TyArr(args, ret, _) ->
     List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
@@ -128,8 +106,6 @@ let rec ftv_type (t : 'a typ) : StringSet.t =
                     typs
                     StringSet.empty
 ;;
-
-
 let ftv_scheme (s : 'a scheme) : StringSet.t =
   match s with
   | SForall(args, typ, _) ->
@@ -137,8 +113,19 @@ let ftv_scheme (s : 'a scheme) : StringSet.t =
 let ftv_env (e : 'a typ envt) : StringSet.t = 
   failwith "Compute the free type variables of an environment here"
 ;;
+
+exception OccursCheck of string
 let occurs (name : string) (t : 'a typ) =
   StringSet.mem name (ftv_type t)
+;;
+
+
+(* find_pos: find type of vairable from environment, or find type scheme of function from funenv *)
+let rec find_pos (ls : 'a envt) x pos : 'a =
+  try
+    StringMap.find x ls
+  with
+  | Not_found -> failwith (sprintf "inference.ml: type of variable %s not found at %s" x (string_of_sourcespan pos))
 ;;
 
 
@@ -148,7 +135,7 @@ let occurs (name : string) (t : 'a typ) =
 let rec subst_var_typ (((tyvar : string), (to_typ : 'a typ)) as sub) (in_typ : 'a typ): 'a typ =
   match in_typ with 
   | TyBlank _ -> in_typ 
-  | TyCon(id, _) -> if String.equal tyvar id then to_typ else in_typ
+  | TyCon(id, _) -> in_typ
   | TyVar(tyvar1, _) ->
       if String.equal tyvar tyvar1 then to_typ
       else in_typ
@@ -161,7 +148,6 @@ let rec subst_var_typ (((tyvar : string), (to_typ : 'a typ)) as sub) (in_typ : '
     let typs_subst = List.map (fun typ -> subst_var_typ sub typ) typs in
       TyTup(typs_subst, tag)
 ;;
-
 let subst_var_scheme ((tyvar, to_typ) as sub) scheme =
   match scheme with (* ?? *)
     | SForall(strings, typ, loc) -> SForall(strings, subst_var_typ sub typ, loc)
@@ -169,29 +155,35 @@ let subst_var_scheme ((tyvar, to_typ) as sub) scheme =
 let apply_subst_typ (subst : 'a typ subst) (t : 'a typ) : 'a typ =
   List.fold_left (fun t sub -> subst_var_typ sub t) t subst
 ;;
-
 let apply_subst_scheme (subst : 'a typ subst) (scheme : 'a scheme) : 'a scheme =
   List.fold_left (fun scheme sub -> subst_var_scheme sub scheme) scheme subst
 ;;
-
 let apply_subst_env (subst : 'a typ subst) (env : 'a typ envt) : 'a typ envt =
   StringMap.fold 
   (fun name typ new_env -> StringMap.add name (apply_subst_typ subst typ) new_env)
   env StringMap.empty
 ;;
-
 let apply_subst_funenv (subst : 'a typ subst) (env : 'a scheme envt) : 'a scheme envt =
   StringMap.fold 
   (fun name scheme new_env -> StringMap.add name (apply_subst_scheme subst scheme) new_env)
   env StringMap.empty
 ;;
-
 let apply_subst_subst (subst : 'a typ subst) (dest : 'a typ subst) : 'a typ subst =
   List.map (fun (tyvar, typ) -> (tyvar, apply_subst_typ subst typ)) dest
 ;;
-
 let compose_subst (sub1 : 'a typ subst) (sub2 : 'a typ subst) : 'a typ subst =
   sub1 @ (apply_subst_subst sub1 sub2)
+;;
+
+
+let resolve_alias sub (t : 'a typ)  : 'a typ = 
+  match t with
+  | TyCon(id, loc) -> 
+    begin try 
+      let (_, t) = List.find (fun (x, _) -> String.equal x id) sub in t
+    with Not_found -> failwith ("resolve_alias: cannot resolve alias" ^ id) 
+    end
+  | _ -> failwith ("resolve_alias: cannot resolve alias" ^ (string_of_typ t))
 ;;
 
 (* unify:
@@ -199,36 +191,43 @@ let compose_subst (sub1 : 'a typ subst) (sub2 : 'a typ subst) : 'a typ subst =
    returns the most general substitution sub' which extends sub 
    and makes two given types equal
 *)
-exception OccursCheck of string
 
 let rec unify (t1 : 'a typ) (t2 : 'a typ) (sub : 'a typ subst) (loc : sourcespan) (reasons : reason list) : 'a typ subst =  
-  (*let () = Printf.printf ";unify of %s -  %s\n" (string_of_typ t1) (string_of_typ t2) in*)
+    let helper t1 t2 : bool = 
+      match (t1, t2) with
+      | (TyCon(id1, _), TyCon(id2, _)) when (String.equal id1 id2) -> true
+      | _ -> false
+    in
+    (*let () = Printf.printf ";unify of %s -  %s\n" (string_of_typ t1) (string_of_typ t2) in*)
+    if (helper t1 t2) then sub else
 
-  (* unfiy_typs: helper function that unify two list of types *)
-  let unfiy_typs (typs1 : 'a typ list) (typs2 : 'a typ list) (sub : 'a typ subst) loc reasons : 'a typ subst = 
-      List.fold_left2
-      (fun sub t1 t2 -> unify t1 t2 sub loc reasons)
-      sub typs1 typs2 
-  in
     let t1 = apply_subst_typ sub t1 in
     let t2 = apply_subst_typ sub t2 in
     match (t1, t2) with 
     | (TyVar(id1, _), TyVar(id2, _)) when (String.equal id1 id2) -> sub
     | (TyVar(id1, _), t2) when not (occurs id1 t2) -> (* extend sub *) compose_subst [(id1, t2)] sub
     | (_, TyVar(id2, _)) -> unify t2 t1 sub loc reasons
-    | (TyArr(typs1, typ1, _), TyArr(typs2, typ2, _)) -> 
+    | (TyArr(typs1, typ1, loc1), TyArr(typs2, typ2, loc2)) -> 
         (* unify argument types *)
-        let sub = unfiy_typs typs1 typs2 sub loc reasons in 
+        let sub = unify (TyTup(typs1, loc1)) (TyTup(typs2, loc2)) sub loc reasons in 
         (* unify the return type *)
         unify typ1 typ2 sub loc reasons 
-    | (TyTup(typs1, _), TyTup(typs2, _)) -> 
+    | (TyTup(typs1, _), TyTup(typs2, _)) when List.length typs1 == List.length typs2 -> 
         (* unify tuple element types *)
-        unfiy_typs typs1 typs2 sub loc reasons 
-    
-    | (TyTup(typs1, _), TyCon(id1, _)) when (String.equal id1 "Nil") -> sub
-    | (TyCon(id1, _), TyTup(typs1, _)) when (String.equal id1 "Nil") -> sub
-
+        List.fold_left2
+            (fun sub t1 t2 -> unify t1 t2 sub loc reasons)
+            sub typs1 typs2 
     | (TyCon(id1, _), TyCon(id2, _)) when (String.equal id1 id2) -> sub
+
+    | (TyCon(id1, loc'), TyTup(_, _)) -> 
+    begin
+      try
+        let t1' = resolve_alias sub t1 in 
+            unify t1' t2 sub loc reasons
+      with _ -> raise (TypeMismatch(loc, t2, t1, reasons))
+    end
+    | (TyTup(_, _), TyCon(_, _)) -> unify t2 t1 sub loc reasons
+
     | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 ;;     
      
@@ -242,13 +241,13 @@ let rec unblank (t : 'a typ) : 'a typ =
   | TyCon _ -> t
   | TyVar _ -> t
   | TyArr(args, ret, tag) ->
-     let args = List.map unblank args in
-     let ret = unblank ret in TyArr(args, ret, tag)
+    let ret = unblank ret in
+    let args = List.map unblank args in TyArr(args, ret, tag)
   | TyApp(t, args, tag) ->
-     let t = unblank t in
-     let args = List.map unblank args in TyApp(t, args, tag)
+    let t = unblank t in
+    let args = List.map unblank args in TyApp(t, args, tag)
   | TyTup(typs, tag) -> 
-     let typs = List.map unblank typs in TyTup(typs, tag)
+    let typs = List.map unblank typs in TyTup(typs, tag)
 ;;
 
 let instantiate (s : 'a scheme) : 'a typ =
@@ -263,8 +262,7 @@ let instantiate (s : 'a scheme) : 'a typ =
           (var, tyvar)::subst
       ) [] vars
     in
-    let ins_typ = apply_subst_typ subst typ in
-      ins_typ
+    apply_subst_typ subst typ
 ;;
 
 let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
@@ -280,30 +278,22 @@ let generalize (e : 'a typ envt) (t : 'a typ) : 'a scheme =
       | None   -> (StringMap.add x t env, x::some)
       end 
     | TyCon _   -> (env, some)
+    | TyTup(typs, _) -> List.fold_left generalize_typ (env, some) typs
     | TyArr _   -> failwith "generalize_typ: TyArr not implemented - higher order function is not implemented"
     | TyBlank _ -> failwith "generalize_typ: TyBlank - should unblank first"
     | TyApp _   -> failwith "generalize_typ: TyApp - impossible case"
-    | TyTup(typs, _) -> 
-        List.fold_left generalize_typ (env, some) typs
   in
   match t with 
   | TyArr(arg_typs, b_typ, loc) -> 
     let (e_new, some) = 
-        List.fold_left
-        generalize_typ (e, []) arg_typs
+      List.fold_left
+      generalize_typ (e, []) arg_typs
     in
     let (_, some) = generalize_typ (e_new, some) b_typ in
       SForall(some, t, loc)
   | _ -> failwith "generalize: impossible case"
 ;;
 
-(* find_pos: find type of vairable from environment, or find type scheme of function from funenv *)
-let rec find_pos (ls : 'a envt) x pos : 'a =
-  try
-    StringMap.find x ls
-  with
-  | Not_found -> failwith (sprintf "inference.ml: type of variable %s not found at %s" x (string_of_sourcespan pos))
-;;
 
 (* infer_exp
    env: environment that associate variable names with types
@@ -322,7 +312,6 @@ let rec infer_exp
           (s  : 'a typ subst) 
           reasons
         : sourcespan typ subst =
-
   (* infer_app: infer type of function call, including primitive function calls *)
   let infer_app (t : 'a typ) (e : 'a expr): sourcespan typ subst =
       let (fun_name, args, loc') =
@@ -330,7 +319,7 @@ let rec infer_exp
          | EPrim1(op, expr, loc') -> (name_of_op1 op, [expr], loc')
          | EPrim2(op, expr1, expr2, loc') -> (name_of_op2 op, [expr1; expr2], loc') 
          | EApp(fun_name, args, loc') -> (fun_name, args, loc')
-         | _ -> failwith "infer_app: impossible expr"
+         | _ -> failwith "infer_app: impossible case"
       in
       (* lookup function scheme from funenv *)
       let scheme = find_pos funenv fun_name loc'
@@ -346,20 +335,17 @@ let rec infer_exp
               infer_exp funenv env typ arg s reasons 
            ) s typs args 
         in
-          (* unify the return type *)
-          (unify typ t s1 loc' reasons)
+        (* unify the return type *)
+        (unify typ t s1 loc' reasons)
       | _ -> failwith "infer_app: impossible type"
   in
   (*let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in*)
-
   match e with
   | ENil(typ, loc)  -> unify typ t s loc reasons
   | ENumber(v, loc) -> unify tInt t s loc reasons
-
   | EBool(v, loc)   -> unify tBool t s loc reasons
-
   | EId(x, loc)     -> let a = find_pos env x loc in
-                           unify a t s loc reasons
+                       unify a t s loc reasons
   | ELet(args, e2, loc) -> 
     let rec extract_binds env (binds : 'a bind list) : (sourcespan typ envt * 'a typ list) = 
         List.fold_left
@@ -407,23 +393,26 @@ let rec infer_exp
     let a = TyVar(gensym "tuple", loc) in
     let s = infer_exp funenv env a expr s reasons in
     let a = apply_subst_typ s a in
+    let a = 
+      try 
+        resolve_alias s a  
+      with _ -> a 
+    in
     begin match a with
           | TyTup(typs, _) -> 
               unify (List.nth typs m) t s loc reasons
-          | _ -> failwith ("infer_exp: EGetItem impossible type - not a tuple " ^ (string_of_typ a))
+          | _ -> failwith ("infer_exp: EGetItem impossible type - not a tuple" ^ (string_of_typ a) ^ (string_of_sourcespan loc))
     end
   | ESetItem(expr1, m, n, expr2, loc) ->
-    let a = TyVar(gensym "tuple", loc) in
-    let s = infer_exp funenv env a expr1 s reasons in
-    let s = unify t a s loc reasons in
-    let a = apply_subst_typ s a in
+    let s = infer_exp funenv env t expr1 s reasons in
+    let a = apply_subst_typ s t in
     begin match a with
           | TyTup(typs, _) -> 
               let b = TyVar(gensym "blank", loc) in
               let s1 = infer_exp funenv env b expr2 s reasons in
               let b = apply_subst_typ s1 b in
-                unify (List.nth typs m) b s1 loc reasons
-          | _ -> failwith ("infer_exp: ESetItem impossible type - not a tuple" ^ (string_of_typ a))
+                unify b (List.nth typs m) s1 loc reasons
+          | _ -> failwith ("infer_exp: ESetItem impossible type - not a tuple" ^ (string_of_typ a) ^ (string_of_sourcespan loc))
     end
   | EPrim1(op, expr, loc)         -> infer_app t e
   | EPrim2(op, expr1, expr2, loc) -> infer_app t e
@@ -473,13 +462,9 @@ let infer_decl funenv env (t : 'a typ) (decl : sourcespan decl)  (s : 'a typ sub
       | TyArr(a, b, _) ->
         let (s, env') = build_env s env arg_binds a in
         let s = infer_exp funenv env' b e s reasons in
-
-(*        let () =  List.iter (fun (name, typ) -> Printf.printf ";\t%s => %s\n" name (string_of_typ typ)) s in
-*)
+        (*let () =  List.iter (fun (name, typ) -> Printf.printf ";\t%s => %s\n" name (string_of_typ typ)) s in*)
         (*let () = Printf.printf ";type of %s (after typed): %s\n" f_name (string_of_typ (apply_subst_typ s t)) in*)
-
         s
-
       | _ -> failwith "infer_decl: impossible type"
       
 ;;
@@ -530,11 +515,8 @@ let infer_prog funenv env (p : sourcespan program) : 'a typ =
         (fun s typedecl -> 
           match typedecl with
           | TyDecl(tyname, typs, loc) ->
-              let a = TyVar(tyname, loc) in
               let b = TyTup(typs, loc) in
-              (* prevent loop forever *)
-              let b = apply_subst_typ [(tyname, a)] b in 
-              (tyname, b)::s
+              compose_subst [(tyname, b)] s
         ) [] typedecls
       in
       (* 2. type the declgroups *)
@@ -546,8 +528,7 @@ let infer_prog funenv env (p : sourcespan program) : 'a typ =
       in
       (* 3. type the body *)
       let a = TyVar(gensym "body", tag) in
-      let s = infer_exp funenv env a body s [] 
-      in 
+      let s = infer_exp funenv env a body s [] in 
         apply_subst_typ s a
 ;;
 

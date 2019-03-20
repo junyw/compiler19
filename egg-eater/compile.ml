@@ -399,6 +399,7 @@ let desugar (p : sourcespan program) : sourcespan program =
           | BBlank(typ, _)    -> [(bind, helpE expr, tag)]
           | BName(id, typ, _) -> [(bind, helpE expr, tag)]
           | BTuple(binds, _)  -> 
+            (* TODO : generate new tmp *)
             (* handle destructuring *)
             let expr' = helpE expr in
             let n = List.length binds in

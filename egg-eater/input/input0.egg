@@ -3,4 +3,6 @@ type intlist = (Int * intlist)
 def length(l : intlist):
   if l == (nil : intlist): 0
   else: 1 + length(l[1 of 2])
-1
+
+let x : intlist = (3, (2, nil:intlist))  in
+length(x)

@@ -183,6 +183,26 @@ let typed_fun_tests = [
 
     (typed_q(0) == -2) && (typed_q(-1) == 0) && (typed_q(2) == 0)
   |} "true";
+  
+  t "typed_group_1" {|
+        def foo() -> Int:
+          1
+        and
+        def bar() -> Int:
+          foo()
+
+        bar(): Int
+  |} "1";
+
+  te "typed_group_err_1" {|
+        def foo() -> Int:
+          1
+        and
+        def bar() -> Int:
+          foo()
+
+        bar(): Bool
+  |} "expected Bool but got Int";
 
 ];;
 
@@ -373,6 +393,12 @@ let tuple_tests = [
   t "tset_3" {| let three = (0, 0, 0) in
                   three[0 of 3 := 1][1 of 3 := 2][2 of 3 := 3] |} "(1,2,3)";
   
+  t "tset_4" {| def add_one(x): 
+                    x + 1
+                
+                let three = (1, 2, 3) in
+                    add_one(three[0 of 3]) |} "2";
+
   t "tprint_1" "print((4, (true, 3)))" "(4,(true,3))\n(4,(true,3))";
 
   t "link_1" {| def link(first, rest):
@@ -416,6 +442,15 @@ let type_tests = [
 
   t "nil_1" "istuple(nil: Nil)" "true";
 
+  t "ty_tuple_0" "let x = () in istuple(x)" "true";
+
+  t "ty_tuple_1" "let x = (1, true) in x[1 of 2] : Bool" "true";
+  te "ty_tuple_1_err" "let x = (1, true) in x[1 of 2] : Int" "expected Int but got Bool";
+
+  t "ty_tuple_2" "let x : (Int * Bool) = (1, true) in x[1 of 2] : Bool" "true";
+  t "ty_tuple_3" "let x : (Int * (Int * Bool)) = (1, (2, true)) in x[1 of 2] : (Int * Bool)" "(2,true)";
+  t "ty_tuple_4" "let x : (Int) = (1,) in x[0 of 2] : Int" "1";
+
   t "alias_1" {|
     type pair = (Int * Int)
     (1,1) : pair
@@ -430,32 +465,68 @@ let type_tests = [
 
     foo((1, true))
   |} "(true,(1,true))";
+  
+  t "alias_3" {|
+    type pair = (Int * Int)
+    type triple = (Int * pair)
+    (1,(1,0)) : triple
+  |} "(1,(1,0))";
+
+  t "alias_4" {|
+    type triple = (Int * pair)
+    type pair = (Int * Int)
+    (1,(1,0)) : triple
+  |} "(1,(1,0))";
 
 ];;
 
 let recursive_data = [
-  (* not working *)
-(*  t "recursive_1" {|
-    type intlist = (Int * intlist)
+  t "recursive_1" {|
+      type intlist = (Int * intlist)
 
-    def length(l : intlist):
-      if l == (nil : intlist): 0
-      else: 1 + length(l[1 of 2])
+      def length(l : intlist):
+        if l == (nil : intlist): 0
+        else: 1 + length(l[1 of 2])
 
-    length((0, nil: Nil))
-  |} "1";
-*)
+      let x : intlist = (4, (3, (2, nil:intlist))) in
+            length(x)  
+    |} "3";
+
+  t "recursive_2" {|
+      type intlist = (Int * intlist)
+
+      def link(first, rest):
+        (first, rest)
+      and
+      def append(l1, l2):
+        if l1 == (nil : intlist): l2
+        else:
+          link(l1[0 of 2], append(l1[1 of 2], l2))
+      and
+      def reverse(l):
+        if l == (nil : intlist): l
+        else:
+          append(reverse(l[1 of 2]), link(l[0 of 2], nil : intlist))
+
+      let list1 = link(1, link(2, link(3, nil:intlist))) in
+        let list2 = link(4, link(5, link(6, nil:intlist)))
+          in reverse(append(list1, list2))
+  |} "(6,(5,(4,(3,(2,(1,nil))))))";
 ];;
 
 let type_errs = [
+  te "ty_expr_err_0" "true: Int" "expected Int but got Bool";
+  te "ty_expr_err_1" "3 == true" "expected Int but got Bool";
 
-  te "expr_err_1" 
+  te "ty_expr_err_2" 
      "let x: Bool = 1 in x" 
      "expected Bool but got Int";
 
-  te "expr_err_2" 
+  te "ty_expr_err_3" 
      "let x = 1, y: Bool = x in y" 
      "expected Bool but got Int";
+
+  te "ty_fun_err_1" {| def f<'a>(x: 'a, y: 'a) -> 'a: x f(1, true) |} "expected Int but got Bool";
 
   te "ty_err_1" 
   {| def equal_a(a):
@@ -509,13 +580,42 @@ let type_errs = [
      let (a, b) = tuple_fun(1) in if a: 0 else: 1
   |} "expected Bool but got Int"; 
 
-(*  te "ty_err_7" 
+  te "ty_err_7" {| let three = (0, 0, 0) in
+                      three[0 of 3 := 1][1 of 3 := 2][2 of 3 := true] |} "expected Int but got Bool";
+
+  te "ty_err_8" {| let three = (0, 0, 0) in
+                      three[0 of 3] == true |} "expected Int but got Bool";
+
+  te "ty_err_9" 
   {| def tuple_fun(x) -> (Int * Int):
         (x, x)
-     
+     let (a : Int, b : Int, c : Int) = tuple_fun(1) in c
+  |} "expected (Int * Int * Int) but got (Int * Int)"; 
+
+  te "ty_err_10" 
+  {| def tuple_fun(x) -> (Int * Int):
+        (x, x)
      let (a, b, c) = tuple_fun(1) in c
-  |} "..."; 
-*)
+  |} "but got (Int * Int)"; 
+
+  te "ty_err_11" 
+  {| def tuple_fun(x) -> (Int * Int):
+        (x, x, 1)
+     0
+  |} "but got (Int * Int)"; 
+
+  te "ty_err_12" 
+  {| def tuple_fun(a, b):
+        (a == b, b == a)
+     tuple_fun(1, true)
+  |} "expected Int but got Bool"; 
+
+  te "ty_err_13" 
+  {| def tuple_fun(a, b):
+        (a == b, b == a)
+     tuple_fun(true, 1)
+  |} "expected Bool but got Int"; 
+
   te "ty_add1_error" "add1(true)" 
      "expected Int but got Bool";
   
