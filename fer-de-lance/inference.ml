@@ -323,7 +323,6 @@ let rec infer_exp
          match e with
          | EPrim1(op, expr, loc') -> (name_of_op1 op, [expr], loc')
          | EPrim2(op, expr1, expr2, loc') -> (name_of_op2 op, [expr1; expr2], loc') 
-         | EApp(fun_name, args, loc') -> (fun_name, args, loc')
          | _ -> failwith "infer_app: impossible case"
       in
       (* lookup function scheme from funenv *)
@@ -421,7 +420,7 @@ let rec infer_exp
     end
   | EPrim1(op, expr, loc)         -> infer_app t e
   | EPrim2(op, expr1, expr2, loc) -> infer_app t e
-  | EApp(fun_name, args, loc)     -> infer_app t e
+  | EApp(fun_name, args, loc)     -> failwith "infer_exp: EApp to be implemented"
   | EAnnot(expr, typ, loc) -> infer_exp funenv env typ expr s reasons
   | EIf(c_expr, t_expr, f_expr, loc) ->
     let s = infer_exp funenv env tBool c_expr s reasons in

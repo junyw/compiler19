@@ -668,10 +668,14 @@ let built_in_func = [
   ti "input_1" "input()" "1" "Please input an integer value: You entered: 1\n1";
 ];;
 
+let lambdas = [
+  t "lambda_1" "let incr = (lambda(x): x + 1) in incr(5)" "6";
 
+
+];;
 
 let all_tests = []
-  @ wf_errs
+(*  @ wf_errs
   @ runtime_errs
   @ tuple_tests
   @ seq_tests
@@ -682,7 +686,8 @@ let all_tests = []
   @ type_tests  
   @ recursive_data
   @ type_errs
-  @ built_in_func
+  @ built_in_func *)
+  @ lambdas
 ;;
 
 let suite =

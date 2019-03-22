@@ -26,7 +26,7 @@ type arg =
   | RegOffsetReg of reg * reg * int * int
   | Sized of size * arg
   | LabelContents of string
-  | Variable of string
+  | Contents of string
 
 type instruction =
   | IMov of arg * arg
@@ -46,7 +46,7 @@ type instruction =
   | ILabel of string
   | IPush of arg
   | IPop of arg
-  | ICall of string
+  | ICall of arg
   | IRet
 
   | ICmp of arg * arg
@@ -95,7 +95,8 @@ let rec arg_to_asm (a : arg) : string =
              (match size with | DWORD_PTR -> "DWORD" | WORD_PTR -> "WORD" | BYTE_PTR -> "BYTE")
              (arg_to_asm a)
   | LabelContents s -> sprintf "[%s]" s
-  | Variable(id) -> sprintf "[%s]" id
+  | Contents s -> sprintf "%s" s
+
 ;;
 
 let rec i_to_asm (i : instruction) : string =
@@ -150,8 +151,8 @@ let rec i_to_asm (i : instruction) : string =
      sprintf "  push %s" (arg_to_asm value)
   | IPop(dest) ->
      sprintf "  pop %s" (arg_to_asm dest)
-  | ICall(label) ->
-     sprintf "  call %s" label
+  | ICall(value) ->
+     sprintf "  call %s" (arg_to_asm value)
   | IRet ->
      "  ret"
   | ITest(arg, comp) ->

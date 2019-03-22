@@ -1,17 +1,18 @@
 open Printf
 
+
 type tag = int
 type sourcespan = (Lexing.position * Lexing.position)
 
 type prim1 =
   | Add1
   | Sub1
+  | Input
   | IsBool
   | IsNum
   | IsTuple
   | Not
   | PrintStack
-  | Input 
 
 type prim2 =
   | Plus
@@ -25,6 +26,7 @@ type prim2 =
   | LessEq
   | Eq
   | EqB
+
 
 type 'a typ =
   | TyBlank of 'a
@@ -50,6 +52,7 @@ and 'a expr =
   | EGetItem of 'a expr * int * int * 'a
   | ESetItem of 'a expr * int * int * 'a expr * 'a
   | ELet of 'a binding list * 'a expr * 'a
+  | ELetRec of 'a binding list * 'a expr * 'a
   | EPrim1 of prim1 * 'a expr * 'a
   | EPrim2 of prim2 * 'a expr * 'a expr * 'a
   | EIf of 'a expr * 'a expr * 'a expr * 'a
@@ -57,7 +60,8 @@ and 'a expr =
   | EBool of bool * 'a
   | ENil of 'a typ * 'a
   | EId of string * 'a
-  | EApp of string * 'a expr list * 'a
+  | EApp of 'a expr * 'a expr list * 'a
+  | ELambda of 'a bind list * 'a expr * 'a
   | EAnnot of 'a expr * 'a typ * 'a
 
 type 'a decl =
@@ -78,13 +82,16 @@ and 'a cexpr = (* compound expressions *)
   | CIf of 'a immexpr * 'a aexpr * 'a aexpr * 'a
   | CPrim1 of prim1 * 'a immexpr * 'a
   | CPrim2 of prim2 * 'a immexpr * 'a immexpr * 'a
-  | CApp of string * 'a immexpr list * 'a
+  | CApp of 'a immexpr * 'a immexpr list * 'a
   | CImmExpr of 'a immexpr (* for when you just need an immediate value *)
   | CTuple of 'a immexpr list * 'a
   | CGetItem of 'a immexpr * int * 'a
   | CSetItem of 'a immexpr * int * 'a immexpr * 'a
+  | CLambda of string list * 'a aexpr * 'a                                            
 and 'a aexpr = (* anf expressions *)
+  | ASeq of 'a cexpr * 'a aexpr * 'a
   | ALet of string * 'a cexpr * 'a aexpr * 'a
+  | ALetRec of (string * 'a cexpr) list * 'a aexpr * 'a
   | ACExpr of 'a cexpr
 and 'a adecl =
   | ADFun of string * string list * 'a aexpr * 'a
@@ -130,6 +137,16 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
      let tag_binds = List.map tag_binding binds in
      let tag_body = map_tag_E f body in
      ELet(tag_binds, tag_body, tag_let)
+  | ELetRec(binds, body, a) ->
+     let tag_let = f a in
+     let tag_binding (b, e, t) =
+       let tag_bind = f t in
+       let tag_b = map_tag_B f b in
+       let tag_e = map_tag_E f e in
+       (tag_b, tag_e, tag_bind) in
+     let tag_binds = List.map tag_binding binds in
+     let tag_body = map_tag_E f body in
+     ELetRec(tag_binds, tag_body, tag_let)
   | EIf(cond, thn, els, a) ->
      let tag_if = f a in
      let tag_cond = map_tag_E f cond in
@@ -138,7 +155,10 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
      EIf(tag_cond, tag_thn, tag_els, tag_if)
   | EApp(name, args, a) ->
      let tag_app = f a in
-     EApp(name, List.map (map_tag_E f) args, tag_app)
+     EApp(map_tag_E f name, List.map (map_tag_E f) args, tag_app)
+  | ELambda(binds, body, a) ->
+     let tag_lam = f a in
+     ELambda(List.map (map_tag_B f) binds, map_tag_E f body, tag_lam)
 and map_tag_B (f : 'a -> 'b) b =
   match b with
   | BBlank(t, tag) -> BBlank(map_tag_T f t, f tag)
@@ -234,10 +254,14 @@ and untagE e =
      EPrim2(op, untagE e1, untagE e2, ())
   | ELet(binds, body, _) ->
      ELet(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, untagE body, ())
+  | ELetRec(binds, body, _) ->
+     ELetRec(List.map (fun (b, e, _) -> (untagB b, untagE e, ())) binds, untagE body, ())
   | EIf(cond, thn, els, _) ->
      EIf(untagE cond, untagE thn, untagE els, ())
   | EApp(name, args, _) ->
-     EApp(name, List.map untagE args, ())
+     EApp(untagE name, List.map untagE args, ())
+  | ELambda(binds, body, _) ->
+     ELambda(List.map untagB binds, untagE body, ())
 and untagB b =
   match b with
   | BBlank(typ, _) -> BBlank(untagT typ, ())
@@ -270,9 +294,15 @@ let atag (p : 'a aprogram) : tag aprogram =
     !next in
   let rec helpA (e : 'a aexpr) : tag aexpr =
     match e with
+    | ASeq(e1, e2, _) ->
+       let seq_tag = tag() in
+       ASeq(helpC e1, helpA e2, seq_tag)
     | ALet(x, c, b, _) ->
        let let_tag = tag() in
        ALet(x, helpC c, helpA b, let_tag)
+    | ALetRec(binds, body, _) ->
+       let letrec_tag = tag() in
+       ALetRec(List.map (fun (x, c) -> (x, helpC c)) binds, helpA body, letrec_tag)
     | ACExpr c -> ACExpr (helpC c)
   and helpC (c : 'a cexpr) : tag cexpr =
     match c with
@@ -285,9 +315,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CIf(cond, thn, els, _) ->
        let if_tag = tag() in
        CIf(helpI cond, helpA thn, helpA els, if_tag)
-    | CApp(name, args, _) ->
+    | CApp(fn, args, _) ->
        let app_tag = tag() in
-       CApp(name, List.map helpI args, app_tag)
+       CApp(helpI fn, List.map helpI args, app_tag)
     | CImmExpr i -> CImmExpr (helpI i)
     | CTuple(es, _) ->
        let tup_tag = tag() in
@@ -298,6 +328,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | CSetItem(e, idx, newval, _) ->
        let set_tag = tag() in
        CSetItem(helpI e, idx, helpI newval, set_tag)
+    | CLambda(args, body, _) ->
+       let lam_tag = tag() in
+       CLambda(args, helpA body, lam_tag)
   and helpI (i : 'a immexpr) : tag immexpr =
     match i with
     | ImmNil(_) -> ImmNil(tag())

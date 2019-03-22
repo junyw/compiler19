@@ -71,7 +71,6 @@ let rec string_of_typ (t : 'a typ) : string =
                            (ExtString.String.join ", " (List.map string_of_typ args))
   | TyVar(id, _) -> "'" ^ id
   | TyTup(tys, _) -> "(" ^ (ExtString.String.join " * " (List.map string_of_typ tys)) ^ ")"
-
 let string_of_scheme (s : 'a scheme) : string =
   match s with
   | SForall(vars, typ, _) -> sprintf "Forall %s, %s" (ExtString.String.join ", " vars) (string_of_typ typ)
@@ -109,14 +108,22 @@ and string_of_expr_with (print_a : 'a -> string) (e : 'a expr) : string =
      let binds_strs = List.map (string_of_binding_with print_a) binds in
      let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
      sprintf "(let %s in %s)%s" binds_str (string_of_expr body) (print_a a)
+  | ELetRec(binds, body, a) ->
+     let binds_strs = List.map (string_of_binding_with print_a) binds in
+     let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
+     sprintf "(let-rec %s in %s)%s" binds_str (string_of_expr body) (print_a a)
   | EIf(cond, thn, els, a) ->
      sprintf "(if %s: %s else: %s)%s"
              (string_of_expr cond)
              (string_of_expr thn)
              (string_of_expr els)
              (print_a a)
-  | EApp(funname, args, a) ->
-     sprintf "(%s(%s))%s" funname (ExtString.String.join ", " (List.map string_of_expr args)) (print_a a)
+  | EApp(f, args, a) ->
+     sprintf "(%s(%s))%s" (string_of_expr f) (ExtString.String.join ", " (List.map string_of_expr args)) (print_a a)
+  | ELambda(binds, body, a) ->
+     let binds_strs = List.map string_of_bind binds in
+     let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
+     sprintf "(lam(%s) %s)%s" binds_str (string_of_expr body) (print_a a)
 let string_of_expr (e : 'a expr) : string =
   string_of_expr_with (fun _ -> "") e
 
@@ -159,14 +166,22 @@ let string_of_sourcespan ((pstart, pend) : sourcespan) : string =
   sprintf "%s, %d:%d-%d:%d" pstart.pos_fname pstart.pos_lnum (pstart.pos_cnum - pstart.pos_bol)
           pend.pos_lnum (pend.pos_cnum - pend.pos_bol)
 
-let rec string_of_aexpr_with (print_a : 'a -> string) (e : 'a aexpr) : string =
-  let string_of_aexpr = string_of_aexpr_with print_a in
+let rec string_of_aexpr_with (depth : int) (print_a : 'a -> string) (e : 'a aexpr) : string =
+  let string_of_aexpr = string_of_aexpr_with (depth - 1) print_a in
+  let string_of_cexpr = string_of_cexpr_with (depth - 1) print_a in
+  if depth <= 0 then "..." else
   match e with
-  | ALet(x, e, b, a) -> sprintf "(alet %s = %s in %s)%s" x (string_of_cexpr_with print_a e) (string_of_aexpr b) (print_a a)
-  | ACExpr c -> string_of_cexpr_with print_a c
-and string_of_cexpr_with (print_a : 'a -> string) (c : 'a cexpr) : string =
-  let string_of_aexpr = string_of_aexpr_with print_a in
+  | ASeq(e1, e2, a) -> sprintf "(%s ; %s)%s" (string_of_cexpr e1) (string_of_aexpr e2) (print_a a)
+  | ALet(x, e, b, a) -> sprintf "(alet %s = %s in %s)%s" x (string_of_cexpr e) (string_of_aexpr b) (print_a a)
+  | ALetRec(xes, b, a) ->
+     sprintf "(aletrec (%s) in %s)%s"
+       (ExtString.String.join ",\n    " (List.map (fun (x, c) -> sprintf "%s = %s" x (string_of_cexpr c)) xes))
+       (string_of_aexpr b) (print_a a)
+  | ACExpr c -> string_of_cexpr c
+and string_of_cexpr_with (depth : int) (print_a : 'a -> string) (c : 'a cexpr) : string =
+  let string_of_aexpr = string_of_aexpr_with (depth - 1) print_a in
   let string_of_immexpr = string_of_immexpr_with print_a in
+  if depth <= 0 then "..." else
   match c with
   | CTuple(imms, a) -> sprintf "(%s)%s" (ExtString.String.join ", " (List.map string_of_immexpr imms)) (print_a a)
   | CGetItem(e, idx, a) -> sprintf "%s[%d]%s" (string_of_immexpr e) idx (print_a a)
@@ -182,7 +197,10 @@ and string_of_cexpr_with (print_a : 'a -> string) (c : 'a cexpr) : string =
              (string_of_aexpr els)
              (print_a a)
   | CApp(funname, args, a) ->
-     sprintf "(%s(%s))%s" funname (ExtString.String.join ", " (List.map string_of_immexpr args)) (print_a a)
+     sprintf "(%s(%s))%s" (string_of_immexpr funname)
+       (ExtString.String.join ", " (List.map string_of_immexpr args)) (print_a a)
+  | CLambda(args, body, a) ->
+     sprintf "(lam(%s) %s)%s" (ExtString.String.join ", " args) (string_of_aexpr body) (print_a a)
   | CImmExpr i -> string_of_immexpr i
 and string_of_immexpr_with (print_a : 'a -> string) (i : 'a immexpr) : string =
   match i with
@@ -194,15 +212,15 @@ and string_of_aprogram_with (print_a : 'a -> string) (p : 'a aprogram) : string 
   match p with
   | AProgram(decls, body, a) ->
      (ExtString.String.join "\n" (List.map (string_of_adecl_with print_a) decls)) ^ "\n"
-     ^ (string_of_aexpr_with print_a body) ^ "\n" ^ (print_a a)
+     ^ (string_of_aexpr_with 1000 print_a body) ^ "\n" ^ (print_a a)
 and string_of_adecl_with (print_a : 'a -> string) (d : 'a adecl) : string =
   match d with
   | ADFun(name, args, body, a) ->
      sprintf "(fun %s(%s): %s)%s" name (ExtString.String.join ", " args)
-       (string_of_aexpr_with print_a body) (print_a a)
+       (string_of_aexpr_with 1000 print_a body) (print_a a)
 
-let string_of_aexpr (e : 'a aexpr) : string = string_of_aexpr_with (fun _ -> "") e
-let string_of_cexpr (c : 'a cexpr) : string = string_of_cexpr_with (fun _ -> "") c
+let string_of_aexpr (e : 'a aexpr) (depth : int) : string = string_of_aexpr_with depth (fun _ -> "") e
+let string_of_cexpr (c : 'a cexpr) (depth : int) : string = string_of_cexpr_with depth (fun _ -> "") c
 let string_of_immexpr (i : 'a immexpr) : string = string_of_immexpr_with (fun _ -> "") i
 let string_of_adecl (d : 'a adecl) : string = string_of_adecl_with (fun _ -> "") d
 let string_of_aprogram (p : 'a aprogram) : string = string_of_aprogram_with (fun _ -> "") p
@@ -264,7 +282,7 @@ let rec format_typ (fmt : Format.formatter) (print_a : 'a -> string) (t : 'a typ
 ;;
 let rec format_bind (fmt : Format.formatter) (print_a : 'a -> string) (b : 'a bind) : unit =
   match b with
-  | BBlank(t, a) -> pp_print_string fmt "_ : "; format_typ fmt print_a t; pp_print_string fmt (maybe_angle (print_a a))
+  | BBlank(t, a) -> pp_print_string fmt "#BLANK# : "; format_typ fmt print_a t; pp_print_string fmt (maybe_angle (print_a a))
   | BName(x, typ, a) ->
      pp_print_string fmt x;
      pp_print_string fmt " : ";
@@ -281,7 +299,8 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
      open_label fmt "ESeq" (print_a a);
      help e1;
      pp_print_string fmt "; ";
-     help e2
+     help e2;
+     close_paren fmt
   | ETuple(es, a) ->
      open_label fmt "ETuple" (print_a a);
      print_list fmt (fun fmt -> format_expr fmt print_a) es print_comma_sep;
@@ -328,9 +347,9 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
      open_label fmt "EIf" (print_a a);
      help cond; print_comma_sep fmt; help thn; print_comma_sep fmt; help els;
      close_paren fmt
-  | EApp(funname, args, a) ->
+  | EApp(f, args, a) ->
      open_label fmt "EApp" (print_a a);
-     pp_print_string fmt (quote funname);
+     help f;
      print_comma_sep fmt;
      print_list fmt (fun fmt -> format_expr fmt print_a) args print_comma_sep;
      close_paren fmt
@@ -338,13 +357,32 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
      let print_item fmt (b, e, a) =
        open_paren fmt;
        format_bind fmt print_a b;
-       print_comma_sep fmt;
+       pp_print_string fmt " ="; pp_print_space fmt ();
        help e;
        close_paren fmt;
        pp_print_string fmt (maybe_angle (print_a a)) in
      open_label fmt "ELet" (print_a a);
      open_paren fmt; print_list fmt print_item binds print_comma_sep; close_paren fmt;
      print_comma_sep fmt;
+     help body;
+     close_paren fmt
+  | ELetRec(binds, body, a) ->
+     let print_item fmt (b, e, a) =
+       open_paren fmt;
+       format_bind fmt print_a b;
+       print_comma_sep fmt;
+       help e;
+       close_paren fmt;
+       pp_print_string fmt (maybe_angle (print_a a)) in
+     open_label fmt "ELetRec" (print_a a);
+     open_paren fmt; print_list fmt print_item binds print_comma_sep; close_paren fmt;
+     print_comma_sep fmt;
+     help body;
+     close_paren fmt
+  | ELambda(binds, body, a) ->
+     open_label fmt "ELam" (print_a a);
+     open_paren fmt; print_list fmt (fun fmt -> format_bind fmt print_a) binds print_comma_sep; close_paren fmt;
+     pp_print_string fmt ":"; pp_print_space fmt ();
      help body;
      close_paren fmt
 ;;

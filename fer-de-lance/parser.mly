@@ -7,7 +7,7 @@ let make_namebind(name, typ, loc) =
 
 %token <int> NUM
 %token <string> ID TYID
-%token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LBRACE RBRACE LET IN OF EQUAL COMMA PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE EQEQ LESSSPACE LESSNOSPACE GREATER LESSEQ GREATEREQ AND OR NOT THINARROW COLONEQ SEMI NIL TYPE
+%token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LBRACE RBRACE LET IN OF EQUAL COMMA PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE EQEQ LESSSPACE LESSNOSPACE GREATER LESSEQ GREATEREQ AND OR NOT THINARROW COLONEQ SEMI NIL TYPE LAMBDA BEGIN END REC
 
 %right SEMI
 %left COLON
@@ -40,11 +40,17 @@ bindings :
   | bind EQUAL expr { [($1, $3, (Parsing.rhs_start_pos 1, Parsing.rhs_end_pos 1))] }
   | bind EQUAL expr COMMA bindings { ($1, $3, (Parsing.rhs_start_pos 1, Parsing.rhs_end_pos 1))::$5 }
 
+namebindings :
+  | namebind EQUAL expr { [($1, $3, (Parsing.rhs_start_pos 1, Parsing.rhs_end_pos 1))] }
+  | namebind EQUAL expr COMMA namebindings { ($1, $3, (Parsing.rhs_start_pos 1, Parsing.rhs_end_pos 1))::$5 }
+
 expr :
   | LET bindings IN expr { ELet($2, $4, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | LET REC namebindings IN expr { ELetRec($3, $5, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
   | IF expr COLON expr ELSECOLON expr { EIf($2, $4, $6, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | BEGIN expr END { $2 }
   | binop_expr SEMI expr { ESeq($1, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
-  | binop_expr { $1 }
+  | binop_expr %prec SEMI { $1 }
 
 exprs :
   | expr { [$1] }
@@ -75,12 +81,19 @@ simple_expr :
   | tuple_expr { $1 }
   | tuple_get { $1 }
   | tuple_set { $1 }
-  // Function calls
-  | ID LPARENNOSPACE exprs RPAREN { EApp($1, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
-  | ID LPARENNOSPACE RPAREN { EApp($1, [], (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
   // Parentheses
   | LPARENSPACE expr RPAREN { $2 }
   | LPARENNOSPACE expr RPAREN { $2 }
+  // Lambdas
+  | LPARENNOSPACE LAMBDA LPARENNOSPACE binds RPAREN COLON expr RPAREN { ELambda($4, $7, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | LPARENNOSPACE LAMBDA LPARENSPACE binds RPAREN COLON expr RPAREN { ELambda($4, $7, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | LPARENNOSPACE LAMBDA COLON expr RPAREN { ELambda([], $4, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | LPARENSPACE LAMBDA LPARENNOSPACE binds RPAREN COLON expr RPAREN { ELambda($4, $7, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | LPARENSPACE LAMBDA LPARENSPACE binds RPAREN COLON expr RPAREN { ELambda($4, $7, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | LPARENSPACE LAMBDA COLON expr RPAREN { ELambda([], $4, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  // Function calls
+  | binop_expr LPARENNOSPACE exprs RPAREN { EApp($1, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | binop_expr LPARENNOSPACE RPAREN { EApp($1, [], (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
   // Simple cases
   | const { $1 }
   | id { $1 }
@@ -148,7 +161,7 @@ binds :
   | bind COMMA binds { $1::$3 }
 
 bind :
-  | namebind { $1 }  
+  | namebind { $1 }
   | LPARENNOSPACE binds RPAREN { BTuple($2, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
   | LPARENSPACE binds RPAREN { BTuple($2, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
 
@@ -196,7 +209,7 @@ tydecls :
   | tydecl tydecls { $1 :: $2 }
 
 program :
-| tydecls decls expr COLON typ EOF { Program($1, $2, EAnnot($3, $5, (Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 5)), (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }  
-| tydecls decls expr EOF { Program($1, $2, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | tydecls decls expr COLON typ EOF { Program($1, $2, EAnnot($3, $5, (Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 5)), (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
+  | tydecls decls expr EOF { Program($1, $2, $3, (Parsing.symbol_start_pos (), Parsing.symbol_end_pos ())) }
 
 %%

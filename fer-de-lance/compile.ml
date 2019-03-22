@@ -145,7 +145,7 @@ let rename_and_tag (p : tag program) : tag program =
        (try
          EId(find env name, tag)
        with Not_found -> e)
-    | EApp(name, args, tag) -> EApp(name, List.map (helpE env) args, tag)
+    | EApp(name, args, tag) -> EApp(helpE env name, List.map (helpE env) args, tag)
     | ELet(binds, body, tag) ->
        let (binds', env') = helpBG env binds in
        let body' = helpE env' body in
@@ -162,6 +162,7 @@ let rename_and_tag (p : tag program) : tag program =
        ELambda(binds', body', tag)
   in (rename [] p)
 ;;
+
 
 (* This data type lets us keep track of how a binding was introduced.
    We'll use it to discard unnecessary Seq bindings, and to distinguish 
@@ -211,9 +212,10 @@ let anf (p : tag program) : unit aprogram =
           let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
           (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
 
-    | EApp(funname, args, _) ->
+    | EApp(f, args, _) ->
+       let (f_ans, f_setup) = helpI f in
        let (new_args, new_setup) = List.split (List.map helpI args) in
-       (CApp(funname, new_args, ()), List.concat new_setup)
+       (CApp(f_ans, new_args, ()), f_setup @ (List.concat new_setup))
     | ETuple(exprs, _) -> 
        let (exprs_imm, exprs_setup) = List.split (List.map helpI exprs) in
        (CTuple(exprs_imm, ()),  List.concat exprs_setup)
@@ -225,9 +227,7 @@ let anf (p : tag program) : unit aprogram =
         let (expr2_imm, expr2_setup) = helpI expr2 in
         (CSetItem(expr1_imm, a, expr2_imm, ()), expr1_setup @ expr2_setup)
     
-    | ELambda(binds, body, _) ->
-       raise (NotYetImplemented("helpC: ELambda - Finish this case"))
-    | ELetRec(binds, body, _) ->
+    | ELetRec(binds, aexpr, _) ->
        raise (NotYetImplemented("helpC: ELetRec - Finish this case"))
 
     (* NOTE: You may need more cases here, for sequences and tuples *)
@@ -253,10 +253,11 @@ let anf (p : tag program) : unit aprogram =
        let tmp = sprintf "if_%d" tag in
        let (cond_imm, cond_setup) = helpI cond in
        (ImmId(tmp, ()), cond_setup @ [(tmp, CIf(cond_imm, helpA _then, helpA _else, ()))])
-    | EApp(funname, args, tag) ->
+    | EApp(f, args, tag) ->
        let tmp = sprintf "app_%d" tag in
+       let (f_ans, f_setup) = helpI f in
        let (new_args, new_setup) = List.split (List.map helpI args) in
-       (ImmId(tmp, ()), (List.concat new_setup) @ [(tmp, CApp(funname, new_args, ()))])
+       (ImmId(tmp, ()), f_setup @ (List.concat new_setup) @ [(tmp, CApp(f_ans, new_args, ()))])
     
     | ELet([], body, _) -> helpI body
     | ELet((BBlank(_, _), exp, _)::rest, body, pos) ->
@@ -285,6 +286,14 @@ let anf (p : tag program) : unit aprogram =
 
     | ENil(typ, tag) -> (ImmNil(()), [])
     
+    | ELambda(binds, aexpr, tag) -> 
+       let tmp = sprintf "lambda_anf_%d" tag in
+       let args = List.map (fun a ->
+                      match a with
+                      | BName(a, _, _) -> a
+                      | _ -> raise (InternalCompilerError("Tuple bindings should have been desugared away"))) binds in
+        (ImmId(tmp, ()), [(tmp, CLambda(args, helpA aexpr, ()))])
+
     | _ -> raise (NotYetImplemented "Finish the remaining cases")
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
@@ -352,23 +361,27 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
            in errors
        (* check body *)
          @ wf_E body new_env fun_env 
+      | ELetRec(binds, body, a) -> [] (* TODO *)
+
       | EApp(f, args, loc) -> 
+        [] (* TODO *)
         (* first lookup from built-in functions, if not found lookup from user-defined functions *)
-        begin match find_opt built_in f with
+        (* begin match find_opt built_in f with
           | Some(arity) -> 
               if List.length args != arity 
               then [ Arity(List.length args, arity, loc) ] else []
           | None -> 
               begin match find_opt fun_env f with
-                | None -> (* function not defined *)
+                | None -> 
                     [ UnboundFun(f, loc) ]
-                | Some(DFun(_, args', _, _, _)) -> (* wrong arity *)
+                | Some(DFun(_, args', _, _, _)) -> 
                     if List.length args' != List.length args
                     then [ Arity(List.length args', List.length args, loc) ] else []
               end
-        end
+        end *)
       | EAnnot _ -> [] (* TODO *)
-      
+      | ELambda(binds, body, a) -> [] (* TODO *)
+
   (* wf_D: check well-formedness of a decl *)
   and wf_D d (fun_env : (string * sourcespan decl) list): exn list =
     match d with
@@ -408,13 +421,13 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
 ;;
 
 
-let desugar (p : sourcespan program) : sourcespan program =
+let desugar (p : tag program) : tag program =
   let gensym =
     let next = ref 0 in
     (fun name ->
       next := !next + 1;
       sprintf "%s_%d" name (!next)) in
-  let rec helpE (e : sourcespan expr) (* other parameters may be needed here *) =
+  let rec helpE (e : tag expr) (* other parameters may be needed here *) =
     match e with
     | EAnnot(e, t, tag) -> helpE e
     | ESeq(e1, e2, tag) -> 
@@ -452,7 +465,10 @@ let desugar (p : sourcespan program) : sourcespan program =
             binds'
         in
           ELet(List.concat @@ List.map helpB binds, helpE body, tag)
-  and helpD (decl : sourcespan decl) (* other parameters may be needed here *) =
+      | ELetRec(binds, body, a) -> e (* TODO *)
+      | ELambda(binds, body, a) -> e (* TODO *)
+
+  and helpD (decl : tag decl) (* other parameters may be needed here *) =
     match decl with
     | DFun(name, args, scheme, body, tag) ->
       (* def add-pairs((x1, y1), (x2, y2)):
@@ -476,13 +492,13 @@ let desugar (p : sourcespan program) : sourcespan program =
         ) ([], []) args
       in
         DFun(name, args', helpS scheme, helpE (ELet(new_bindings, body, tag)), tag)
-  and helpG (g : sourcespan decl list) (* other parameters may be needed here *) =
+  and helpG (g : tag decl list) (* other parameters may be needed here *) =
     List.map helpD g
-  and helpT (t : sourcespan typ) (* other parameters may be needed here *) =
+  and helpT (t : tag typ) (* other parameters may be needed here *) =
     t (* TODO *)
-  and helpS (s : sourcespan scheme) (* other parameters may be needed here *) =
+  and helpS (s : tag scheme) (* other parameters may be needed here *) =
     s (* TODO *)
-  and helpTD (t : sourcespan tydecl) (* other parameters may be needed here *) =
+  and helpTD (t : tag tydecl) (* other parameters may be needed here *) =
     match t with
     | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
   in
@@ -494,7 +510,6 @@ let desugar (p : sourcespan program) : sourcespan program =
 
 let rec compile_fun (fun_name : string) args body env : instruction list =
   raise (NotYetImplemented "Compile funs not yet implemented")
-
 
 and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
@@ -549,7 +564,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         (* argument is discarded *)
         [ ILineComment("calling c function");
           IPush(Sized(DWORD_PTR, e_reg)); 
-          ICall("input");
+          ICall(Contents("input"));
           IAdd(Reg(ESP), Const(1*4));
         ]
      | Add1  -> 
@@ -603,7 +618,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           IPush(Sized(DWORD_PTR, Reg(ESP))); 
           IPush(Sized(DWORD_PTR, Reg(EBP)));
           IPush(Sized(DWORD_PTR, e_reg)); 
-          ICall("printstack");
+          ICall(Contents("printstack"));
           IAdd(Reg(ESP), Const(3*4));
         ]
      end
@@ -678,31 +693,6 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         ]
      | EqB -> failwith "compile_cexpr: EqB not implemented"
      end
-  | CApp(fun_name, immexprs, tag) ->
-    (* check if it is built-in function *)
-    let tmp = 
-      match find_opt built_in fun_name with
-      | Some(arity) -> sprintf "%s" fun_name
-      | None -> sprintf "$fun_dec_%s" fun_name 
-    in
-    let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
-    (* the label of the function declaration *)
-    let num_of_args = List.length immexprs in
-    let push_args = List.fold_left 
-        (fun instrs imm_reg -> 
-          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
-        [] imm_regs
-    in
-      [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
-        ILineComment(sprintf "caller has %d arguments" num_args);
-        ILineComment(("tail call: " ^ (string_of_bool is_tail)));
-      ] 
-      @ push_args @
-      [
-        ICall(tmp);
-        IAdd(Reg(ESP), Const(num_of_args * word_size));
-      ]
-     
   | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
   | CTuple(immexprs, tag) -> 
 (*
@@ -769,6 +759,129 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       @ [ IMov(RegOffset((word_size * (i+1)), EAX), Reg(ECX)) ]
       (* leave the tuple as the result *)
       @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
+  
+  | CLambda(args, aexpr, tag) ->  
+    let num_args = List.length args in
+    let n = (count_vars aexpr) in
+    let lambda_label = sprintf "$lambda_%s" (string_of_int tag) in
+    let lambda_label_end = sprintf "$lambda_end_%s" (string_of_int tag) in
+
+    (*1. Compute the free-variables of the function, and sort them alphabetically.*)
+    let freeVars e = 
+      [] (* TODO *)
+    in   
+(*    let free = List.sort (freeVars aexpr) in
+*)
+    let free = [] in
+    (*2. Update the environment:*)
+    (* All the arguments are now offset by one slot from our earlier compilation*)
+    (* All the free variables are mapped to the first few local-variable slots*)
+    (* The body must be compiled with a starting stack-index that accommodates those already-initialized local variable slots used for the free-variables*)
+    let moveClosureVarToStack idx = [] 
+    in
+    let env' = [(*TODO*)] @ env in
+    let (env', i) = List.fold_left 
+        (fun (env, i) arg -> 
+          let arg_reg = RegOffset((word_size * i), EBP) in
+            ((arg, arg_reg)::env, i+1)
+        ) (env, 3) args 
+    in
+    (*3. Compile the body in the new environment*)
+    let compiled_body = compile_aexpr aexpr (List.length free) env' num_args false in
+
+    (*4. Produce compiled code that, after the stack management and before the body, reads the saved 
+         free-variables out of the closure (which is passed in as the first function parameter), and 
+         stores them in the reserved local variable slots.*)
+    let compiled_code = 
+        [ IJmp(lambda_label_end);
+          ILabel(lambda_label)     ]
+      (* Prologue *)
+      @ [        
+          (* save (previous, caller's) EBP on stack *)
+          IPush(Reg(EBP));
+          (* make current ESP the new EBP *)
+          IMov(Reg(EBP), Reg(ESP));
+          (* "allocate space" for N local variables *)
+          ISub(Reg(ESP), Const(4*n)); 
+        ]
+      @ compiled_body
+      @ [  
+          (* restore value of ESP to that just before call *)
+          IMov(Reg(ESP), Reg(EBP));
+          (* now, value at [ESP] is caller's (saved) EBP
+              so: restore caller's EBP from stack [ESP] *)
+          IPop(Reg(EBP));
+          (* return to caller *)
+          IRet;
+        ]
+      @ [ ILabel(lambda_label_end) ]
+    in
+    (*5. The closure itself is a heap-allocated tuple (arity, code-pointer, N, free-var1, ... free-varN).*)
+    let closure_setup = 
+      (* arity *)
+      [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_args)) ]
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 1), ESI)), Contents(lambda_label)) ]
+    @ [ (* number of free variables *)]
+    @ [ (* copy free variabels *)]
+    @ [ IMov(Reg(EAX), Reg(ESI));
+        IAdd(Reg(EAX), HexConst(0x5));
+        IAdd(Reg(ESI), Const(24)(* TODO *));
+      ]
+    in
+      compiled_code @ closure_setup
+
+  | CApp(immexpr, immexprs, tag) ->
+      let imm_reg = compile_imm immexpr env in
+      let num_args = List.length immexprs in
+      let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
+      let push_args = List.fold_left 
+        (fun instrs imm_reg -> 
+          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
+        [] imm_regs
+      in
+      (*1. Retrieve the function value, and check that it’s tagged as a closure.*)
+        (* load the function *)
+        [ IMov(Reg(EAX), imm_reg) ]
+      @ [ (* check-tag EAX, 0x5 *)]
+        (* untag the value*)
+      @ [ ISub(Reg(EAX), HexConst(0x5)) ]
+        (* check the arity *)
+      @ [ ]
+      (*2. Push all the arguments..*)
+      @ push_args
+      (*3. Push the closure itself.*)
+      @ [ IPush(Sized(DWORD_PTR, imm_reg)) ]
+      (*4. Call the code-label in the closure.*)
+      @ [ ICall(RegOffset((word_size * 1), EAX)) ]
+      (*5. Pop the arguments and the closure.*)
+      @ [ IAdd(Reg(ESP), Const(num_args * word_size)) ]
+
+
+    (* check if it is built-in function *)
+(*    let tmp = 
+      match find_opt built_in fun_name with
+      | Some(arity) -> sprintf "%s" fun_name
+      | None -> sprintf "$fun_dec_%s" fun_name 
+    in
+    let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
+*)    (* the label of the function declaration *)
+(*    let num_of_args = List.length immexprs in
+    let push_args = List.fold_left 
+        (fun instrs imm_reg -> 
+          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
+        [] imm_regs
+    in
+      [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
+        ILineComment(sprintf "caller has %d arguments" num_args);
+        ILineComment(("tail call: " ^ (string_of_bool is_tail)));
+      ] 
+      @ push_args @
+      [
+        ICall(tmp);
+        IAdd(Reg(ESP), Const(num_of_args * word_size));
+      ]
+*)     
+
 
 
 and compile_imm e env : arg =
@@ -848,7 +961,7 @@ global our_code_starts_here" in
         ISub(Reg(ESP), Const(4*n)); 
 
         (* Set the global variable STACK_BOTTOM to EBP *)
-        IMov(Variable("_STACK_BOTTOM"), Reg(EBP));
+        IMov(LabelContents("_STACK_BOTTOM"), Reg(EBP));
       ] 
     in
     let heap_start = [
@@ -865,7 +978,7 @@ global our_code_starts_here" in
         [ ILabel(err_type);
           IPush(Reg(EAX));
           IPush(Const(err_code)); 
-          ICall("error");
+          ICall(Contents("error"));
           IAdd(Reg(ESP), Const(2*4));
           IMov(Reg(ESP), Reg(EBP)); 
           IRet;
@@ -907,11 +1020,12 @@ let typecheck p =
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
-  |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))
-  |> (add_phase desugared desugar)
+(*  |> (add_phase desugared_preTC desugar) *)
+  (*|> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))*)
   |> (add_phase tagged tag)
+  |> (add_phase desugared_postTC desugar)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  (*|>  debug*)
+  |>  debug
   |> (add_phase result compile_prog)
 ;;

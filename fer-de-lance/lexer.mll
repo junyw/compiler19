@@ -41,6 +41,8 @@ rule token = parse
   | "isnum" { ISNUM }
   | "add1" { ADD1 }
   | "sub1" { SUB1 }
+  | "lambda" { LAMBDA }
+  | "λ" { LAMBDA }
   | "if" { IF }
   | ":" { COLON }
   | "else:" { ELSECOLON }
@@ -68,6 +70,9 @@ rule token = parse
   | "||" { OR }
   | "!" { NOT }
   | ";" { SEMI }
+  | "begin" { BEGIN }
+  | "end" { END }
+  | "rec" { REC }
   | tyident as x { TYID x }
   | ident as x { ID x }
   | eof { EOF }
