@@ -656,15 +656,18 @@ let built_in_func = [
 
   (* content equality *)
   t "equals_1" "equals((), ())" "true";
-  (*t "equals_2" {| equals((1, 2, (true, 3)), (1, 2, (true, 3))) |} "true"; *)(* NOT WORKING *)
-  t "equals_3" {| equals((1, 2, (true, 3)), (1, 2, (true, 2))) |} "false";
-  t "equals_4" "equals(true, false)" "false";
-  t "equals_5" "equals(true, true)" "true";
-  t "equals_6" "equals(1, 1)" "true";
+  t "equals_2" {| equals((1, 2, (true, 3)), (1, 2, (true, 3))) |} "true"; 
+  t "equals_3" {| equals((true, 3), (true, 2)) |} "false";
+  t "equals_4" {| equals((1, 2, (true, 3)), (1, 2, (true, 2))) |} "false";
+  t "equals_5" "equals(true, false)" "false";
+  t "equals_6" "equals(true, true)" "true";
+  t "equals_7" "equals(1, 1)" "true";
+  t "equals_8" "equals(2, 1)" "false";
 
   (* input *)
   ti "input_1" "input()" "1" "Please input an integer value: You entered: 1\n1";
 ];;
+
 
 
 let all_tests = []

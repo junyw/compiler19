@@ -6,13 +6,15 @@ open Assembly
 open Errors
 open Inference 
        
+type 'a envt = (string * 'a) list
+
+let skip_typechecking = ref false
+
 let built_in = [
   ("input", 0);
   ("print", 1);
   ("equals", 2);
 ];;
-
-type 'a envt = (string * 'a) list
 
 let rec is_anf (e : 'a expr) : bool =
   match e with
@@ -148,8 +150,27 @@ let rename_and_tag (p : tag program) : tag program =
        let (binds', env') = helpBG env binds in
        let body' = helpE env' body in
        ELet(binds', body', tag)
+    | ELetRec(bindings, body, tag) ->
+       let (revbinds, env) = List.fold_left (fun (revbinds, env) (b, e, t) ->
+                                 let (b, env) = helpB env b in ((b, e, t)::revbinds, env)) ([], env) bindings in
+       let bindings' = List.fold_left (fun bindings (b, e, tag) -> (b, helpE env e, tag)::bindings) [] revbinds in
+       let body' = helpE env body in
+       ELetRec(bindings', body', tag)
+    | ELambda(binds, body, tag) ->
+       let (binds', env') = helpBS env binds in
+       let body' = helpE env' body in
+       ELambda(binds', body', tag)
   in (rename [] p)
 ;;
+
+(* This data type lets us keep track of how a binding was introduced.
+   We'll use it to discard unnecessary Seq bindings, and to distinguish 
+   letrec from let. Essentially, it accumulates just enough information 
+   in our binding list to tell us how to reconstruct an appropriate aexpr. *)
+type 'a anf_bind =
+  | BSeq of 'a cexpr
+  | BLet of string * 'a cexpr
+  | BLetRec of (string * 'a cexpr) list
 
 
 let anf (p : tag program) : unit aprogram =
@@ -164,7 +185,7 @@ let anf (p : tag program) : unit aprogram =
        let args = List.map (fun a ->
                       match a with
                       | BName(a, _, _) -> a
-                      | _ -> raise (NotYetImplemented("helpD: Finish this"))) args in
+                      | _ -> raise (InternalCompilerError("Tuple bindings should have been desugared away"))) args in
        ADFun(name, args, helpA body, ())
   and helpC (e : tag expr) : (unit cexpr * (string * unit cexpr) list) = 
     match e with
@@ -203,6 +224,11 @@ let anf (p : tag program) : unit aprogram =
         let (expr1_imm, expr1_setup) = helpI expr1 in
         let (expr2_imm, expr2_setup) = helpI expr2 in
         (CSetItem(expr1_imm, a, expr2_imm, ()), expr1_setup @ expr2_setup)
+    
+    | ELambda(binds, body, _) ->
+       raise (NotYetImplemented("helpC: ELambda - Finish this case"))
+    | ELetRec(binds, body, _) ->
+       raise (NotYetImplemented("helpC: ELetRec - Finish this case"))
 
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
@@ -466,8 +492,11 @@ let desugar (p : sourcespan program) : sourcespan program =
 
 ;;
 
+let rec compile_fun (fun_name : string) args body env : instruction list =
+  raise (NotYetImplemented "Compile funs not yet implemented")
 
-let rec compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
+
+and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
   | ALet(id, cexpr, aexpr, _) -> 
      let prelude = compile_cexpr cexpr (si + 1) env num_args false in
@@ -865,6 +894,10 @@ global our_code_starts_here" in
     in
     sprintf "%s%s\n" prelude as_assembly_string
 
+let typecheck p =
+  (* You should replace this with either type_synth or type_check *)
+  type_synth p
+
 
 (* Feel free to add additional phases to your pipeline.
    The final pipeline phase needs to return a string,
@@ -874,7 +907,7 @@ global our_code_starts_here" in
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
-  |> (add_err_phase type_checked type_synth)
+  |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))
   |> (add_phase desugared desugar)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)

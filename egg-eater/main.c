@@ -108,17 +108,13 @@ int input(int val) {
 }
 
 bool istuple(int val) {
-  if ((val & 0x00000111) == 0x00000001) { 
+  if ((val & 0x00000007) == 0x00000001) { 
     return true;
   }
   return false;
 }
 
 int equals(int val1, int val2) {
-  // print_tagged_value(val1);
-  // print_tagged_value(val2);
-  // printf("\n%#010x\n", val1);
-  // printf("\n%#010x\n", val2);
   // content equality
   if (istuple(val1) && istuple(val2)) {
       // compare tuples - does not handle cyclic tuples
@@ -135,14 +131,15 @@ int equals(int val1, int val2) {
       if (size1 != size2) return BOOL_FALSE;
       
       for(int i = 0; i < size1; i++) {
-        if (!equals(*(p1+(i+1)), *(p2+(i+1)))) return BOOL_FALSE;
+        // The return value of equals is tagged boolean.
+        int eq = equals(*(p1+(i+1)), *(p2+(i+1)));
+        if (eq == BOOL_FALSE) return BOOL_FALSE;
       }
       return BOOL_TRUE;
-  } else if (val1 == val2) {
-    // not a tuple      
-    return BOOL_TRUE;
+  } else  {
+    // not a tuple    
+    if (val1 == val2) return BOOL_TRUE; else return BOOL_FALSE;
   } 
-  return BOOL_FALSE;
 }
 
 int print(int val) {

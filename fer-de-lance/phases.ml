@@ -17,8 +17,9 @@ type phase =
   | Source of string
   | Parsed of sourcespan program
   | WellFormed of sourcespan program
-  | Desugared of sourcespan program
+  | DesugaredPreTC of sourcespan program
   | TypeChecked of sourcespan program
+  | DesugaredPostTC of tag program
   | Renamed of tag program
   | Tagged of tag program
   | ANFed of tag aprogram
@@ -29,10 +30,11 @@ type phase =
 let source s = Source s
 let parsed p = Parsed p
 let well_formed p = WellFormed p
-let desugared p = Desugared p
+let desugared_preTC p = DesugaredPreTC p
 let renamed p = Renamed p
 let tagged p = Tagged p
 let type_checked p = TypeChecked p
+let desugared_postTC p = DesugaredPostTC p
 let anfed p = ANFed p
 let result s = Result s
 ;;
@@ -92,30 +94,36 @@ let add_phase
      | err -> Error([Failure("Unexpected compile error: " ^ Printexc.to_string err)], trace)
 ;;
 
+let no_op_phase (cur_pipeline : 'a pipeline) = cur_pipeline
+;;
+
 (* Stringifies a list of phases, for debug printing purposes *)
 let print_trace (trace : phase list) : string list =
   let phase_name p = match p with
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
-    | Desugared _ -> "Desugared"
+    | DesugaredPreTC _ -> "Desugared before TC"
     | WellFormed _ -> "Well-formed"
     | Renamed  _ -> "Renamed"
     | Tagged _ -> "Tagged"
     | TypeChecked _ -> "TypeChecked"
+    | DesugaredPostTC _ -> "Desugared after TC"
     | ANFed _ -> "ANF'ed"
     | Result _ -> "Result" in
   let string_of_phase p = match p with
     | Source s -> s
     | Parsed p
-    | Desugared p
+    | DesugaredPreTC p
     | WellFormed p -> string_of_program p
     | Renamed p -> string_of_program p
     | TypeChecked p -> ast_of_program p
+    | DesugaredPostTC p -> ast_of_program p
     | Tagged p -> string_of_program_with (fun tag -> sprintf "@%d" tag) p
     | ANFed p -> string_of_aprogram_with (fun tag -> sprintf "@%d" tag)  p
     | Result s -> s in
   List.mapi (fun n p -> sprintf "Phase %d (%s):\n%s" n (phase_name p) (string_of_phase p)) (List.rev trace)
 ;;
+
 
 (* add debug to pipeline to print trace to stderr *)
 let debug (cur_pipeline : 'a pipeline) : 'a pipeline = 
