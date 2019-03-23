@@ -423,15 +423,19 @@ let rec infer_exp
                 unify b (List.nth typs m) s1 loc reasons
           | _ -> failwith ("infer_exp: ESetItem impossible type - not a tuple" ^ (string_of_typ a) ^ (string_of_sourcespan loc))
     end
-  | EPrim1(op, expr, loc)         -> infer_app t e
-  | EPrim2(op, expr1, expr2, loc) -> infer_app t e
   | EAnnot(expr, typ, loc) -> infer_exp funenv env typ expr s reasons
   | EIf(c_expr, t_expr, f_expr, loc) ->
     let s = infer_exp funenv env tBool c_expr s reasons in
     let s = infer_exp funenv env t t_expr s reasons in
         infer_exp funenv env t f_expr s reasons
 
-  | EApp(fun_name, args, loc) -> failwith "infer_exp: EApp to be implemented"
+
+  | EPrim1(op, expr, loc)         -> infer_app t e
+  | EPrim2(op, expr1, expr2, loc) -> infer_app t e
+  | EApp(f, args, loc) -> 
+      let a = List.map (fun _ -> newTyVar "app_arg" loc) args in
+      let s1 = infer_exp funenv env (TyArr(a, t, loc)) f s reasons in
+          infer_exp funenv env (TyTup(a, loc)) (ETuple(args, loc)) s1 reasons
   
   | ELambda(arg_binds, e, loc) -> 
     let rec bind_to_typs (bind : 'a bind) : 'a typ list = 
