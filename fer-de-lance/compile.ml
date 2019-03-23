@@ -767,7 +767,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let lambda_label_end = sprintf "$lambda_end_%s" (string_of_int tag) in
 
     (*1. Compute the free-variables of the function, and sort them alphabetically.*)
-    let rec freeVars (e : 'a aexpr) = 
+    let rec freeVars (e : 'a aexpr) : (string list) = 
       (* TODO : needs to remove duplicates *)
       let rec helpA e env =
         match e with
@@ -779,25 +779,26 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       and helpC e env =
         match e with
         | CIf(c, t, f, _) -> (helpI c env) @ (helpA t env) @ (helpA f env)
-        | CPrim1(_, a, _) helpI a env
+        | CPrim1(_, a, _) -> helpI a env
         | CPrim2(_, a, b, _) -> (helpI a env) @ (helpI b env)
-        | CApp(a, args, _) -> (helpI a env) @ (List.map (fun x -> helpI x env) args)
+        | CApp(a, args, _) -> (helpI a env) @ List.concat (List.map (fun x -> helpI x env) args)
         | CImmExpr(a) -> helpI a env
         | CTuple _
         | CGetItem _
         | CSetItem _ -> failwith "freeVars: not implemented yet"
         | CLambda(args, aexpr, _) -> 
-          helpA args@env aexpr
+          helpA aexpr (args @ env) 
       and helpI e env = 
+        match e with
         | ImmId(id, _) -> 
-          begin match List.find_opt (fun x -> String.equal x id) env with
+          begin match (List.find_opt (fun x -> String.equal x id) env) with
           | Some(_) -> []
           | None    -> [id]
           end 
         | _ -> []
       in helpA e args
     in   
-    let free = List.sort (freeVars aexpr) in
+    let free = List.sort (fun x y -> String.compare x y) (freeVars aexpr) in
     let num_free_vars = List.length free in
     (*2. Update the environment:*)
     (* The closure itself is the first argument [EBP + 8], other arguments start from [EBP + 12] *)
@@ -812,27 +813,27 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let moveClosureVarToStack i =
       (* move the i^th variable to the i^th slot *)
       (* from the (i+3)^rd slot in the closure *)
-      [ IMov(Reg(EAX), RegOffset(12 + 4 * i, Reg(ECX)));
-        IMov(RegOffset(~word_size * i, EBP), Reg(EAX));
+      [ IMov(Reg(EAX), RegOffset(12 + 4 * i, ECX));
+        IMov(RegOffset(~-word_size * i, EBP), Reg(EAX));
       ]
     in
-    let load_closure_variables = (List.mapi (fun fv i -> moveClosureVarToStack i + 1) free) in
+    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack (i + 1)) free) in
     (* save locations of args to env *)
-    let (env, i) = List.fold_left 
+    let (env', i) = List.fold_left 
         (fun (env, i) arg -> 
           let arg_reg = RegOffset((word_size * i), EBP) in
             ((arg, arg_reg)::env, i+1)
-        ) (env, 3) args 
+        ) ([], 3) args 
     in
     (* save locations of closure variables to env *)
-    let (env, i) = List.fold_left 
+    let (env'', i) = List.fold_left 
         (fun (env, i) arg -> 
-          let arg_reg = RegOffset(~word_size * i, EBP) in
+          let arg_reg = RegOffset(~-word_size * i, EBP) in
             ((arg, arg_reg)::env, i+1)
-        ) (env, 0) args 
+        ) (env', 0) free 
     in
     (*3. Compile the body in the new environment*)
-    let compiled_body = compile_aexpr aexpr num_free_vars env num_args false in
+    let compiled_body = compile_aexpr aexpr num_free_vars env'' num_args false in
 
     (*4. Produce compiled code that, after the stack management and before the body, reads the saved 
          free-variables out of the closure (which is passed in as the first function parameter), and 
@@ -867,16 +868,19 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     in
     (* Creat the closure in heap *)
     (* represented as a heap-allocated tuple:
-      (arity, code-pointer, N, free-var1, ... free-varN) *)
-    
-    let moveClosureVarToHeap i =
+------------------------------------------------------------------------
+| arity | code ptr | N | var_1 | var_2 | ... | var_N | (maybe padding) |
+------------------------------------------------------------------------
+    *)
+
+    let moveClosureVarToHeap fv i =
       (* move the i^th variable to the i^th slot *)
       (* from the (i+3)^rd slot in the closure *)
-      [ IMov(Reg(EAX), ));
+      [ IMov(Reg(EAX), (find env fv));
         IMov(RegOffset(12 + 4 * i, ESI), Reg(EAX));
       ]
     in
-    let save_closure_variables = (List.mapi (fun fv i -> moveClosureVarToHeap i) free) in
+    let save_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToHeap fv i) free) in
 
     let closure_setup = 
       (* arity *)
@@ -884,9 +888,9 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* code-pointer *)
     @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 1), ESI)), Contents(lambda_label)) ]
       (* number of free variables *)
-    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 2), ESI)), Const(num_free_vars) ]
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 2), ESI)), Const(num_free_vars)) ]
       (* copy free variabels *)
-    @ []
+    @ save_closure_variables
       (* creates the closure value *)
     @ [ IMov(Reg(EAX), Reg(ESI));
         IAdd(Reg(EAX), HexConst(0x5)); ]
