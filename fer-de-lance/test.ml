@@ -691,6 +691,10 @@ let lambdas = [
                foo(1, 2, 3, 4)(5) |} "11";
 ];;
 
+let comment = [
+  t "comment_1" "1 # One" "1";
+];;
+
 let all_tests = []
 (*  @ wf_errs
   @ runtime_errs
@@ -705,6 +709,7 @@ let all_tests = []
   @ type_errs
   @ built_in_func *)
   @ lambdas
+  @ comment
 ;;
 
 let suite =

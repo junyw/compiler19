@@ -422,11 +422,36 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         else Error(errors)
 ;;
 
-(* desugar *)
+(* desugar_preTC *)
 (* 1. function definition should be desugared to lambda *)
-(* 2. tuples *)
 
-let desugar (p : tag program) : tag program =
+let desugar_preTC (p : sourcespan program) : sourcespan program =
+  let rec helpD (decl : sourcespan decl): 'a binding =
+    match decl with
+    | DFun(name, args, scheme, body, tag) ->
+      (* function definition should be desugared to lambda *)
+      (BName(name, (instantiate scheme), tag), ELambda(args, body, tag), tag)
+
+  and helpG (g : sourcespan decl list): 'a binding list =
+    List.map helpD g
+  and helpT (t : sourcespan typ) =
+    t (* TODO *)
+  and helpS (s : sourcespan scheme) =
+    s (* TODO *)
+  and helpTD (t : sourcespan tydecl)  =
+    match t with
+    | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
+  in
+  match p with
+  | Program(tydecls, declgroups, body, tag) ->
+      Program(List.map helpTD tydecls, [], ELet(List.concat @@ List.map helpG declgroups, body, tag), tag)
+;;
+
+
+(* desugar_postTC *)
+(* 1. tuples *)
+
+let desugar_postTC (p : tag program) : tag program =
   let gensym =
     let next = ref 0 in
     (fun name ->
@@ -474,11 +499,7 @@ let desugar (p : tag program) : tag program =
       | ELambda(binds, body, a) -> e (* TODO *)
 
   and helpD (decl : tag decl): 'a binding =
-    match decl with
-    | DFun(name, args, scheme, body, tag) ->
-      (* function definition should be desugared to lambda *)
-      (BName(name, (instantiate scheme), tag), ELambda(args, helpE body, tag), tag)
-
+      failwith "desugar_postTC: declartions should have been desugared by desugar_preTC"
       (* def add-pairs((x1, y1), (x2, y2)):
               (x1 + x2, y1 + y2)
         
@@ -1071,10 +1092,10 @@ let typecheck p =
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
-(*  |> (add_phase desugared_preTC desugar) *)
-  (*|> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))*)
+  |> (add_phase desugared_preTC desugar_preTC) 
+  |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))
   |> (add_phase tagged tag)
-  |> (add_phase desugared_postTC desugar)
+  |> (add_phase desugared_postTC desugar_postTC)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
   |>  debug

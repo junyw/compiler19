@@ -1,2 +1,4 @@
-let a = (lambda (x): let b = 10 in b) in 
-	a(0)
+def a(x) : 
+	x + 1
+
+a(10)
