@@ -296,7 +296,7 @@ let anf (p : tag program) : unit aprogram =
                       | _ -> raise (InternalCompilerError("Tuple bindings should have been desugared away"))) binds in
         (ImmId(tmp, ()), [(tmp, CLambda(args, helpA aexpr, ()))])
 
-    | _ -> raise (NotYetImplemented "Finish the remaining cases")
+    | _ -> raise (NotYetImplemented "anf: Finish the remaining cases")
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right (fun (bind, exp) body -> ALet(bind, exp, body, ())) ans_setup (ACExpr ans)
@@ -496,10 +496,7 @@ let desugar_postTC (p : tag program) : tag program =
         in
           ELet(List.concat @@ List.map helpB binds, helpE body, tag)
       | ELetRec(binds, body, a) -> e (* TODO *)
-      | ELambda(binds, body, a) -> e (* TODO *)
-
-  and helpD (decl : tag decl): 'a binding =
-      failwith "desugar_postTC: declartions should have been desugared by desugar_preTC"
+      | ELambda(binds, body, tag) -> ELambda(binds, helpE body, tag) (* TOD *)
       (* def add-pairs((x1, y1), (x2, y2)):
               (x1 + x2, y1 + y2)
         
@@ -518,10 +515,14 @@ let desugar_postTC (p : tag program) : tag program =
           | BTuple(binds, tag')  -> 
               let tmp = gensym "arg" in
                 (args' @ [BName(tmp, TyBlank(tag'), tag')], new_bindings @ [(bind, EId(tmp, tag), tag)])
-        ) ([], []) args
+        ) ([], []) binds
       in
-        DFun(name, args', helpS scheme, helpE (ELet(new_bindings, body, tag)), tag)
-*)  and helpG (g : tag decl list): 'a binding list =
+        ELambda(binds, helpE (ELet(new_bindings, body, tag)), tag)
+*)
+  and helpD (decl : tag decl): 'a binding =
+      failwith "desugar_postTC: declartions should have been desugared by desugar_preTC"
+
+  and helpG (g : tag decl list): 'a binding list =
     List.map helpD g
   and helpT (t : tag typ) (* other parameters may be needed here *) =
     t (* TODO *)
@@ -803,7 +804,9 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
             let env = id :: env in
             (helpC bind env) @ (helpA body env)
         | ACExpr e -> helpC e env
-        | _ -> failwith "freeVars: not implemented yet"
+        | ASeq _ -> failwith "freeVars: ASeq not implemented yet"
+        | ALetRec _ -> failwith "freeVars: ALetRec not implemented yet"
+
       and helpC e env =
         match e with
         | CIf(c, t, f, _) -> (helpI c env) @ (helpA t env) @ (helpA f env)

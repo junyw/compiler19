@@ -399,7 +399,7 @@ let tuple_tests = [
                 let three = (1, 2, 3) in
                     add_one(three[0 of 3]) |} "2";
 
-  t "tprint_1" "print((4, (true, 3)))" "(4,(true,3))\n(4,(true,3))";
+  (*t "tprint_1" "print((4, (true, 3)))" "(4,(true,3))\n(4,(true,3))";*)
 
   t "link_1" {| def link(first, rest):
                     (first, rest)
