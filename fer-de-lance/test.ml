@@ -696,7 +696,7 @@ let comment = [
 ];;
 
 let all_tests = []
-(*  @ wf_errs
+  (*@ wf_errs*)
   @ runtime_errs
   @ tuple_tests
   @ seq_tests
@@ -707,7 +707,7 @@ let all_tests = []
   @ type_tests  
   @ recursive_data
   @ type_errs
-  @ built_in_func *)
+  @ built_in_func 
   @ lambdas
   @ comment
 ;;
