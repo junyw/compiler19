@@ -17,12 +17,10 @@ module StringSet = Set.Make(String);;
 type 'a envt = 'a StringMap.t;;
 type 'a subst = (string * 'a) list;;
 
-let print_funenv funenv =
-  StringMap.iter (fun name scheme -> printf "\t%s => %s\n" name (string_of_scheme scheme)) funenv;;
 let print_env env =
-  StringMap.iter (fun name typ -> debug_printf "\t%s => %s\n" name (string_of_typ typ)) env;;
+  StringMap.iter (fun name scheme -> printf ";\t%s => %s\n" name (string_of_scheme scheme)) env;;
 let print_subst subst =
-  List.iter (fun (name, typ) -> debug_printf "\t%s => %s\n" name (string_of_typ typ)) subst;;
+  List.iter (fun (name, typ) -> printf ";\t%s => %s\n" name (string_of_typ typ)) subst;;
 
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 let mk_tyarr left right : 'a typ = 
@@ -304,15 +302,15 @@ and binds_to_typs (binds : 'a bind list) : 'a typ list =
     List.concat @@ List.map bind_to_typs binds
 ;;
 
-let rec bind_to_env (bind : 'a bind) (env : 'a scheme envt) : 'a scheme envt = 
+let rec bind_to_env (bind : 'a bind) s (env : 'a scheme envt) : 'a scheme envt = 
     match bind with
-    | BBlank(typ, loc) -> StringMap.empty
-    | BName(arg_name, typ, loc) -> StringMap.add arg_name (generalize env (unblank typ)) (StringMap.empty)
-    | BTuple(binds, loc) -> binds_to_env binds StringMap.empty
-and binds_to_env (binds : 'a bind list) (env : 'a scheme envt) : 'a scheme envt =
+    | BBlank(typ, loc) -> env
+    | BName(arg_name, typ, loc) -> StringMap.add arg_name (generalize env (apply_subst_typ s typ)) env
+    | BTuple(binds, loc) -> binds_to_env binds s env
+and binds_to_env (binds : 'a bind list) s (env : 'a scheme envt) : 'a scheme envt =
+    let env = apply_subst_env s env in
     List.fold_left (fun env bind -> 
-                    StringMap.union (fun x y -> failwith "binds_to_env: impossible case") 
-                                    env (bind_to_env bind env))
+                    bind_to_env bind s env)
     env binds
 ;;
 
@@ -332,7 +330,8 @@ let rec infer_exp
           (s  : 'a typ subst) 
           reasons
         : sourcespan typ subst =
-  (*let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in*)
+  let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in
+  let () = print_subst s in
   match e with
   | ENil(typ, loc)  -> unify typ t s loc reasons
   | ENumber(v, loc) -> unify tInt t s loc reasons
@@ -343,16 +342,22 @@ let rec infer_exp
   
   | ELet([], e2, loc) -> infer_exp env t e2 s reasons
   | ELet(((bind : 'a bind), e1, loc')::rest, e2, loc) ->  
+    let rec unblank_bind bind = 
+      match bind with
+      | BBlank(typ, loc) -> BBlank(unblank typ, loc)
+      | BName(arg_name, typ, loc) -> BName(arg_name, unblank typ, loc) 
+      | BTuple(binds, loc) -> BTuple(List.map unblank_bind binds, loc)
+    in
+    let bind = unblank_bind bind in
     let a = match bind_to_typs bind with
             | [typ] -> typ
             | _ -> failwith "infer_exp: ELet binding of impossible type"
     in
-    let a = unblank a in
+    (*let a = unblank a in *)(* should be unblank a bind, so that they maintain the same tyvars *)
     let s1 = infer_exp env a e1 s reasons in
     let env = apply_subst_env s1 env in
-    let env' = binds_to_env [bind] env in
-    let env' = apply_subst_env s1 env' in
-      infer_exp env' t (ELet(rest, e2, loc)) s1 reasons
+    let env' = binds_to_env [bind] s1 env in
+      infer_exp env' (apply_subst_typ s1 t) (ELet(rest, e2, loc)) s1 reasons
 
   | ESeq(e1, e2, loc) ->
     let a = newTyVar "blank" loc in
@@ -395,7 +400,10 @@ let rec infer_exp
           | _ -> failwith ("infer_exp: ESetItem impossible type - not a tuple" ^ (string_of_typ a) ^ (string_of_sourcespan loc))
     end
   
-  | EAnnot(expr, typ, loc) -> infer_exp env typ expr s reasons
+  | EAnnot(expr, typ, loc) -> 
+    let s = unify t (unblank typ) s loc reasons in
+    infer_exp env t expr s reasons
+
   | EIf(c_expr, t_expr, f_expr, loc) ->
     let s = infer_exp env tBool c_expr s reasons in
     let s = infer_exp env t t_expr s reasons in
@@ -418,7 +426,7 @@ let rec infer_exp
         let b = newTyVar "lambda_ret" loc in
         let s1 = unify (TyArr(arg_typs, b, loc)) t s loc reasons in
 
-        let lambda_env = binds_to_env arg_binds env in
+        let lambda_env = binds_to_env arg_binds s env in
         let lambda_env = apply_subst_env s1 lambda_env in
         infer_exp lambda_env b e s1 reasons
 ;;
