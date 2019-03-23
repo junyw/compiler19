@@ -17,11 +17,13 @@ Tagged values:
 Numbers: 0 in least significant bit
 Booleans: 111 in least three significant bits
 Tuples: 001 in least three significant bits
+Lambda: 101 in least three significant bits
 */
 
 const int BOOL_TAG   = 0x00000001;
 const int BOOL_TRUE  = 0xFFFFFFFF; // These must be the same values
 const int BOOL_FALSE = 0x7FFFFFFF; // as chosen in compile.ml
+const int LAMBDA_TAG = 0x00000005;
 
 const int E_ARITH_NOT_NUM = 1;
 const int E_COMPARISON_NOT_NUM = 2;
@@ -40,7 +42,24 @@ void print_tagged_value(int val) {
     printf("true");
   } else if (val == BOOL_FALSE) {
     printf("false");
-  } else if ((val & BOOL_TAG) == 1) {
+  } else if ((val & LAMBDA_TAG) == LAMBDA_TAG) {
+      // ------------------------------------------------------------------------
+      // | arity | code ptr | N | var_1 | var_2 | ... | var_N | (maybe padding) |
+      // ------------------------------------------------------------------------
+    int* p = (int*)(val - 0x5);
+    int arity = *p;
+    int free_vars = *(p+2);
+    printf("(lambda (arity=%d) ", arity);
+    printf("(bound variables=");
+    if(free_vars == 0) printf("None");
+    for(int i = 0; i < free_vars; i++) {
+      print_tagged_value(*(p+(i+3)));
+      if(i != free_vars - 1) printf(",");
+    }
+    printf("))");
+
+  } 
+  else if ((val & BOOL_TAG) == 1) {
     if (val == BOOL_TAG) {
       printf("nil");
       return;
@@ -143,7 +162,7 @@ int equals(int val1, int val2) {
 }
 
 int print(int val) {
-  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE || (val & BOOL_TAG) == 1) {
+  if ((val & BOOL_TAG) == 0 || val == BOOL_TRUE || val == BOOL_FALSE || (val & BOOL_TAG) == 1 || (val & LAMBDA_TAG) == LAMBDA_TAG) {
     print_tagged_value(val);
     printf("\n");
   } else {

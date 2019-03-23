@@ -141,10 +141,12 @@ let rename_and_tag (p : tag program) : tag program =
     | ENumber _ -> e
     | EBool _ -> e
     | ENil _ -> e
-    | EId(name, tag) ->
-       (try
-         EId(find env name, tag)
-       with Not_found -> e)
+    | EId(x, tag) ->
+       begin 
+       try
+         EId(find env x, tag)
+       with _ -> raise (InternalCompilerError (sprintf "rename_and_tag: Name %s not found" x))
+       end
     | EApp(name, args, tag) -> EApp(helpE env name, List.map (helpE env) args, tag)
     | ELet(binds, body, tag) ->
        let (binds', env') = helpBG env binds in
@@ -420,6 +422,9 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         else Error(errors)
 ;;
 
+(* desugar *)
+(* 1. function definition should be desugared to lambda *)
+(* 2. tuples *)
 
 let desugar (p : tag program) : tag program =
   let gensym =
@@ -468,9 +473,12 @@ let desugar (p : tag program) : tag program =
       | ELetRec(binds, body, a) -> e (* TODO *)
       | ELambda(binds, body, a) -> e (* TODO *)
 
-  and helpD (decl : tag decl) (* other parameters may be needed here *) =
+  and helpD (decl : tag decl): 'a binding =
     match decl with
     | DFun(name, args, scheme, body, tag) ->
+      (* function definition should be desugared to lambda *)
+      (BName(name, (instantiate scheme), tag), ELambda(args, helpE body, tag), tag)
+
       (* def add-pairs((x1, y1), (x2, y2)):
               (x1 + x2, y1 + y2)
         
@@ -480,7 +488,7 @@ let desugar (p : tag program) : tag program =
           let (x1, y1) = p1, (x2, y2) = p2 in
               (x1 + x2, y1 + y2)
       *)
-      let (args', new_bindings) = 
+(*      let (args', new_bindings) = 
         List.fold_left
         (fun (args', new_bindings) bind -> 
           match bind with 
@@ -488,11 +496,11 @@ let desugar (p : tag program) : tag program =
           | BName _  -> (args' @ [bind], new_bindings)
           | BTuple(binds, tag')  -> 
               let tmp = gensym "arg" in
-                (args' @ [BName(tmp, TyBlank(tag')(* TODO: type? *), tag')], new_bindings @ [(bind, EId(tmp, tag), tag)])
+                (args' @ [BName(tmp, TyBlank(tag'), tag')], new_bindings @ [(bind, EId(tmp, tag), tag)])
         ) ([], []) args
       in
         DFun(name, args', helpS scheme, helpE (ELet(new_bindings, body, tag)), tag)
-  and helpG (g : tag decl list) (* other parameters may be needed here *) =
+*)  and helpG (g : tag decl list): 'a binding list =
     List.map helpD g
   and helpT (t : tag typ) (* other parameters may be needed here *) =
     t (* TODO *)
@@ -504,8 +512,7 @@ let desugar (p : tag program) : tag program =
   in
   match p with
   | Program(tydecls, declgroups, body, tag) ->
-      Program(List.map helpTD tydecls, List.map helpG declgroups, helpE body, tag)
-
+      Program(List.map helpTD tydecls, [], ELet(List.concat @@ List.map helpG declgroups, helpE body, tag), tag)
 ;;
 
 let rec compile_fun (fun_name : string) args body env : instruction list =
@@ -810,14 +817,15 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       [ IMov(Reg(ECX), RegOffset(word_size * 2, EBP));
         ISub(Reg(ECX), HexConst(0x5)) ]
     in
-    let moveClosureVarToStack i =
+    let moveClosureVarToStack fv i =
       (* move the i^th variable to the i^th slot *)
       (* from the (i+3)^rd slot in the closure *)
-      [ IMov(Reg(EAX), RegOffset(12 + 4 * i, ECX));
-        IMov(RegOffset(~-word_size * i, EBP), Reg(EAX));
+      [ ILineComment(("unpack closure variable " ^ fv ^ " to stack"));
+        IMov(Reg(EAX), RegOffset(12 + 4 * i, ECX));
+        IMov(RegOffset(~-word_size * i - 4, EBP), Reg(EAX));
       ]
     in
-    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack (i + 1)) free) in
+    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack fv i) free) in
     (* save locations of args to env *)
     let (env', i) = List.fold_left 
         (fun (env, i) arg -> 
@@ -828,12 +836,12 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     (* save locations of closure variables to env *)
     let (env'', i) = List.fold_left 
         (fun (env, i) arg -> 
-          let arg_reg = RegOffset(~-word_size * i, EBP) in
+          let arg_reg = RegOffset(~-word_size * i - 4, EBP) in
             ((arg, arg_reg)::env, i+1)
         ) (env', 0) free 
     in
     (*3. Compile the body in the new environment*)
-    let compiled_body = compile_aexpr aexpr num_free_vars env'' num_args false in
+    let compiled_body = compile_aexpr aexpr (1 + num_free_vars) env'' num_args false in
 
     (*4. Produce compiled code that, after the stack management and before the body, reads the saved 
          free-variables out of the closure (which is passed in as the first function parameter), and 
@@ -848,13 +856,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           (* make current ESP the new EBP *)
           IMov(Reg(EBP), Reg(ESP));
           (* "allocate space" for N local variables *)
-          ISub(Reg(ESP), Const(4*n)); 
+          ISub(Reg(ESP), Const(word_size * n)); 
         ]
+      @ [ ILineComment("load the self argument")]
       @ load_closure
       @ load_closure_variables
-      @ [ ILineComment("----start of lambda body-----")]
+      @ [ ILineComment(sprintf "----start of lambda body %s -----" lambda_label)]
       @ compiled_body
-      @ [ ILineComment("----end of lambda body-----")]
+      @ [ ILineComment(sprintf "----end of lambda body %s -----" lambda_label)]
       @ [  
           (* restore value of ESP to that just before call *)
           IMov(Reg(ESP), Reg(EBP));
@@ -866,25 +875,27 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         ]
       @ [ ILabel(lambda_label_end) ]
     in
+
     (* Creat the closure in heap *)
     (* represented as a heap-allocated tuple:
-------------------------------------------------------------------------
-| arity | code ptr | N | var_1 | var_2 | ... | var_N | (maybe padding) |
-------------------------------------------------------------------------
+      ------------------------------------------------------------------------
+      | arity | code ptr | N | var_1 | var_2 | ... | var_N | (maybe padding) |
+      ------------------------------------------------------------------------
     *)
-
     let moveClosureVarToHeap fv i =
       (* move the i^th variable to the i^th slot *)
       (* from the (i+3)^rd slot in the closure *)
-      [ IMov(Reg(EAX), (find env fv));
+      [ ILineComment(("move closure variable " ^ fv ^ " to heap"));
+        IMov(Reg(EAX), (find env fv));
         IMov(RegOffset(12 + 4 * i, ESI), Reg(EAX));
       ]
     in
     let save_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToHeap fv i) free) in
 
     let closure_setup = 
+      [ ILineComment(sprintf "-----start of creating closure %s in heap-----" lambda_label ) ]
       (* arity *)
-      [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_args)) ]
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_args)) ]
       (* code-pointer *)
     @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 1), ESI)), Contents(lambda_label)) ]
       (* number of free variables *)
@@ -894,8 +905,15 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* creates the closure value *)
     @ [ IMov(Reg(EAX), Reg(ESI));
         IAdd(Reg(EAX), HexConst(0x5)); ]
-        (* update the heap pointer, keeping 8-byte alignment *)
-    @ [ IAdd(Reg(ESI), Const(24)(* TODO *));]
+      
+      (* update the heap pointer, keeping 8-byte alignment *)
+      (* bump the heap pointer *)
+    @ [ IAdd(Reg(ESI), Const(word_size * (3 + num_free_vars))) ]
+      (* realign the heap *)
+    @ [ IAdd(Reg(ESI), Const(if ((3 + num_free_vars) mod 2 == 1) then word_size else 0)) ]
+
+    @ [ ILineComment(sprintf "-----end of creating closure %s in heap-----" lambda_label ) ]
+
     in
       compiled_code @ closure_setup
 
@@ -917,13 +935,15 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         (* check the arity *)
       @ [ ]
       (*2. Push all the arguments..*)
+      @ [ ILineComment("push the arguments")]
       @ push_args
       (*3. Push the closure itself.*)
+      @ [ ILineComment("push the closure on to stack")]
       @ [ IPush(Sized(DWORD_PTR, imm_reg)) ]
       (*4. Call the code-label in the closure.*)
       @ [ ICall(RegOffset((word_size * 1), EAX)) ]
       (*5. Pop the arguments and the closure.*)
-      @ [ IAdd(Reg(ESP), Const(num_args * word_size)) ]
+      @ [ IAdd(Reg(ESP), Const((num_args + 1) * word_size)) ]
 
 
     (* check if it is built-in function *)
@@ -951,58 +971,20 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       ]
 *)     
 
-
-
 and compile_imm e env : arg =
   match e with
   | ImmNum(n, _)      -> Const(n lsl 1)
   | ImmBool(true, _)  -> const_true
   | ImmBool(false, _) -> const_false
-  | ImmId(x, _)       -> (find env x)
+  | ImmId(x, _)       -> 
+      begin try 
+        find env x
+      with _ -> raise (InternalCompilerError (sprintf "compile_imm: Name %s not found" x))
+      end
   | ImmNil _ -> HexConst(0x00000001) (* an invalid pointer tagged as tuple *)
 
 and compile_decl (d : tag adecl) : instruction list =
-  match d with 
-  | ADFun(fun_name, args, aexpr, tag) ->
-    let tmp = sprintf "$fun_dec_%s" fun_name in
-    let tmp_body = sprintf "$fun_dec_body_%s" fun_name in
-    let num_args = List.length args in
-    let n = (count_vars aexpr) in
-    let prelude = [
-      (* save (previous, caller's) EBP on stack *)
-      IPush(Reg(EBP));
-      (* make current ESP the new EBP *)
-      IMov(Reg(EBP), Reg(ESP));
-      (* "allocate space" for N local variables *)
-      ISub(Reg(ESP), Const(4*n)); 
-
-      ILineComment("-----start of function body-----");
-      ILabel(tmp_body);
-    ] in
-    let postlude = [
-      ILineComment("-----end of function body-----");
-
-      (* restore value of ESP to that just before call *)
-      IMov(Reg(ESP), Reg(EBP));
-      (* now, value at [ESP] is caller's (saved) EBP
-          so: restore caller's EBP from stack [ESP] *)
-      IPop(Reg(EBP));
-      (* return to caller *)
-      IRet;
-    ] in
-    let (env, i) = List.fold_left 
-      (fun (env, i) arg -> 
-        let arg_reg = RegOffset((word_size * i), EBP) in
-          ((arg, arg_reg)::env, i+1)
-      ) ([], 2) args 
-    in
-    let body = compile_aexpr aexpr 1 env num_args true in
-          [ ILineComment(("declaration of function " ^ fun_name));
-            ILineComment(("number of arguments " ^ (string_of_int num_args)));
-            ILabel(tmp); ] 
-        @ prelude 
-        @ body 
-        @ postlude
+  raise (InternalCompilerError("compile_decl: Function declarations should have been desugared away"))
 
 let rec compile_prog (anfed : tag aprogram) : string =
   match anfed with

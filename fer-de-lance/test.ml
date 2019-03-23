@@ -670,8 +670,25 @@ let built_in_func = [
 
 let lambdas = [
   t "lambda_1" "let incr = (lambda(x): x + 1) in incr(5)" "6";
+  t "lambda_2" {|  let a = 10 in
+                    let incr = (lambda(x): x + a) in 
+                      incr(5)|} "15";
+  t "lambda_3" {| let a = (lambda(y): y + 1) in
+                    let b = (lambda(x): a(x)) in
+                  b(5) |} "6";
+  t "lambda_4" {| let a = (lambda (x): let b = 10 in b + x) in 
+                  a(5)|} "15";
+  t "lambda_5" {| let a = (lambda (x): (lambda(y): y + x)) in 
+                      a(1)(2)|} "3";
+  t "def_1" {|
+    def incr(x): 
+      x + 1 
+    incr(5)
+  |} "6";
+  t "def_2" {| def foo(w, x, y, z):
+                  (lambda(a): a + x + z)
 
-
+               foo(1, 2, 3, 4)(5) |} "11";
 ];;
 
 let all_tests = []

@@ -1,1 +1,2 @@
- let incr = (lambda(x): x + 1) in incr(5)
+let a = (lambda (x): let b = 10 in b) in 
+	a(0)
