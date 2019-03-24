@@ -160,7 +160,7 @@ let typed_fun_tests = [
     typed_max(1, 2) * typed_max(2, 1)
   |} "4";
 
-  t "typed_fun_2" {|
+(*  t "typed_fun_2" {|
     def typed_nand(a: Bool, b: Bool) -> Bool:
       !(a && b)
     and 
@@ -173,7 +173,7 @@ let typed_fun_tests = [
     let c = print(typed_xor(false, true)) in
       print(typed_xor(false, false))
   |} "false\ntrue\ntrue\nfalse\nfalse";
-
+*)
   t "typed_fun_3" {|
     def typed_q(x: Int) -> Int:
       let a = 1, b = -1, c = -2 in
@@ -233,7 +233,7 @@ let fun_tests = [
     max(1, 2) * max(2, 1)
   |} "4";
 
-  t "fun_2" {|
+(*  t "fun_2" {|
     def nand(a, b):
       !(a && b)
     and
@@ -245,7 +245,7 @@ let fun_tests = [
     let c = print(xor(false, true)) in
       print(xor(false, false))
   |} "false\ntrue\ntrue\nfalse\nfalse";
-
+*)
   t "fun_3" {|
     def q(x):
       let a = 1, b = -1, c = -2 in
@@ -689,6 +689,11 @@ let lambdas = [
                   (lambda(a): a + x + z)
 
                foo(1, 2, 3, 4)(5) |} "11";
+  t "self_recursion_1" {|
+      let rec fac = (lambda (n):
+        if n < 1: 1
+        else: n * fac(n - 1)) # ERROR: fac is not in scope
+      in fac(5) |} "120";
 ];;
 
 let comment = [

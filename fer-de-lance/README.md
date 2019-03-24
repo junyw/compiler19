@@ -1,4 +1,4 @@
-# The Egg-eater Language
+# The Fer-de-lance Language
 
 ```
 <program>:

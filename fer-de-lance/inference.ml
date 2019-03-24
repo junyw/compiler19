@@ -297,7 +297,7 @@ let rec bind_to_typs (bind : 'a bind) : 'a typ list =
     match bind with
     | BBlank(typ, loc) -> [typ]
     | BName(arg_name, typ, loc) -> [typ]
-    | BTuple(binds, loc) -> List.map (fun x -> TyTup(bind_to_typs x, loc)) binds
+    | BTuple(binds, loc) -> [TyTup(List.concat @@ List.map bind_to_typs binds, loc)]
 and binds_to_typs (binds : 'a bind list) : 'a typ list = 
     List.concat @@ List.map bind_to_typs binds
 ;;
@@ -351,7 +351,7 @@ let rec infer_exp
     let bind = unblank_bind bind in
     let a = match bind_to_typs bind with
             | [typ] -> typ
-            | _ -> failwith "infer_exp: ELet binding of impossible type"
+            | _ -> failwith "infer_exp: ELet binding of impossible case" 
     in
     (*let a = unblank a in *)(* should be unblank a bind, so that they maintain the same tyvars *)
     let s1 = infer_exp env a e1 s reasons in

@@ -64,6 +64,7 @@ let count_vars e =
     match e with
     | ALet(_, bind, body, _) -> 1 + (max (helpC bind) (helpA body))
     | ACExpr e -> helpC e
+    | ALetRec(binds, body, _) -> 1 + List.fold_left (fun v (_, cexpr) -> (max v (helpC cexpr))) (helpA body) binds 
   and helpC e =
     match e with
     | CIf(_, t, f, _) -> max (helpA t) (helpA f)
@@ -204,15 +205,17 @@ let anf (p : tag program) : unit aprogram =
        let (cond_imm, cond_setup) = helpI cond in
        (CIf(cond_imm, helpA _then, helpA _else, ()), cond_setup)
     
+
+    (* ELet: tuples are already desugared away *)
     | ELet([], body, _) -> helpC body
     | ELet((BBlank _, exp, _)::rest, body, pos) ->
       let (exp_ans, exp_setup) = helpI exp in (* NOTE: use of helpI *)
-      let (body_ans, body_setup) = helpC(ELet(rest, body, pos)) in
+      let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
       (body_ans, exp_setup @ body_setup) (* NOTE: no binding for exp_ans *)
     | ELet((BName(id, typ, _), expr, _)::rest, body, pos) -> 
-          let (exp_ans, exp_setup) = helpC expr in
-          let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
-          (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
+      let (exp_ans, exp_setup) = helpC expr in
+      let (body_ans, body_setup) = helpC (ELet(rest, body, pos)) in
+      (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
 
     | EApp(f, args, _) ->
        let (f_ans, f_setup) = helpI f in
@@ -229,8 +232,6 @@ let anf (p : tag program) : unit aprogram =
         let (expr2_imm, expr2_setup) = helpI expr2 in
         (CSetItem(expr1_imm, a, expr2_imm, ()), expr1_setup @ expr2_setup)
     
-    | ELetRec(binds, aexpr, _) ->
-       raise (NotYetImplemented("helpC: ELetRec - Finish this case"))
 
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
@@ -263,14 +264,14 @@ let anf (p : tag program) : unit aprogram =
     
     | ELet([], body, _) -> helpI body
     | ELet((BBlank(_, _), exp, _)::rest, body, pos) ->
-       let (exp_ans, exp_setup) = helpI exp in (* NOTE: use of helpI *)
+       let (exp_ans, exp_setup) = helpI exp in
        let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
-       (body_ans, exp_setup @ body_setup) (* NOTE: no binding for exp_ans *)
+       (body_ans, exp_setup @ body_setup) 
     | ELet((BName(id, _, _), exp, _)::rest, body, pos) ->
        let (exp_ans, exp_setup) = helpC exp in
        let (body_ans, body_setup) = helpI (ELet(rest, body, pos)) in
        (body_ans, exp_setup @ [(id, exp_ans)] @ body_setup)
-
+    
     | ETuple(exprs, tag) -> 
         let tmp = sprintf "tuple_%d" tag in
         let (exprs_imm, exprs_setup) = List.split (List.map helpI exprs) in
@@ -450,7 +451,6 @@ let desugar_preTC (p : sourcespan program) : sourcespan program =
 
 (* desugar_postTC *)
 (* 1. tuples *)
-
 let desugar_postTC (p : tag program) : tag program =
   let gensym =
     let next = ref 0 in
@@ -496,7 +496,7 @@ let desugar_postTC (p : tag program) : tag program =
         in
           ELet(List.concat @@ List.map helpB binds, helpE body, tag)
       | ELetRec(binds, body, a) -> e (* TODO *)
-      | ELambda(binds, body, tag) -> ELambda(binds, helpE body, tag) (* TOD *)
+      | ELambda(binds, body, tag) -> 
       (* def add-pairs((x1, y1), (x2, y2)):
               (x1 + x2, y1 + y2)
         
@@ -506,19 +506,19 @@ let desugar_postTC (p : tag program) : tag program =
           let (x1, y1) = p1, (x2, y2) = p2 in
               (x1 + x2, y1 + y2)
       *)
-(*      let (args', new_bindings) = 
+      let (args', new_bindings) = 
         List.fold_left
         (fun (args', new_bindings) bind -> 
           match bind with 
           | BBlank _ -> failwith "helpD: BBlank not allowed"
           | BName _  -> (args' @ [bind], new_bindings)
           | BTuple(binds, tag')  -> 
-              let tmp = gensym "arg" in
+              let tmp = gensym "desugared" in
                 (args' @ [BName(tmp, TyBlank(tag'), tag')], new_bindings @ [(bind, EId(tmp, tag), tag)])
         ) ([], []) binds
       in
-        ELambda(binds, helpE (ELet(new_bindings, body, tag)), tag)
-*)
+        ELambda(args', helpE (ELet(new_bindings, body, tag)), tag)
+
   and helpD (decl : tag decl): 'a binding =
       failwith "desugar_postTC: declartions should have been desugared by desugar_preTC"
 
@@ -537,6 +537,40 @@ let desugar_postTC (p : tag program) : tag program =
       Program(List.map helpTD tydecls, [], ELet(List.concat @@ List.map helpG declgroups, helpE body, tag), tag)
 ;;
 
+(* freeVars: given an expression, returns a list of free variables *)
+let rec freeVars (e : 'a aexpr) env : (string list) = 
+  (* TODO : needs to remove duplicates *)
+  let rec helpA e env =
+    match e with
+    | ALet(id, bind, body, _) -> 
+        let env = id :: env in
+        (helpC bind env) @ (helpA body env)
+    | ACExpr e -> helpC e env
+    | ASeq _ -> failwith "freeVars: ASeq not implemented yet"
+    | ALetRec _ -> failwith "freeVars: ALetRec not implemented yet"
+  and helpC e env =
+    match e with
+    | CIf(c, t, f, _) -> (helpI c env) @ (helpA t env) @ (helpA f env)
+    | CPrim1(_, a, _) -> helpI a env
+    | CPrim2(_, a, b, _) -> (helpI a env) @ (helpI b env)
+    | CApp(a, args, _) -> (helpI a env) @ List.concat (List.map (fun x -> helpI x env) args)
+    | CImmExpr(a) -> helpI a env
+    | CTuple(a, _) -> List.concat (List.map (fun x -> helpI x env) a)
+    | CGetItem(a, _, _) -> helpI a env
+    | CSetItem(a, _, b, _) -> (helpI a env) @ (helpI b env) 
+    | CLambda(args, aexpr, _) -> 
+      helpA aexpr (args @ env) 
+  and helpI e env = 
+    match e with
+    | ImmId(id, _) -> 
+      begin match (List.find_opt (fun x -> String.equal x id) env) with
+      | Some(_) -> []
+      | None    -> [id]
+      end 
+    | _ -> []
+  in helpA e env
+;;   
+
 let rec compile_fun (fun_name : string) args body env : instruction list =
   raise (NotYetImplemented "Compile funs not yet implemented")
 
@@ -554,6 +588,9 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
                       | CApp _ | CIf _ -> compile_cexpr cexpr si env num_args is_tail
                       | _ -> compile_cexpr cexpr si env num_args false
                      end
+  | ALetRec(str_cexprs, aexpr, _) -> failwith "compile_aexpr: ALetRec - TODO"
+
+  | _ -> failwith "compile_aexpr: impossible cased - desugared away"
 
 and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   let assert_num (e_reg : arg) (error : string) = 
@@ -796,40 +833,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let lambda_label_end = sprintf "$lambda_end_%s" (string_of_int tag) in
 
     (*1. Compute the free-variables of the function, and sort them alphabetically.*)
-    let rec freeVars (e : 'a aexpr) : (string list) = 
-      (* TODO : needs to remove duplicates *)
-      let rec helpA e env =
-        match e with
-        | ALet(id, bind, body, _) -> 
-            let env = id :: env in
-            (helpC bind env) @ (helpA body env)
-        | ACExpr e -> helpC e env
-        | ASeq _ -> failwith "freeVars: ASeq not implemented yet"
-        | ALetRec _ -> failwith "freeVars: ALetRec not implemented yet"
-
-      and helpC e env =
-        match e with
-        | CIf(c, t, f, _) -> (helpI c env) @ (helpA t env) @ (helpA f env)
-        | CPrim1(_, a, _) -> helpI a env
-        | CPrim2(_, a, b, _) -> (helpI a env) @ (helpI b env)
-        | CApp(a, args, _) -> (helpI a env) @ List.concat (List.map (fun x -> helpI x env) args)
-        | CImmExpr(a) -> helpI a env
-        | CTuple _
-        | CGetItem _
-        | CSetItem _ -> failwith "freeVars: not implemented yet"
-        | CLambda(args, aexpr, _) -> 
-          helpA aexpr (args @ env) 
-      and helpI e env = 
-        match e with
-        | ImmId(id, _) -> 
-          begin match (List.find_opt (fun x -> String.equal x id) env) with
-          | Some(_) -> []
-          | None    -> [id]
-          end 
-        | _ -> []
-      in helpA e args
-    in   
-    let free = List.sort (fun x y -> String.compare x y) (freeVars aexpr) in
+    let free = List.sort (fun x y -> String.compare x y) (freeVars aexpr args) in
     let num_free_vars = List.length free in
     (*2. Update the environment:*)
     (* The closure itself is the first argument [EBP + 8], other arguments start from [EBP + 12] *)
@@ -909,10 +913,11 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let moveClosureVarToHeap fv i =
       (* move the i^th variable to the i^th slot *)
       (* from the (i+3)^rd slot in the closure *)
-      [ ILineComment(("move closure variable " ^ fv ^ " to heap"));
-        IMov(Reg(EAX), (find env fv));
-        IMov(RegOffset(12 + 4 * i, ESI), Reg(EAX));
-      ]
+      try [ ILineComment(("move closure variable " ^ fv ^ " to heap"));
+            IMov(Reg(EAX), (find env fv));
+            IMov(RegOffset(12 + 4 * i, ESI), Reg(EAX));
+          ]
+      with _ -> raise (InternalCompilerError (sprintf "moveClosureVarToHeap: Name %s not found" fv))
     in
     let save_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToHeap fv i) free) in
 
@@ -1096,7 +1101,7 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
   |> (add_phase desugared_preTC desugar_preTC) 
-  |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))
+  (*|> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))*)
   |> (add_phase tagged tag)
   |> (add_phase desugared_postTC desugar_postTC)
   |> (add_phase renamed rename_and_tag)
