@@ -238,7 +238,8 @@ let rec unify (t1 : 'a typ) (t2 : 'a typ) (sub : 'a typ subst) (loc : sourcespan
             unify t1' t2 sub loc reasons
       with _ -> raise (TypeMismatch(loc, t2, t1, reasons))
     end
-    | (TyTup(_, _), TyCon(_, _)) -> unify t2 t1 sub loc reasons
+    | (TyTup(_, _), TyCon(_, _)) -> 
+      unify t2 t1 sub loc reasons
 
     | _ -> raise (TypeMismatch(loc, t2, t1, reasons))
 ;;     
@@ -330,8 +331,8 @@ let rec infer_exp
           (s  : 'a typ subst) 
           reasons
         : sourcespan typ subst =
-  let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in
-  let () = print_subst s in
+  (*let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in*)
+  (*let () = print_subst s in*)
   match e with
   | ENil(typ, loc)  -> unify typ t s loc reasons
   | ENumber(v, loc) -> unify tInt t s loc reasons
@@ -358,6 +359,8 @@ let rec infer_exp
     let env = apply_subst_env s1 env in
     let env' = binds_to_env [bind] s1 env in
       infer_exp env' (apply_subst_typ s1 t) (ELet(rest, e2, loc)) s1 reasons
+
+  | ELetRec _ -> s (* TODO *)
 
   | ESeq(e1, e2, loc) ->
     let a = newTyVar "blank" loc in
@@ -429,6 +432,7 @@ let rec infer_exp
         let lambda_env = binds_to_env arg_binds s env in
         let lambda_env = apply_subst_env s1 lambda_env in
         infer_exp lambda_env b e s1 reasons
+  | _ -> failwith ("infer_exp: missing pattern" ^ (string_of_expr e))
 ;;
 
 let infer_prog env (p : sourcespan program) : 'a typ =

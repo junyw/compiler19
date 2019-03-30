@@ -13,6 +13,7 @@ type prim1 =
   | IsTuple
   | Not
   | PrintStack
+  | Print
 
 type prim2 =
   | Plus

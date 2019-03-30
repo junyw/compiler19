@@ -65,6 +65,7 @@ let count_vars e =
     | ALet(_, bind, body, _) -> 1 + (max (helpC bind) (helpA body))
     | ACExpr e -> helpC e
     | ALetRec(binds, body, _) -> 1 + List.fold_left (fun v (_, cexpr) -> (max v (helpC cexpr))) (helpA body) binds 
+    | _ -> failwith "count_vars: case not implemented yet"
   and helpC e =
     match e with
     | CIf(_, t, f, _) -> max (helpA t) (helpA f)
@@ -180,18 +181,9 @@ type 'a anf_bind =
 let anf (p : tag program) : unit aprogram =
   let rec helpP (p : tag program) : unit aprogram =
     match p with
-    | Program(_, decls, body, _) -> AProgram(List.concat(List.map helpG decls), helpA body, ())
-  and helpG (g : tag decl list) : unit adecl list =
-    (*List.map helpD g*)
-    failwith "anf: helpG - should have been desugared away"
-  and helpD (d : tag decl) : unit adecl =
-    match d with
-    | DFun(name, args, ret, body, _) ->
-       let args = List.map (fun a ->
-                      match a with
-                      | BName(a, _, _) -> a
-                      | _ -> raise (InternalCompilerError("Tuple bindings should have been desugared away"))) args in
-       ADFun(name, args, helpA body, ())
+    | Program(_, [], body, _) -> AProgram([], helpA body, ())
+
+    | Program(_, decls, body, _) -> failwith "anf: decls should have been desugared away"
   and helpC (e : tag expr) : (unit cexpr * (string * unit cexpr) list) = 
     match e with
     | EAnnot(e, _, _) -> helpC e
@@ -234,7 +226,6 @@ let anf (p : tag program) : unit aprogram =
         (CSetItem(expr1_imm, a, expr2_imm, ()), expr1_setup @ expr2_setup)
     
     | ELambda(binds, aexpr, tag) -> 
-        let tmp = sprintf "lambda_anf_%d" tag in
         let args = List.map (fun a ->
                       match a with
                       | BName(a, _, _) -> a
@@ -457,8 +448,6 @@ let desugar_preTC (p : sourcespan program) : sourcespan program =
     List.map helpD g
   and helpT (t : sourcespan typ) =
     t (* TODO *)
-  and helpS (s : sourcespan scheme) =
-    s (* TODO *)
   and helpTD (t : sourcespan tydecl)  =
     match t with
     | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
@@ -540,16 +529,8 @@ let desugar_postTC (p : tag program) : tag program =
         ) ([], []) binds
       in
         ELambda(args', helpE (ELet(new_bindings, body, tag)), tag)
-
-  and helpD (decl : tag decl): 'a binding =
-      failwith "desugar_postTC: declartions should have been desugared by desugar_preTC"
-
-  and helpG (g : tag decl list): 'a binding list =
-    List.map helpD g
   and helpT (t : tag typ) (* other parameters may be needed here *) =
     t (* TODO *)
-  and helpS (s : tag scheme) (* other parameters may be needed here *) =
-    s (* TODO *)
   and helpTD (t : tag tydecl) (* other parameters may be needed here *) =
     match t with
     | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
@@ -557,6 +538,7 @@ let desugar_postTC (p : tag program) : tag program =
   match p with
   | Program(tydecls, [], body, tag) ->
       Program(List.map helpTD tydecls, [], helpE body, tag)
+  | Program(tydecls, declgroups, body, tag) -> failwith "desugar_postTC: declgroups should have been desugared away"
 ;;
 
 (* freeVars: given an expression, returns a list of free variables *)
@@ -912,7 +894,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         IMov(RegOffset(~-word_size * i - 4, EBP), Reg(EAX));
       ]
     in
-    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack fv i) free) in
+    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack fv (0 + i)) free) in
     (* save locations of args to env *)
     let (env', i) = List.fold_left 
         (fun (env, i) arg -> 
@@ -1097,7 +1079,7 @@ global our_code_starts_here" in
         
         IPush(Reg(EBP));
         IMov(Reg(EBP), Reg(ESP));        
-        ISub(Reg(ESP), Const(4*n)); 
+        ISub(Reg(ESP), Const(word_size * n)); 
 
         (* Set the global variable STACK_BOTTOM to EBP *)
         IMov(LabelContents("_STACK_BOTTOM"), Reg(EBP));
@@ -1160,11 +1142,11 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
   |> (add_err_phase well_formed is_well_formed)
   |> (add_phase desugared_preTC desugar_preTC) 
-  (*|> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))*)
+  |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked typecheck))
   |> (add_phase tagged tag)
   |> (add_phase desugared_postTC desugar_postTC)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  |>  debug
+  (*|>  debug*)
   |> (add_phase result compile_prog)
 ;;
