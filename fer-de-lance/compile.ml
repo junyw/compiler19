@@ -614,10 +614,9 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
     let num_of_lambdas = List.length str_cexprs in
     (* decide where the lambda tuple would be placed on the heap, and 
        put the lambda pointer to the stack *)
-    let (instrs0, env', _) = 
+    let (instrs0, env', _, _) = 
       List.fold_left 
-        (fun (instrs, env', i) (id, cexpr) -> 
-            let id_reg = RegOffset(~-(word_size * si(*TODO*)), EBP) in
+        (fun (instrs, env', i, heap_offset) (id, cexpr) -> 
             let free_vars = 
               match cexpr with
               | CLambda(args, e, _) -> freeVars e args        
@@ -627,22 +626,25 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
             let padding = 
               if ((3 + num_free_vars) mod 2 == 1) then 1 else 0 
             in
+            let tuple_size = word_size * (3 + num_free_vars + padding) in
+            let id_reg = RegOffset(~-(word_size * (si + 1 + i)), EBP) in
               (
                 instrs @ [ IMov(Reg(EAX), Reg(ESI));
+                IAdd(Reg(EAX), Const(heap_offset));
                 IAdd(Reg(EAX), HexConst(0x5));
                 IMov(id_reg, Reg(EAX)); ]
                ,
-              (id, id_reg)::env', i + word_size * (3 + num_free_vars + padding)))
-        ([], env, 0) str_cexprs 
+              (id, id_reg)::env', i + 1, heap_offset + tuple_size))
+        ([], env, 1, 0) str_cexprs 
     in
     (* compile lambdas *)
     let (instrs, _) = 
       List.fold_left
         (fun (instrs, i) (id, cexpr) ->
-          let id_reg = RegOffset(~-(word_size * (si + i)), EBP) in
-          let cexpr_instr = compile_cexpr cexpr (si + 1 + num_of_lambdas) env' num_args false in
-            (instrs @ cexpr_instr @ [ IMov(id_reg, Reg(EAX)) ]), i + 1)
-        ([], 0) str_cexprs 
+          let cexpr_instr = compile_cexpr cexpr (si + 1 + i) env' num_args false in
+            ( instrs @ cexpr_instr
+            , i + 1) )
+        ([], 1) str_cexprs 
     in
     let body = compile_aexpr aexpr (si + 1 + num_of_lambdas) env' num_args is_tail in
     instrs0 @ instrs @ body

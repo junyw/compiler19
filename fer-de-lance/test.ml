@@ -711,7 +711,7 @@ let all_tests = []
   @ fun_tests 
   @ type_tests  
   @ recursive_data
-  @ type_errs
+  (*@ type_errs*)
   (*@ built_in_func *)
   @ lambdas
   @ comment

@@ -1,4 +1,11 @@
-let rec fac = (lambda (n):
-	if n < 1: 1
-	else: n * fac(n - 1)) 
-in fac(3)
+let rec is_even = (lambda(n):
+    if(n == 0): true
+    else: is_odd(n - 1))
+, is_odd = (lambda(n):
+    if(n == 0): false
+    else: is_even(n - 1))
+in
+
+# is_odd(5) && !(is_even(3)) &&
+let x = 1 in
+	let y = is_odd(10) in y
