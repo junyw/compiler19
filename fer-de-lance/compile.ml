@@ -182,7 +182,8 @@ let anf (p : tag program) : unit aprogram =
     match p with
     | Program(_, decls, body, _) -> AProgram(List.concat(List.map helpG decls), helpA body, ())
   and helpG (g : tag decl list) : unit adecl list =
-    List.map helpD g
+    (*List.map helpD g*)
+    failwith "anf: helpG - should have been desugared away"
   and helpD (d : tag decl) : unit adecl =
     match d with
     | DFun(name, args, ret, body, _) ->
@@ -232,6 +233,14 @@ let anf (p : tag program) : unit aprogram =
         let (expr2_imm, expr2_setup) = helpI expr2 in
         (CSetItem(expr1_imm, a, expr2_imm, ()), expr1_setup @ expr2_setup)
     
+    | ELambda(binds, aexpr, tag) -> 
+        let tmp = sprintf "lambda_anf_%d" tag in
+        let args = List.map (fun a ->
+                      match a with
+                      | BName(a, _, _) -> a
+                      | _ -> raise (InternalCompilerError("Tuple bindings should have been desugared away"))) binds in
+        (CLambda(args, helpA aexpr, ()), [])
+   
 
     (* NOTE: You may need more cases here, for sequences and tuples *)
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
@@ -297,10 +306,21 @@ let anf (p : tag program) : unit aprogram =
                       | _ -> raise (InternalCompilerError("Tuple bindings should have been desugared away"))) binds in
         (ImmId(tmp, ()), [(tmp, CLambda(args, helpA aexpr, ()))])
 
-    | _ -> raise (NotYetImplemented "anf: Finish the remaining cases")
+    | _ -> raise (NotYetImplemented ("anf helpI: Finish the remaining cases" ^ (string_of_expr e)))
   and helpA e : unit aexpr = 
-    let (ans, ans_setup) = helpC e in
-    List.fold_right (fun (bind, exp) body -> ALet(bind, exp, body, ())) ans_setup (ACExpr ans)
+    match e with
+    | ELetRec(bindings, aexpr, tag) ->
+      let rec_functions = 
+        List.map (fun (bind, e, _) -> 
+                  let (e_imm, _) = helpC e in
+                  match bind with 
+                  | BName(id, _, _) -> (id, e_imm)
+                  | _ -> failwith "anf helpA: impossible case") bindings 
+      in
+      ALetRec(rec_functions, helpA aexpr, ())
+    | _ -> 
+      let (ans, ans_setup) = helpC e in
+      List.fold_right (fun (bind, exp) body -> ALet(bind, exp, body, ())) ans_setup (ACExpr ans)
   in
   helpP p
 
@@ -444,6 +464,8 @@ let desugar_preTC (p : sourcespan program) : sourcespan program =
     | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
   in
   match p with
+  | Program(tydecls, [], body, tag) ->
+      Program(List.map helpTD tydecls, [], body, tag)
   | Program(tydecls, declgroups, body, tag) ->
       Program(List.map helpTD tydecls, [], ELet(List.concat @@ List.map helpG declgroups, body, tag), tag)
 ;;
@@ -533,8 +555,8 @@ let desugar_postTC (p : tag program) : tag program =
     | TyDecl(str, typs, tag) -> TyDecl(str, List.map helpT typs, tag)
   in
   match p with
-  | Program(tydecls, declgroups, body, tag) ->
-      Program(List.map helpTD tydecls, [], ELet(List.concat @@ List.map helpG declgroups, helpE body, tag), tag)
+  | Program(tydecls, [], body, tag) ->
+      Program(List.map helpTD tydecls, [], helpE body, tag)
 ;;
 
 (* freeVars: given an expression, returns a list of free variables *)
@@ -588,7 +610,42 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
                       | CApp _ | CIf _ -> compile_cexpr cexpr si env num_args is_tail
                       | _ -> compile_cexpr cexpr si env num_args false
                      end
-  | ALetRec(str_cexprs, aexpr, _) -> failwith "compile_aexpr: ALetRec - TODO"
+  | ALetRec(str_cexprs, aexpr, _) -> 
+    let num_of_lambdas = List.length str_cexprs in
+    (* decide where the lambda tuple would be placed on the heap, and 
+       put the lambda pointer to the stack *)
+    let (instrs0, env', _) = 
+      List.fold_left 
+        (fun (instrs, env', i) (id, cexpr) -> 
+            let id_reg = RegOffset(~-(word_size * si(*TODO*)), EBP) in
+            let free_vars = 
+              match cexpr with
+              | CLambda(args, e, _) -> freeVars e args        
+              | _ -> failwith "compile ALetRec error"
+            in
+            let num_free_vars = List.length free_vars in
+            let padding = 
+              if ((3 + num_free_vars) mod 2 == 1) then 1 else 0 
+            in
+              (
+                instrs @ [ IMov(Reg(EAX), Reg(ESI));
+                IAdd(Reg(EAX), HexConst(0x5));
+                IMov(id_reg, Reg(EAX)); ]
+               ,
+              (id, id_reg)::env', i + word_size * (3 + num_free_vars + padding)))
+        ([], env, 0) str_cexprs 
+    in
+    (* compile lambdas *)
+    let (instrs, _) = 
+      List.fold_left
+        (fun (instrs, i) (id, cexpr) ->
+          let id_reg = RegOffset(~-(word_size * (si + i)), EBP) in
+          let cexpr_instr = compile_cexpr cexpr (si + 1 + num_of_lambdas) env' num_args false in
+            (instrs @ cexpr_instr @ [ IMov(id_reg, Reg(EAX)) ]), i + 1)
+        ([], 0) str_cexprs 
+    in
+    let body = compile_aexpr aexpr (si + 1 + num_of_lambdas) env' num_args is_tail in
+    instrs0 @ instrs @ body
 
   | _ -> failwith "compile_aexpr: impossible cased - desugared away"
 
