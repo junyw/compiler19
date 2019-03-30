@@ -811,6 +811,12 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ICall(Contents("printstack"));
           IAdd(Reg(ESP), Const(3*4));
         ]
+     | Print -> 
+        [ ILineComment("calling c function");
+          IPush(Sized(DWORD_PTR, e_reg)); 
+          ICall(Contents("print"));
+          IAdd(Reg(ESP), Const(1*4));
+        ]
      end
   | CPrim2(op, imme1, imme2, tag) -> 
      let e1_reg = compile_imm imme1 env in
@@ -1162,6 +1168,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase desugared_postTC desugar_postTC)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  |>  debug
+  (*|>  debug*)
   |> (add_phase result compile_prog)
 ;;

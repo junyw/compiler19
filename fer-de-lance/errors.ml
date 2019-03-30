@@ -16,6 +16,7 @@ exception NotYetImplemented of string (* TODO: Message to show *)
 exception Unsupported of string * sourcespan
 exception InternalCompilerError of string (* Major failure: message to show *)
 exception OccursCheck of string * sourcespan typ * sourcespan
+exception LetRecNonFunction of sourcespan bind * sourcespan (* name binding, where defined *)
 
 
 type reason =
@@ -76,9 +77,13 @@ let print_errors (exns : exn list) : string list =
       | TypeMismatch(loc, expected, actual, []) ->
           sprintf "Type error at %s: expected %s but got %s"
             (string_of_sourcespan loc) (string_of_typ expected) (string_of_typ actual)
+      | LetRecNonFunction(bind, loc) ->
+         sprintf "Binding error at %s: Let-rec expected a name binding to a lambda; got %s"
+           (string_of_sourcespan loc) (string_of_bind bind)
       | TypeMismatch(loc, expected, actual, reasons) ->
          let get_tag e = match e with
            | ELet(_, _, t) -> t
+           | ELetRec(_, _, t) -> t
            | EPrim1(_, _, t) -> t
            | EPrim2(_, _, _, t) -> t
            | EIf(_, _, _, t) -> t
@@ -92,6 +97,7 @@ let print_errors (exns : exn list) : string list =
            | EGetItem(_, _, _, t) -> t
            | ESetItem(_, _, _, _, t) -> t
            | ESeq(_, _, t) -> t
+           | ELambda(_, _, t) -> t
          in
          let print_reason r =
            match r with

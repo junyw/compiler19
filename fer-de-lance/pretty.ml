@@ -19,6 +19,7 @@ let string_of_op1 op =
   | IsBool -> "isbool"
   | IsTuple -> "istuple"
   | Input -> "input"
+  | Print -> "print"
 
 let name_of_op1 op =
   match op with
@@ -30,6 +31,7 @@ let name_of_op1 op =
   | IsBool -> "IsBool"
   | IsTuple -> "IsTuple"
   | Input -> "Input"
+  | Print -> "Print"
 
 let string_of_op2 op =
   match op with

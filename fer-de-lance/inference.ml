@@ -56,7 +56,7 @@ let intint2int = SForall([], mk_tyarr [tInt; tInt] tInt, dummy_span)
 let initial_env : sourcespan scheme envt =
   List.fold_left (fun env (name, scheme) -> StringMap.add name scheme env) StringMap.empty [
 
-      (* predefined functions *)
+      (* predefined functions: TODO *)
       ("input", unit2int);
       ("print", any2any);
       ("equals", anyany2bool);
@@ -69,6 +69,7 @@ let initial_env : sourcespan scheme envt =
       ("IsNum",  any2bool);
       ("IsBool", any2bool);
       ("IsTuple", any2bool);
+      ("Print", any2any);
 
       (* prim2 functions *)      
       ("Plus",  intint2int);
@@ -432,7 +433,6 @@ let rec infer_exp
         let lambda_env = binds_to_env arg_binds s env in
         let lambda_env = apply_subst_env s1 lambda_env in
         infer_exp lambda_env b e s1 reasons
-  | _ -> failwith ("infer_exp: missing pattern" ^ (string_of_expr e))
 ;;
 
 let infer_prog env (p : sourcespan program) : 'a typ =
