@@ -17,11 +17,11 @@ type phase =
   | Source of string
   | Parsed of sourcespan program
   | WellFormed of sourcespan program
-  | DesugaredPreTC of sourcespan program
+  | DesugaredBindings of sourcespan program
   | TypeChecked of sourcespan program
-  | DesugaredPostTC of tag program
   | Renamed of tag program
   | Tagged of tag program
+  | DesugaredDecls of tag program
   | ANFed of tag aprogram
   | Result of string
 ;;
@@ -30,11 +30,11 @@ type phase =
 let source s = Source s
 let parsed p = Parsed p
 let well_formed p = WellFormed p
-let desugared_preTC p = DesugaredPreTC p
+let desugared_bindings p = DesugaredBindings p
 let renamed p = Renamed p
 let tagged p = Tagged p
 let type_checked p = TypeChecked p
-let desugared_postTC p = DesugaredPostTC p
+let desugared_decls p = DesugaredDecls p
 let anfed p = ANFed p
 let result s = Result s
 ;;
@@ -102,22 +102,22 @@ let print_trace (trace : phase list) : string list =
   let phase_name p = match p with
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
-    | DesugaredPreTC _ -> "Desugared before TC"
+    | DesugaredBindings _ -> "Desugared bindings"
     | WellFormed _ -> "Well-formed"
     | Renamed  _ -> "Renamed"
     | Tagged _ -> "Tagged"
     | TypeChecked _ -> "TypeChecked"
-    | DesugaredPostTC _ -> "Desugared after TC"
+    | DesugaredDecls _ -> "Desugared decls"
     | ANFed _ -> "ANF'ed"
     | Result _ -> "Result" in
   let string_of_phase p = match p with
     | Source s -> s
     | Parsed p
-    | DesugaredPreTC p
+    | DesugaredBindings p
     | WellFormed p -> string_of_program p
     | Renamed p -> string_of_program p
     | TypeChecked p -> ast_of_program p
-    | DesugaredPostTC p -> ast_of_program p
+    | DesugaredDecls p -> ast_of_program p
     | Tagged p -> string_of_program_with (fun tag -> sprintf "@%d" tag) p
     | ANFed p -> string_of_aprogram_with (fun tag -> sprintf "@%d" tag)  p
     | Result s -> s in

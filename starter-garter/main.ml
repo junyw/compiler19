@@ -10,7 +10,9 @@ open Inference
 let show_trace = ref false
 let filename_set = ref false
 let filename : string ref = ref ""
-       
+;;
+Printexc.record_backtrace true
+;;     
 let () =
   let speclist = [
       ("-t", Arg.Set show_trace, "Display the trace of compilation");

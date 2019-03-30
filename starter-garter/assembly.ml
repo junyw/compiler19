@@ -25,6 +25,7 @@ type arg =
   | RegOffset of int * reg (* int is # words of offset *)
   | RegOffsetReg of reg * reg * int * int
   | Sized of size * arg
+  | Label of string
   | LabelContents of string
 
 type instruction =
@@ -45,22 +46,22 @@ type instruction =
   | ILabel of string
   | IPush of arg
   | IPop of arg
-  | ICall of string
+  | ICall of arg
   | IRet
 
   | ICmp of arg * arg
   | ITest of arg * arg
-  | IJo of string
-  | IJno of string
-  | IJe of string
-  | IJne of string
-  | IJl of string
-  | IJle of string
-  | IJg of string
-  | IJge of string
-  | IJmp of string
-  | IJz of string
-  | IJnz of string
+  | IJo of arg
+  | IJno of arg
+  | IJe of arg
+  | IJne of arg
+  | IJl of arg
+  | IJle of arg
+  | IJg of arg
+  | IJge of arg
+  | IJmp of arg
+  | IJz of arg
+  | IJnz of arg
 
   | ILineComment of string
   | IInstrComment of instruction * string
@@ -93,6 +94,7 @@ let rec arg_to_asm (a : arg) : string =
      sprintf "%s %s"
              (match size with | DWORD_PTR -> "DWORD" | WORD_PTR -> "WORD" | BYTE_PTR -> "BYTE")
              (arg_to_asm a)
+  | Label s -> s
   | LabelContents s -> sprintf "[%s]" s
 ;;
 
@@ -110,28 +112,28 @@ let rec i_to_asm (i : instruction) : string =
      sprintf "  cmp %s, %s" (arg_to_asm left) (arg_to_asm right)
   | ILabel(name) ->
      name ^ ":"
-  | IJo(label) ->
-     sprintf "  jo near %s" label
-  | IJno(label) ->
-     sprintf "  jno near %s" label
-  | IJe(label) ->
-     sprintf "  je near %s" label
-  | IJne(label) ->
-     sprintf "  jne near %s" label
-  | IJl(label) ->
-     sprintf "  jl near %s" label
-  | IJle(label) ->
-     sprintf "  jle near %s" label
-  | IJg(label) ->
-     sprintf "  jg near %s" label
-  | IJge(label) ->
-     sprintf "  jge near %s" label
-  | IJmp(label) ->
-     sprintf "  jmp near %s" label
-  | IJz(label) ->
-     sprintf "  jz near %s" label
-  | IJnz(label) ->
-     sprintf "  jnz near %s" label
+  | IJo(dest) ->
+     sprintf "  jo near %s" (arg_to_asm dest)
+  | IJno(dest) ->
+     sprintf "  jno near %s" (arg_to_asm dest)
+  | IJe(dest) ->
+     sprintf "  je near %s" (arg_to_asm dest)
+  | IJne(dest) ->
+     sprintf "  jne near %s" (arg_to_asm dest)
+  | IJl(dest) ->
+     sprintf "  jl near %s" (arg_to_asm dest)
+  | IJle(dest) ->
+     sprintf "  jle near %s" (arg_to_asm dest)
+  | IJg(dest) ->
+     sprintf "  jg near %s" (arg_to_asm dest)
+  | IJge(dest) ->
+     sprintf "  jge near %s" (arg_to_asm dest)
+  | IJmp(dest) ->
+     sprintf "  jmp near %s" (arg_to_asm dest)
+  | IJz(dest) ->
+     sprintf "  jz near %s" (arg_to_asm dest)
+  | IJnz(dest) ->
+     sprintf "  jnz near %s" (arg_to_asm dest)
   | IAnd(dest, value) ->
      sprintf "  and %s, %s" (arg_to_asm dest) (arg_to_asm value)
   | IOr(dest, value) ->
@@ -149,7 +151,7 @@ let rec i_to_asm (i : instruction) : string =
   | IPop(dest) ->
      sprintf "  pop %s" (arg_to_asm dest)
   | ICall(label) ->
-     sprintf "  call %s" label
+     sprintf "  call %s" (arg_to_asm label)
   | IRet ->
      "  ret"
   | ITest(arg, comp) ->

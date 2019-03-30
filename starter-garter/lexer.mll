@@ -75,7 +75,7 @@ rule token = parse
   | "end" { END }
   | "rec" { REC }
   | tyident as x { TYID x }
-  | ident as x { ID x }
+  | ident as x { if x = "_" then UNDERSCORE else ID x }
   | eof { EOF }
   | _ as c { failwith (sprintf "Unrecognized character: %c" c) }
 
