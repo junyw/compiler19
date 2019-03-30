@@ -1,7 +1,8 @@
-let rec fib = (lambda (n):
-      if(n == 1): 1 
-        else: 
-          if(n == 2): 1 
-            else: fib(n - 1) + fib(n - 2))
-in 
-    fib(6)
+let rec is_even = (lambda(n):
+    if(n == 0): true
+    else: is_odd(n - 1))
+, is_odd = (lambda(n):
+    if(n == 0): false
+    else: is_even(n - 1))
+in
+    printStack(is_even(printStack(21))) && printStack(is_odd(6)) && printStack(is_even(20))

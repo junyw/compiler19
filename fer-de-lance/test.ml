@@ -233,7 +233,7 @@ let fun_tests = [
     max(1, 2) * max(2, 1)
   |} "4";
 
-(*  t "fun_2" {|
+  t "fun_2" {|
     def nand(a, b):
       !(a && b)
     and
@@ -245,7 +245,7 @@ let fun_tests = [
     let c = print(xor(false, true)) in
       print(xor(false, false))
   |} "false\ntrue\ntrue\nfalse\nfalse";
-*)
+
   t "fun_3" {|
     def q(x):
       let a = 1, b = -1, c = -2 in
@@ -268,7 +268,7 @@ let fun_tests = [
     id(true)
   |} "true";
 
-(*  t "fxyz" 
+  t "fxyz" 
    {|
       let rec fxyz = (lambda(x, y, z):
         if(id(x)): id(y)
@@ -279,7 +279,7 @@ let fun_tests = [
       in
       fxyz(true, 4, 5)
    |} "4";
-*)
+
   t "f_boolint" {| def f_boolint(x, y):
                 (x == true) && (y == 1)
 
@@ -309,7 +309,7 @@ let fun_tests = [
         if(n == 0): false
         else: is_even(n - 1))
     in
-    is_even(20) # && !(is_even(3)) && is_odd(5) 
+    is_even(20) && !(is_even(3)) && is_odd(5) 
   |} "true"; (* TODO *)
 
   (* this function call would stack-overflow without tail-call optimization *)

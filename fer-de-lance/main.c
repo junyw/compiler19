@@ -34,6 +34,33 @@ const int E_ARITH_OVERFLOW = 5;
 extern int STACK_BOTTOM;
 int STACK_BOTTOM = 0;
 
+
+void print_tagged_value_non_recursive(int val) {
+  if ((val & BOOL_TAG) == 0) { 
+    // is number
+    printf("%d", val >> 1);  // shift bits right to remove tag
+  } else if (val == BOOL_TRUE) {
+    printf("true");
+  } else if (val == BOOL_FALSE) {
+    printf("false");
+  } else if ((val & LAMBDA_TAG) == LAMBDA_TAG) {
+    printf("<lambda at ");
+    printf("%#010x>", val);
+  } 
+  else if ((val & BOOL_TAG) == 1) {
+    if (val == BOOL_TAG) {
+      printf("nil");
+      return;
+    }
+    printf("tuple at ");
+    printf("%#010x", val);
+    
+  } else {
+    printf("%#010x", val); 
+  }
+  return;
+}
+
 void print_tagged_value(int val) {
   if ((val & BOOL_TAG) == 0) { 
     // is number
@@ -53,7 +80,7 @@ void print_tagged_value(int val) {
     printf("(bound variables=");
     if(free_vars == 0) printf("None");
     for(int i = 0; i < free_vars; i++) {
-      print_tagged_value(*(p+(i+3)));
+      print_tagged_value_non_recursive(*(p+(i+3)));
       if(i != free_vars - 1) printf(",");
     }
     printf("))");
@@ -78,6 +105,7 @@ void print_tagged_value(int val) {
   }
   return;
 }
+
 /* why this must be implemented as a EPrim1 and not as a EApp expression?
   Diamondback does not have pointers, therefore printstack must be implemented 
   in C to have direct access to memory.

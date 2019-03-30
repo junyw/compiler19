@@ -62,10 +62,11 @@ let rec find_opt ls x =
 let count_vars e =
   let rec helpA e =
     match e with
+    | ASeq(e1, e2, _) -> max (helpC e1) (helpA e2)
     | ALet(_, bind, body, _) -> 1 + (max (helpC bind) (helpA body))
+    | ALetRec(binds, body, _) ->
+       (List.length binds) + List.fold_left max (helpA body) (List.map (fun (_, rhs) -> helpC rhs) binds)
     | ACExpr e -> helpC e
-    | ALetRec(binds, body, _) -> 1 + List.fold_left (fun v (_, cexpr) -> (max v (helpC cexpr))) (helpA body) binds 
-    | _ -> failwith "count_vars: case not implemented yet"
   and helpC e =
     match e with
     | CIf(_, t, f, _) -> max (helpA t) (helpA f)
@@ -575,8 +576,90 @@ let rec freeVars (e : 'a aexpr) env : (string list) =
   in helpA e env
 ;;   
 
-let rec compile_fun (fun_name : string) args body env : instruction list =
-  raise (NotYetImplemented "Compile funs not yet implemented")
+
+(* compile_fun: 
+   f_name: name of the function
+   args: names of the arguments
+   body: body of the function 
+   env:
+
+   returns: instructions for the function 
+*)
+let rec compile_fun (f_name : string) (args : string list) (body : 'a aexpr) env : instruction list =
+    let num_args = List.length args in
+    let n = count_vars body in
+    let lambda_label = sprintf "$lambda_%s" f_name in
+    let lambda_label_end = sprintf "$lambda_end_%s" f_name in
+
+    (*1. Compute the free-variables of the function, and sort them alphabetically.*)
+    let free = List.sort (fun x y -> String.compare x y) (freeVars body args) in
+    let num_free_vars = List.length free in
+    (*2. Update the environment:*)
+    (* The closure itself is the first argument [EBP + 8], other arguments start from [EBP + 12] *)
+    (* All the free variables are mapped to the first few local-variable slots*)
+    (* The body must be compiled with a starting stack-index that accommodates those already-initialized local variable slots used for the free-variables*)
+    
+    (* unpack the closure variables *)
+    let load_closure = 
+      [ IMov(Reg(ECX), RegOffset(word_size * 2, EBP));
+        ISub(Reg(ECX), HexConst(0x5)) ]
+    in
+    let moveClosureVarToStack fv i =
+      (* move the i^th variable to the i^th slot *)
+      (* from the (i+3)^rd slot in the closure *)
+      [ ILineComment(("unpack closure variable " ^ fv ^ " to stack"));
+        IMov(Reg(EAX), RegOffset(12 + 4 * i, ECX));
+        IMov(RegOffset(~-word_size * i - 4, EBP), Reg(EAX));
+      ]
+    in
+    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack fv (0 + i)) free) in
+    (* save locations of args to env *)
+    let (env', i) = List.fold_left 
+        (fun (env, i) arg -> 
+          let arg_reg = RegOffset((word_size * i), EBP) in
+            ((arg, arg_reg)::env, i+1)
+        ) ([], 3) args 
+    in
+    (* save locations of closure variables to env *)
+    let (env'', i) = List.fold_left 
+        (fun (env, i) arg -> 
+          let arg_reg = RegOffset(~-word_size * i - 4, EBP) in
+            ((arg, arg_reg)::env, i+1)
+        ) (env', 0) free 
+    in
+    (*3. Compile the body in the new environment*)
+    let compiled_body = compile_aexpr body (1 + num_free_vars) env'' num_args false in
+
+    (*4. Produce compiled code that, after the stack management and before the body, reads the saved 
+         free-variables out of the closure (which is passed in as the first function parameter), and 
+         stores them in the reserved local variable slots.*)
+        [ IJmp(lambda_label_end);
+          ILabel(lambda_label)     ]
+      (* Prologue *)
+      @ [        
+          (* save (previous, caller's) EBP on stack *)
+          IPush(Reg(EBP));
+          (* make current ESP the new EBP *)
+          IMov(Reg(EBP), Reg(ESP));
+          (* "allocate space" for N local variables *)
+          ISub(Reg(ESP), Const(word_size * n)); 
+        ]
+      @ [ ILineComment("load the self argument")]
+      @ load_closure
+      @ load_closure_variables
+      @ [ ILineComment(sprintf "----start of lambda body %s -----" lambda_label)]
+      @ compiled_body
+      @ [ ILineComment(sprintf "----end of lambda body %s -----" lambda_label)]
+      @ [  
+          (* restore value of ESP to that just before call *)
+          IMov(Reg(ESP), Reg(EBP));
+          (* now, value at [ESP] is caller's (saved) EBP
+              so: restore caller's EBP from stack [ESP] *)
+          IPop(Reg(EBP));
+          (* return to caller *)
+          IRet;
+        ]
+      @ [ ILabel(lambda_label_end) ]
 
 and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
   match e with
@@ -609,7 +692,7 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
               if ((3 + num_free_vars) mod 2 == 1) then 1 else 0 
             in
             let tuple_size = word_size * (3 + num_free_vars + padding) in
-            let id_reg = RegOffset(~-(word_size * (si + 1 + i)), EBP) in
+            let id_reg = RegOffset(~-(word_size * (si + i)), EBP) in
               (
                 instrs @ [ IMov(Reg(EAX), Reg(ESI));
                 IAdd(Reg(EAX), Const(heap_offset));
@@ -617,18 +700,18 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
                 IMov(id_reg, Reg(EAX)); ]
                ,
               (id, id_reg)::env', i + 1, heap_offset + tuple_size))
-        ([], env, 1, 0) str_cexprs 
+        ([], env, 0, 0) str_cexprs 
     in
     (* compile lambdas *)
     let (instrs, _) = 
       List.fold_left
         (fun (instrs, i) (id, cexpr) ->
-          let cexpr_instr = compile_cexpr cexpr (si + 1 + i) env' num_args false in
+          let cexpr_instr = compile_cexpr cexpr (si + i) env' num_args false in
             ( instrs @ cexpr_instr
             , i + 1) )
-        ([], 1) str_cexprs 
+        ([], 0) str_cexprs 
     in
-    let body = compile_aexpr aexpr (si + 1 + num_of_lambdas) env' num_args is_tail in
+    let body = compile_aexpr aexpr (si + num_of_lambdas) env' num_args is_tail in
     instrs0 @ instrs @ body
 
   | _ -> failwith "compile_aexpr: impossible cased - desugared away"
@@ -868,82 +951,13 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
   
   | CLambda(args, aexpr, tag) ->  
-    let num_args = List.length args in
-    let n = (count_vars aexpr) in
-    let lambda_label = sprintf "$lambda_%s" (string_of_int tag) in
-    let lambda_label_end = sprintf "$lambda_end_%s" (string_of_int tag) in
-
-    (*1. Compute the free-variables of the function, and sort them alphabetically.*)
+    let num_of_args = List.length args in
+    let f_name = string_of_int tag in
     let free = List.sort (fun x y -> String.compare x y) (freeVars aexpr args) in
     let num_free_vars = List.length free in
-    (*2. Update the environment:*)
-    (* The closure itself is the first argument [EBP + 8], other arguments start from [EBP + 12] *)
-    (* All the free variables are mapped to the first few local-variable slots*)
-    (* The body must be compiled with a starting stack-index that accommodates those already-initialized local variable slots used for the free-variables*)
-    
-    (* unpack the closure variables *)
-    let load_closure = 
-      [ IMov(Reg(ECX), RegOffset(word_size * 2, EBP));
-        ISub(Reg(ECX), HexConst(0x5)) ]
-    in
-    let moveClosureVarToStack fv i =
-      (* move the i^th variable to the i^th slot *)
-      (* from the (i+3)^rd slot in the closure *)
-      [ ILineComment(("unpack closure variable " ^ fv ^ " to stack"));
-        IMov(Reg(EAX), RegOffset(12 + 4 * i, ECX));
-        IMov(RegOffset(~-word_size * i - 4, EBP), Reg(EAX));
-      ]
-    in
-    let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack fv (0 + i)) free) in
-    (* save locations of args to env *)
-    let (env', i) = List.fold_left 
-        (fun (env, i) arg -> 
-          let arg_reg = RegOffset((word_size * i), EBP) in
-            ((arg, arg_reg)::env, i+1)
-        ) ([], 3) args 
-    in
-    (* save locations of closure variables to env *)
-    let (env'', i) = List.fold_left 
-        (fun (env, i) arg -> 
-          let arg_reg = RegOffset(~-word_size * i - 4, EBP) in
-            ((arg, arg_reg)::env, i+1)
-        ) (env', 0) free 
-    in
-    (*3. Compile the body in the new environment*)
-    let compiled_body = compile_aexpr aexpr (1 + num_free_vars) env'' num_args false in
 
-    (*4. Produce compiled code that, after the stack management and before the body, reads the saved 
-         free-variables out of the closure (which is passed in as the first function parameter), and 
-         stores them in the reserved local variable slots.*)
-    let compiled_code = 
-        [ IJmp(lambda_label_end);
-          ILabel(lambda_label)     ]
-      (* Prologue *)
-      @ [        
-          (* save (previous, caller's) EBP on stack *)
-          IPush(Reg(EBP));
-          (* make current ESP the new EBP *)
-          IMov(Reg(EBP), Reg(ESP));
-          (* "allocate space" for N local variables *)
-          ISub(Reg(ESP), Const(word_size * n)); 
-        ]
-      @ [ ILineComment("load the self argument")]
-      @ load_closure
-      @ load_closure_variables
-      @ [ ILineComment(sprintf "----start of lambda body %s -----" lambda_label)]
-      @ compiled_body
-      @ [ ILineComment(sprintf "----end of lambda body %s -----" lambda_label)]
-      @ [  
-          (* restore value of ESP to that just before call *)
-          IMov(Reg(ESP), Reg(EBP));
-          (* now, value at [ESP] is caller's (saved) EBP
-              so: restore caller's EBP from stack [ESP] *)
-          IPop(Reg(EBP));
-          (* return to caller *)
-          IRet;
-        ]
-      @ [ ILabel(lambda_label_end) ]
-    in
+    let f_code = compile_fun f_name args aexpr env in
+    let lambda_label = sprintf "$lambda_%s" f_name in (* must be the same as in compile_fun *)
 
     (* Creat the closure in heap *)
     (* represented as a heap-allocated tuple:
@@ -965,7 +979,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let closure_setup = 
       [ ILineComment(sprintf "-----start of creating closure %s in heap-----" lambda_label ) ]
       (* arity *)
-    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_args)) ]
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_of_args)) ]
       (* code-pointer *)
     @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 1), ESI)), Contents(lambda_label)) ]
       (* number of free variables *)
@@ -973,7 +987,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (* copy free variabels *)
     @ save_closure_variables
       (* creates the closure value *)
-    @ [ IMov(Reg(EAX), Reg(ESI));
+    @ [ ILineComment(sprintf "closure %s create at heap" lambda_label);
+        IMov(Reg(EAX), Reg(ESI));
         IAdd(Reg(EAX), HexConst(0x5)); ]
       
       (* update the heap pointer, keeping 8-byte alignment *)
@@ -985,7 +1000,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     @ [ ILineComment(sprintf "-----end of creating closure %s in heap-----" lambda_label ) ]
 
     in
-      compiled_code @ closure_setup
+      f_code @ closure_setup
 
   | CApp(immexpr, immexprs, tag) ->
       let imm_reg = compile_imm immexpr env in
@@ -1147,6 +1162,6 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   |> (add_phase desugared_postTC desugar_postTC)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase anfed (fun p -> atag (anf p)))
-  (*|>  debug*)
+  |>  debug
   |> (add_phase result compile_prog)
 ;;
