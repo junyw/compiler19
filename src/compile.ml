@@ -4,7 +4,6 @@ open Assembly
 open Errors
 open Pretty
 open Phases
-open TypeCheck
 open Inference
        
 type 'a envt = (string * 'a) list
@@ -18,13 +17,29 @@ let print_env env how =
   List.iter (fun (id, bind) -> debug_printf "  %s -> %s\n" id (how bind)) env;;
 
 
-let find env x loc =
+let find env (x : string) (loc : string) =
   let rec help ls =
     match ls with
     | [] -> raise (InternalCompilerError (sprintf "Name %s not found at %s" x loc))
     | (y,v)::rest ->
        if y = x then v else help rest
   in help env
+;;
+
+let count_vars e =
+  let rec helpA e =
+    match e with
+    | ASeq(e1, e2, _) -> max (helpC e1) (helpA e2)
+    | ALet(_, bind, body, _) -> 1 + (max (helpC bind) (helpA body))
+    | ALetRec(binds, body, _) ->
+       (List.length binds) + List.fold_left max (helpA body) (List.map (fun (_, rhs) -> helpC rhs) binds)
+    | ACExpr e -> helpC e
+  and helpC e =
+    match e with
+    | CIf(_, t, f, _) -> max (helpA t) (helpA f)
+    | _ -> 0
+  in helpA e
+;;
 
 
 let num_tag =          0x00000000
@@ -57,8 +72,8 @@ let err_CALL_NOT_CLOSURE = 14
 let err_CALL_ARITY_ERR   = 15
 
                              
-let initial_env : int envt =
-  raise (NotYetImplemented "Come up with an initial environment of global functions (names and arities)")
+let initial_env : int envt = [] (* TODO *)
+  (*raise (NotYetImplemented "Come up with an initial environment of global functions (names and arities)")*)
 ;;
                              
 (* FINISH THIS FUNCTION WITH THE WELL-FORMEDNESS FROM FER-DE-LANCE *)
@@ -564,7 +579,7 @@ let anf (p : tag program) : unit aprogram =
 
 
 
-let free_vars_E (e : 'a aexpr) rec_binds : string list =
+let free_vars_E (e : 'a aexpr) (rec_binds : string list) : string list =
   let rec helpA (bound : string list) (e : 'a aexpr) : string list =
     match e with
     | ASeq(e1, e2, _) -> helpC bound e1 @ helpA bound e2
@@ -645,7 +660,512 @@ let reserve size tag =
 (* Additionally, you are provided an initial environment of values that you may want to
    assume should take up the first few stack slots.  See the compiliation of Programs
    below for one way to use this ability... *)
-let compile_fun name args body initial_env = raise (NotYetImplemented "NYI: compile_fun")
+
+let rec compile_imm (e : tag immexpr) env : arg =
+  match e with
+  | ImmNum(n, _)      -> Const(n lsl 1)
+  | ImmBool(true, _)  -> const_true
+  | ImmBool(false, _) -> const_false
+  | ImmId(x, loc)       -> 
+      begin try 
+        find env x (string_of_int loc)
+      with _ -> raise (InternalCompilerError (sprintf "compile_imm: Name %s not found" x))
+      end
+  | ImmNil _ -> HexConst(0x00000001) (* an invalid pointer tagged as tuple *)
+;;
+
+(* compile_fun: 
+  name: name of the function 
+  args: names of arguments
+  body: expression of the function body
+  initial_env:
+  returns prologue, comp_main, epilogue
+*)
+let rec compile_fun 
+      (name : string) 
+      (args : string list) 
+      (body : 'a aexpr)
+      env
+    : (instruction list * instruction list * instruction list) = 
+  
+  let num_args = List.length args in
+  let n = count_vars body in
+  let lambda_label = sprintf "$lambda_%s" name in
+  let lambda_label_end = sprintf "$lambda_end_%s" name in
+
+  (*1. Compute the free-variables of the function, and sort them alphabetically.*)
+  let free = List.sort (fun x y -> String.compare x y) (free_vars_E body args) in
+  let num_free_vars = List.length free in
+  (*2. Update the environment:*)
+  (* The closure itself is the first argument [EBP + 8], other arguments start from [EBP + 12] *)
+  (* All the free variables are mapped to the first few local-variable slots*)
+  (* The body must be compiled with a starting stack-index that accommodates those already-initialized local variable slots used for the free-variables*)
+  
+  (* unpack the closure variables *)
+  let load_closure = 
+    [ IMov(Reg(ECX), RegOffset(word_size * 2, EBP));
+      ISub(Reg(ECX), HexConst(0x5)) ]
+  in
+  let moveClosureVarToStack fv i =
+    (* move the i^th variable to the i^th slot *)
+    (* from the (i+3)^rd slot in the closure *)
+    [ ILineComment(("unpack closure variable " ^ fv ^ " to stack"));
+      IMov(Reg(EAX), RegOffset(12 + 4 * i, ECX));
+      IMov(RegOffset(~-word_size * i - 4, EBP), Reg(EAX));
+    ]
+  in
+  let load_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToStack fv (0 + i)) free) in
+  (* save locations of args to env *)
+  let (env', i) = List.fold_left 
+      (fun (env, i) arg -> 
+        let arg_reg = RegOffset((word_size * i), EBP) in
+          ((arg, arg_reg)::env, i+1)
+      ) ([], 3) args 
+  in
+  (* save locations of closure variables to env *)
+  let (env'', i) = List.fold_left 
+      (fun (env, i) arg -> 
+        let arg_reg = RegOffset(~-word_size * i - 4, EBP) in
+          ((arg, arg_reg)::env, i+1)
+      ) (env', 0) free 
+  in
+  (*3. Compile the body in the new environment*)
+  let compiled_body = compile_aexpr body (1 + num_free_vars) env'' num_args false in
+
+  (*4. Produce compiled code that, after the stack management and before the body, reads the saved 
+       free-variables out of the closure (which is passed in as the first function parameter), and 
+       stores them in the reserved local variable slots.*)
+      
+  let prologue = 
+      [ IJmp(Label(lambda_label_end));
+        ILabel(lambda_label)     ]
+    (* Prologue *)
+    @ [        
+        (* save (previous, caller's) EBP on stack *)
+        IPush(Reg(EBP));
+        (* make current ESP the new EBP *)
+        IMov(Reg(EBP), Reg(ESP));
+        (* "allocate space" for N local variables *)
+        ISub(Reg(ESP), Const(word_size * n)); 
+      ]
+  in
+  let comp_main = 
+      [ ILineComment("load the self argument")]
+    @ load_closure
+    @ load_closure_variables
+    @ [ ILineComment(sprintf "----start of lambda body %s -----" lambda_label)]
+    @ compiled_body
+    @ [ ILineComment(sprintf "----end of lambda body %s -----" lambda_label)]
+  in
+  let epilogue = 
+      [  
+        (* restore value of ESP to that just before call *)
+        IMov(Reg(ESP), Reg(EBP));
+        (* now, value at [ESP] is caller's (saved) EBP
+            so: restore caller's EBP from stack [ESP] *)
+        IPop(Reg(EBP));
+        (* return to caller *)
+        IRet;
+      ]
+    @ [ ILabel(lambda_label_end) ]
+  in
+    (prologue, comp_main, epilogue)
+
+and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (is_tail : bool) : instruction list =
+  match e with
+  | ALet(id, cexpr, aexpr, _) -> 
+     let prelude = compile_cexpr cexpr (si + 1) env num_args false in
+     (* id_reg: position of the binding in memory *)
+     let id_reg = RegOffset(~-(word_size * si), EBP) in 
+     let body = compile_aexpr aexpr (si + 1) ((id, id_reg)::env) num_args is_tail in
+     prelude
+     @ [ IMov(id_reg, Reg(EAX)) ]
+     @ body
+  | ACExpr(cexpr) -> begin match cexpr with 
+                      | CApp _ | CIf _ -> compile_cexpr cexpr si env num_args is_tail
+                      | _ -> compile_cexpr cexpr si env num_args false
+                     end
+  | ALetRec(str_cexprs, aexpr, _) -> 
+    let num_of_lambdas = List.length str_cexprs in
+    (* decide where the lambda tuple would be placed on the heap, and 
+       put the lambda pointer to the stack *)
+    let (instrs0, env', _, _) = 
+      List.fold_left 
+        (fun (instrs, env', i, heap_offset) (id, cexpr) -> 
+            let free_vars = 
+              match cexpr with
+              | CLambda(args, e, _) -> free_vars_E e args        
+              | _ -> failwith "compile ALetRec error"
+            in
+            let num_free_vars = List.length free_vars in
+            let padding = 
+              if ((3 + num_free_vars) mod 2 == 1) then 1 else 0 
+            in
+            let tuple_size = word_size * (3 + num_free_vars + padding) in
+            let id_reg = RegOffset(~-(word_size * (si + i)), EBP) in
+              (
+                instrs @ [ IMov(Reg(EAX), Reg(ESI));
+                IAdd(Reg(EAX), Const(heap_offset));
+                IAdd(Reg(EAX), HexConst(0x5));
+                IMov(id_reg, Reg(EAX)); ]
+               ,
+              (id, id_reg)::env', i + 1, heap_offset + tuple_size))
+        ([], env, 0, 0) str_cexprs 
+    in
+    (* compile lambdas *)
+    let (instrs, _) = 
+      List.fold_left
+        (fun (instrs, i) (id, cexpr) ->
+          let cexpr_instr = compile_cexpr cexpr (si + i) env' num_args false in
+            ( instrs @ cexpr_instr
+            , i + 1) )
+        ([], 0) str_cexprs 
+    in
+    let body = compile_aexpr aexpr (si + num_of_lambdas) env' num_args is_tail in
+    instrs0 @ instrs @ body
+
+  | _ -> failwith "compile_aexpr: impossible cased - desugared away"
+
+and compile_cexpr (e : tag cexpr) si env num_args is_tail =
+  let assert_num (e_reg : arg) (error : string) = 
+    [ ILineComment("assert_num");
+      IMov(Reg(EAX), e_reg);
+      ITest(Reg(EAX), HexConst(0x00000001));
+      IJnz(Label(error));
+    ]
+  (* check the value in e_reg is boolean *)
+  and assert_bool (e_reg : arg) (error : string) = 
+    [ ILineComment("assert_bool");
+      IMov(Reg(EAX), e_reg); 
+      IMov(Reg(EDX), Reg(EAX));
+      IXor(Reg(EDX), HexConst(0x7FFFFFFF));
+      ITest(Reg(EDX), HexConst(0x7FFFFFFF));
+      IJnz(Label(error));
+    ]
+  in
+  match e with 
+  | CIf(immexpr, aexpr, aexpr2, tag) -> 
+    let else_label = sprintf "$if_false_%d" tag in
+    let done_label = sprintf "$done_%d" tag in
+        [ IMov(Reg(EAX), compile_imm immexpr env) ]
+      @ assert_bool (Reg(EAX)) "$err_if_not_boolean"
+      @ [ ICmp(Reg(EAX), const_false); 
+          IJe(Label(else_label)) ]
+      @ compile_aexpr aexpr si env num_args is_tail
+      @ [ IJmp(Label(done_label)); 
+          ILabel(else_label) ]
+      @ compile_aexpr aexpr2 si env num_args is_tail
+      @ [ ILabel(done_label) ]
+  | CPrim1(op, immexpr, tag) -> 
+     let e_reg = compile_imm immexpr env in
+     let done_label = sprintf "$eprim1_done_%d" tag in
+     begin match op with
+     | Add1  -> 
+        assert_num e_reg "$err_arith_not_num" @
+        [ IMov(Reg(EAX), e_reg);
+          IAdd(Reg(EAX), Const(1 lsl 1)); 
+          (* check overflow *) 
+          IJo(Label("$err_arith_overflow"));
+        ] 
+     | Sub1  -> 
+        assert_num e_reg "$err_arith_not_num" @
+        [ IMov(Reg(EAX), e_reg); 
+          IAdd(Reg(EAX), Const(~-1 lsl 1));
+          (* check overflow *) 
+          IJo(Label("$err_arith_overflow"));
+        ] 
+     | IsBool -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), HexConst(0x7FFFFFFF));
+          ICmp(Reg(EAX), HexConst(0x7FFFFFFF));
+          IMov(Reg(EAX), const_true);
+          IJe(Label(done_label));
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ]
+     | IsNum  -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), HexConst(0x00000001));  
+          ICmp(Reg(EAX), HexConst(0));
+          IMov(Reg(EAX), const_true);
+          IJe(Label(done_label));
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ];
+     | IsTuple -> 
+        [ IMov(Reg(EAX), e_reg); 
+          IAnd(Reg(EAX), HexConst(0x00000111));
+          ICmp(Reg(EAX), HexConst(0x00000001));
+          IMov(Reg(EAX), const_true);
+          IJe(Label(done_label));
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ];
+     | Not ->
+        assert_bool e_reg "$err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e_reg);
+            IXor(Reg(EAX), Const(0x80000000));
+          ]
+     | PrintStack -> 
+        [ ILineComment("calling c function");
+          IPush(Sized(DWORD_PTR, Reg(ESP))); 
+          IPush(Sized(DWORD_PTR, Reg(EBP)));
+          IPush(Sized(DWORD_PTR, e_reg)); 
+          ICall(Label("printstack"));
+          IAdd(Reg(ESP), Const(3*4));
+        ]
+     | Print -> 
+        [ ILineComment("calling c function");
+          IPush(Sized(DWORD_PTR, e_reg)); 
+          ICall(Label("print"));
+          IAdd(Reg(ESP), Const(1*4));
+        ]
+     end
+  | CPrim2(op, imme1, imme2, tag) -> 
+     let e1_reg = compile_imm imme1 env in
+     let e2_reg = compile_imm imme2 env in
+     let done_label = sprintf "$eprim2_done_%d" tag in
+     begin match op with 
+     | Plus  -> 
+        assert_num e1_reg "$err_arith_not_num" @
+        assert_num e2_reg "$err_arith_not_num" @
+        [ IMov(Reg(EAX), e1_reg); 
+          IAdd(Reg(EAX), e2_reg);
+          (* check overflow *) 
+          IJo(Label("err_arith_overflow"));
+        ]
+     | Minus -> 
+          assert_num e1_reg "$err_arith_not_num"
+        @ assert_num e2_reg "$err_arith_not_num"
+        @ [ IMov(Reg(EAX), e1_reg); 
+            ISub(Reg(EAX), e2_reg);
+            (* check overflow *) 
+            IJo(Label("err_arith_overflow"));
+          ]
+     | Times -> 
+          assert_num e1_reg "$err_arith_not_num"
+        @ assert_num e2_reg "$err_arith_not_num"
+        @ [ IMov(Reg(EAX), e1_reg); 
+            ISar(Reg(EAX), Const(1));
+            IMul(Reg(EAX), e2_reg);
+            (* check overflow *) 
+            IJo(Label("err_arith_overflow"));
+          ]
+     | And   -> 
+          assert_bool e1_reg "$err_logic_not_boolean" 
+        @ assert_bool e2_reg "$err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IAnd(Reg(EAX), e2_reg); 
+          ]
+     | Or    -> 
+          assert_bool e1_reg "$err_logic_not_boolean" 
+        @ assert_bool e2_reg "$err_logic_not_boolean" 
+        @ [ IMov(Reg(EAX), e1_reg); 
+            IOr(Reg(EAX),  e2_reg);
+          ]
+     | Greater | GreaterEq | Less| LessEq ->
+        let jump_instruction = match op with 
+        | Greater -> IJg(Label(done_label));
+        | GreaterEq -> IJge(Label(done_label));
+        | Less -> IJl(Label(done_label));
+        | LessEq -> IJle(Label(done_label));
+        | _ -> failwith "compile_cprim2_compare: not a compare operator"
+        in
+          assert_num e1_reg "$err_comparison_not_num"
+        @ assert_num e2_reg "$err_comparison_not_num"
+        @ [ IMov(Reg(EAX), e1_reg);
+            ICmp(Reg(EAX), e2_reg);
+            IMov(Reg(EAX), const_true);
+          ]
+        @ [ jump_instruction ]
+        @ [ IMov(Reg(EAX), const_false);
+            ILabel(done_label);
+          ]
+     | Eq   -> 
+        [ IMov(Reg(EAX), e1_reg);
+          ICmp(Reg(EAX), e2_reg);
+          IMov(Reg(EAX), const_true);
+          IJe(Label(done_label));
+          IMov(Reg(EAX), const_false);
+          ILabel(done_label);
+        ]
+     | EqB -> failwith "compile_cexpr: EqB not implemented"
+     end
+  | CImmExpr(immexpr) -> [ IMov(Reg(EAX), compile_imm immexpr env) ]
+  | CTuple(immexprs, tag) -> 
+  (*
+    The header stores the number of elements in the tuple. The value is not tagged.
+
+      (4 bytes)    (4 bytes)  (4 bytes)          (4 bytes)
+  --------------------------------------------------------
+  | # elements | element_0 | element_1 | ... | element_n |
+  --------------------------------------------------------
+  *)
+      let size = List.length immexprs in
+      (* store the size of the tuple *)
+      let header_instr = 
+        [ IMov(RegOffset(0, ESI), Sized(DWORD_PTR, Const(size))) ]
+      in
+      (* the elements of the tuple are already evaluated, 
+         move the values to the heap *)
+      let (_, mov_instr) = List.fold_left 
+        (fun (i, instrs) immexpr -> 
+          let e_reg = compile_imm immexpr env in
+          
+          (i + 1, instrs 
+                @ [ IMov(Reg(EAX), e_reg);
+                    IMov(RegOffset((word_size * i), ESI), Reg(EAX)); ])
+        ) (1, []) immexprs
+      in
+        [ ILineComment(("creating tuple of length " ^ (string_of_int size))) ]
+      @ header_instr
+      @ mov_instr
+      (* save the position of the tuple to EAX *)
+      @ [ IMov(Reg(EAX), Reg(ESI)) ]
+      (* tag the tuple *)
+      @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
+      (* bump the heap pointer *)
+      @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ]
+      (* realign the heap *)
+      @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
+
+  | CGetItem(immexpr, i, tag) -> 
+      let e_reg = compile_imm immexpr env in
+      (* get the tuple *)
+        [ IMov(Reg(EAX), e_reg) ]
+      (* TODO: check that EAX is indeed a tuple *)
+      (* untag it *)
+      @ [ ISub(Reg(EAX), HexConst(0x1)) ]
+      (* TODO: check the index is within range *)
+
+      (* get the i-th item *)
+      @ [ IMov(Reg(EAX), RegOffset((word_size * (i+1)), EAX))]
+
+  | CSetItem(immexpr1, i, immexpr2, tag) -> 
+      let e_reg1 = compile_imm immexpr1 env in
+      let e_reg2 = compile_imm immexpr2 env in
+      (* get the tuple *)
+        [ IMov(Reg(EAX), e_reg1) ]
+      (* TODO: check that EAX is indeed a tuple *)
+      (* untag it *)
+      @ [ ISub(Reg(EAX), HexConst(0x1)) ]
+      (* TODO: check the index is within range *)
+
+      (* get the new value *)
+      @ [ IMov(Reg(ECX), e_reg2) ]
+      (* mutate the tuple *)
+      @ [ IMov(RegOffset((word_size * (i+1)), EAX), Reg(ECX)) ]
+      (* leave the tuple as the result *)
+      @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
+  
+  | CLambda(args, aexpr, tag) ->  
+    let num_of_args = List.length args in
+    let f_name = string_of_int tag in
+    let free = free_vars_E aexpr args in
+    let num_free_vars = List.length free in
+
+    let (prologue, comp_main, epilogue) = compile_fun f_name args aexpr env in
+    let f_code = prologue @ comp_main @ epilogue in
+
+    let lambda_label = sprintf "$lambda_%s" f_name in (* must be the same as in compile_fun *)
+
+    (* Creat the closure in heap *)
+    (* represented as a heap-allocated tuple:
+      ------------------------------------------------------------------------
+      | arity | code ptr | N | var_1 | var_2 | ... | var_N | (maybe padding) |
+      ------------------------------------------------------------------------
+    *)
+    let moveClosureVarToHeap fv i =
+      (* move the i^th variable to the i^th slot *)
+      (* from the (i+3)^rd slot in the closure *)
+      try [ ILineComment(("move closure variable " ^ fv ^ " to heap"));
+            IMov(Reg(EAX), (find env fv "moveClosureVarToHeap"));
+            IMov(RegOffset(12 + 4 * i, ESI), Reg(EAX));
+          ]
+      with _ -> raise (InternalCompilerError (sprintf "moveClosureVarToHeap: Name %s not found" fv))
+    in
+    let save_closure_variables = List.concat (List.mapi (fun i fv -> moveClosureVarToHeap fv i) free) in
+
+    let closure_setup = 
+      [ ILineComment(sprintf "-----start of creating closure %s in heap-----" lambda_label ) ]
+      (* arity *)
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_of_args)) ]
+      (* code-pointer *)
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 1), ESI)), Label(lambda_label)) ]
+      (* number of free variables *)
+    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 2), ESI)), Const(num_free_vars)) ]
+      (* copy free variabels *)
+    @ save_closure_variables
+      (* creates the closure value *)
+    @ [ ILineComment(sprintf "closure %s create at heap" lambda_label);
+        IMov(Reg(EAX), Reg(ESI));
+        IAdd(Reg(EAX), HexConst(0x5)); ]
+      
+      (* update the heap pointer, keeping 8-byte alignment *)
+      (* bump the heap pointer *)
+    @ [ IAdd(Reg(ESI), Const(word_size * (3 + num_free_vars))) ]
+      (* realign the heap *)
+    @ [ IAdd(Reg(ESI), Const(if ((3 + num_free_vars) mod 2 == 1) then word_size else 0)) ]
+
+    @ [ ILineComment(sprintf "-----end of creating closure %s in heap-----" lambda_label ) ]
+
+    in
+      f_code @ closure_setup
+
+  | CApp(immexpr, immexprs, tag) ->
+      let imm_reg = compile_imm immexpr env in
+      let num_args = List.length immexprs in
+      let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
+      let push_args = List.fold_left 
+        (fun instrs imm_reg -> 
+          [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
+        [] imm_regs
+      in
+      (*1. Retrieve the function value, and check that it’s tagged as a closure.*)
+        (* load the function *)
+        [ IMov(Reg(EAX), imm_reg) ]
+      @ [ (* check-tag EAX, 0x5 *)]
+        (* untag the value*)
+      @ [ ISub(Reg(EAX), HexConst(0x5)) ]
+        (* check the arity *)
+      @ [ ]
+      (*2. Push all the arguments..*)
+      @ [ ILineComment("push the arguments")]
+      @ push_args
+      (*3. Push the closure itself.*)
+      @ [ ILineComment("push the closure on to stack")]
+      @ [ IPush(Sized(DWORD_PTR, imm_reg)) ]
+      (*4. Call the code-label in the closure.*)
+      @ [ ICall(RegOffset((word_size * 1), EAX)) ]
+      (*5. Pop the arguments and the closure.*)
+      @ [ IAdd(Reg(ESP), Const((num_args + 1) * word_size)) ]
+
+
+      (* check if it is built-in function *)
+  (*    let tmp = 
+        match find_opt built_in fun_name with
+        | Some(arity) -> sprintf "%s" fun_name
+        | None -> sprintf "$fun_dec_%s" fun_name 
+      in
+      let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
+  *)    (* the label of the function declaration *)
+  (*    let num_of_args = List.length immexprs in
+      let push_args = List.fold_left 
+          (fun instrs imm_reg -> 
+            [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
+          [] imm_regs
+      in
+        [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
+          ILineComment(sprintf "caller has %d arguments" num_args);
+          ILineComment(("tail call: " ^ (string_of_bool is_tail)));
+        ] 
+        @ push_args @
+        [
+          ICall(tmp);
+          IAdd(Reg(ESP), Const(num_of_args * word_size));
+        ]
+  *)     
+;;
 
 let native_call (label : arg) args =
   let setup = List.rev_map (fun arg ->
@@ -731,11 +1251,16 @@ err_nil_deref:%s
   (* $heap is a mock parameter name, just so that compile_fun knows our_code_starts_here takes in 1 parameter *)
      let (prologue, comp_main, epilogue) = compile_fun "our_code_starts_here" ["$heap"] body initial_env in
      let heap_start = [
-         IInstrComment(IMov(LabelContents("STACK_BOTTOM"), Reg(EBP)), "This is the bottom of our Garter stack");
-         ILineComment("heap start");
-         IInstrComment(IMov(Reg(ESI), RegOffset(8, EBP)), "Load ESI with our argument, the heap pointer");
-         IInstrComment(IAdd(Reg(ESI), Const(7)), "Align it to the nearest multiple of 8");
-         IInstrComment(IAnd(Reg(ESI), HexConst(0xFFFFFFF8)), "by adding no more than 7 to it")
+        (* Set the global variable STACK_BOTTOM to EBP *)
+        IInstrComment(IMov(LabelContents("STACK_BOTTOM"), Reg(EBP)), "This is the bottom of our Garter stack");
+        ILineComment("heap start");
+        (* Store the HEAP to ESI, and ensure that it is a multiple of 8 *)
+        (* Load ESI with the pass-in pointer *)
+        IInstrComment(IMov(Reg(ESI), RegOffset((word_size * 2), EBP)), "Load ESI with our argument, the heap pointer");
+        (* Add 7 to get above the next multiple of 8 *)
+        IInstrComment(IAdd(Reg(ESI), Const(7)), "Align it to the nearest multiple of 8");
+        (* Then round back down *)
+        IInstrComment(IAnd(Reg(ESI), HexConst(0xFFFFFFF8)), "by adding no more than 7 to it")
        ] in
      let main = (prologue @ heap_start @ List.flatten comp_decls @ comp_main @ epilogue) in
      sprintf "%s%s%s\n" prelude (to_asm main) suffix
