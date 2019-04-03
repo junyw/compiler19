@@ -390,18 +390,23 @@ let rec infer_exp
     begin match a with
           | TyTup(typs, _) -> 
               unify (List.nth typs m) t s loc reasons
-          | _ -> failwith ("infer_exp: EGetItem impossible type - not a tuple" ^ (string_of_typ a) ^ (string_of_sourcespan loc))
+          | _ -> failwith ("infer_exp: EGetItem impossible type - not a tuple " ^ (string_of_typ a) ^ " " ^ (string_of_sourcespan loc))
     end
   | ESetItem(expr1, m, n, expr2, loc) ->
     let s = infer_exp env t expr1 s reasons in
     let a = apply_subst_typ s t in
+    let a = 
+      try 
+        resolve_alias s a  
+      with _ -> a 
+    in
     begin match a with
           | TyTup(typs, _) -> 
               let b = newTyVar "blank" loc in
               let s1 = infer_exp env b expr2 s reasons in
               let b = apply_subst_typ s1 b in
                 unify b (List.nth typs m) s1 loc reasons
-          | _ -> failwith ("infer_exp: ESetItem impossible type - not a tuple" ^ (string_of_typ a) ^ (string_of_sourcespan loc))
+          | _ -> failwith ("infer_exp: ESetItem impossible type - not a tuple " ^ (string_of_typ a) ^ " " ^ (string_of_sourcespan loc))
     end
   
   | EAnnot(expr, typ, loc) -> 

@@ -823,8 +823,12 @@ and compile_aexpr (e : tag aexpr) (si : int) (env : arg envt) (num_args : int) (
     in
     let body = compile_aexpr aexpr (si + num_of_lambdas) env' num_args is_tail in
     instrs0 @ instrs @ body
+  
+  | ASeq(cexpr, aexpr, _) -> 
+    let cexpr_instr = compile_cexpr cexpr (si + 1) env num_args false in
+    let aexpr_instr = compile_aexpr aexpr (si + 1) env num_args is_tail in
+    cexpr_instr @ aexpr_instr
 
-  | _ -> failwith "compile_aexpr: impossible cased - desugared away"
 
 and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   let assert_num (e_reg : arg) (error : string) = 
@@ -1004,7 +1008,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       let size = List.length immexprs in
       (* store the size of the tuple *)
       let header_instr = 
-        [ IMov(RegOffset(0, ESI), Sized(DWORD_PTR, Const(size))) ]
+      (* Use the last bit of size to indicate whether it is forwarding *)
+        [ IMov(RegOffset(0, ESI), Sized(DWORD_PTR, Const(size lsl 1))) ]
       in
       (* the elements of the tuple are already evaluated, 
          move the values to the heap *)

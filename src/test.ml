@@ -90,11 +90,11 @@ let expr_tests = [
 ];;
 
 let pair_tests = [
-  t "tup1" "let t = (4, (5, 6)) in
+  t "tup1" "let t = (4, 1, (5, 6)) in
             begin
               t[0 of 2 := 7];
               t
-            end" "" "(7, (5, 6))";
+            end" "" "(7, 1, (5, 6))";
   t "tup2" "type intlist = (Int * intlist)
             let t : intlist = (4, (5, nil : intlist)) in
             begin
@@ -116,11 +116,11 @@ let pair_tests = [
 
 let oom = [
   tgcerr "oomgc1" (7 + builtins_size) "(1, (3, 4))" "" "Out of memory";
-  tgc "oomgc2" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
+(*  tgc "oomgc2" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
   tvgc "oomgc3" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
   tgc "oomgc4" (4 + builtins_size) "(3, 4)" "" "(3, 4)";
   tgcerr "oomgc5" (3 + builtins_size) "(3, 4, 5, 6, 7, 8, 9)" "" "Allocation";
-];;
+*)];;
 
 let gc = [
   tgc "gc_lam1" (10 + builtins_size)
@@ -138,7 +138,11 @@ let gc = [
 
 let suite =
 "suite">:::
- expr_tests @ pair_tests @ oom @ gc
+   []
+ (*expr_tests *)
+ @ pair_tests 
+ (*@ oom *)
+ (*@ gc*)
 
 
 let () =
