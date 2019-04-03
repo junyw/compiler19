@@ -1,4 +1,8 @@
+#ifndef GC_H
+#define GC_H
+
 #include <stddef.h>
+#include "main.h"
 
 /*
   Prints the contents of the heap, in terms of the word number, the exact address, 
@@ -58,3 +62,7 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top);
     The new location within to_start at which to allocate new data
  */
 int* gc(int* bottom_frame, int* top_frame, int* top_stack, int* from_start, int* from_end, int* to_start);
+
+
+#endif /* GC_H */
+

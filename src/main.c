@@ -12,6 +12,15 @@ extern int* HEAP_END asm("HEAP_END");
 extern int* HEAP asm("HEAP");
 extern int* STACK_BOTTOM asm("STACK_BOTTOM");
 
+/*
+Tagged values:
+Numbers: 0 in least significant bit
+Booleans: 111 in least three significant bits
+Tuples: 001 in least three significant bits
+Lambda: 101 in least three significant bits
+Forwarding: 011 in least three significant bits
+*/
+
 const int NUM_TAG_MASK     = 0x00000001;
 const int BOOL_TAG_MASK    = 0x00000007;
 const int TUPLE_TAG_MASK   = 0x00000007;
@@ -266,6 +275,9 @@ void error(int i, int val) {
     Also updates HEAP_END to point to the new end of the heap, if it's changed
 */
 int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top) {
+  fprintf(stderr, "%s\n", "try_gc");
+  fflush(stderr);
+
   int* new_heap = (int*)calloc(HEAP_SIZE + 7, sizeof(int));
   int* old_heap = HEAP;
   int* old_heap_end = HEAP_END;
@@ -278,9 +290,10 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
   TO_S = new_esi;
   TO_E = new_heap_end;
 
-  /* printf("FROM_S = %p, FROM_E = %p, TO_S = %p, TO_E = %p\n", FROM_S, FROM_E, TO_S, TO_E); */
-  /* naive_print_heap(FROM_S, FROM_E); */
-  /* g_PrintStack(BOOL_TRUE, cur_stack_top, cur_frame, 0); */
+  printf("cur_frame = %p, cur_stack_top = %p\n", cur_frame, cur_stack_top);
+  printf("FROM_S = %p, FROM_E = %p, TO_S = %p, TO_E = %p\n", FROM_S, FROM_E, TO_S, TO_E); 
+  // naive_print_heap(FROM_S, FROM_E); 
+  g_PrintStack(BOOL_TRUE, cur_stack_top, cur_frame, 0); 
 
   // Abort early, if we can't allocate a new to-space
   if (new_heap == NULL) {
@@ -289,8 +302,24 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
     if (old_heap != NULL) free(old_heap);
     exit(ERR_OUT_OF_MEMORY);
   }
+
+  printf("old heap---------------------------------\n");
+  naive_print_heap(old_heap, old_heap_end);
+  printf("old heap end---------------------------------\n");
+  printf("new heap---------------------------------\n");
+  naive_print_heap(new_heap, new_heap_end);
+  printf("new heap end---------------------------------\n");
+
+  new_esi = gc(STACK_BOTTOM, cur_frame, cur_stack_top, FROM_S, FROM_E, TO_S);
   
-  new_esi = gc(STACK_BOTTOM, cur_frame, cur_stack_top, FROM_S, HEAP_END, new_esi);
+  printf("old heap after gc---------------------------------\n");
+  naive_print_heap(old_heap, old_heap_end);
+  printf("old heap end after gc---------------------------------\n");
+  printf("new heap after gc---------------------------------\n");
+  naive_print_heap(new_heap, new_heap_end);
+  printf("new heap end after gc---------------------------------\n");
+
+
   HEAP = new_heap;
   HEAP_END = new_heap_end;
   free(old_heap);
@@ -318,7 +347,7 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
 }
 
 int main(int argc, char** argv) {
-  HEAP_SIZE = 100000;
+  HEAP_SIZE = 10;
   if (argc > 1) { HEAP_SIZE = atoi(argv[1]); }
   if (HEAP_SIZE < 0 || HEAP_SIZE > 1000000) { HEAP_SIZE = 0; }
   HEAP = (int*)calloc(HEAP_SIZE + 7, sizeof (int));

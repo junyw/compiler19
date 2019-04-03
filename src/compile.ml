@@ -916,13 +916,13 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           IPush(Sized(DWORD_PTR, Reg(EBP)));
           IPush(Sized(DWORD_PTR, e_reg)); 
           ICall(Label("printstack"));
-          IAdd(Reg(ESP), Const(3*4));
+          IAdd(Reg(ESP), Const(word_size * 3));
         ]
      | Print -> 
         [ ILineComment("calling c function");
           IPush(Sized(DWORD_PTR, e_reg)); 
           ICall(Label("print"));
-          IAdd(Reg(ESP), Const(1*4));
+          IAdd(Reg(ESP), Const(word_size * 1));
         ]
      end
   | CPrim2(op, imme1, imme2, tag) -> 
@@ -1006,6 +1006,22 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   --------------------------------------------------------
   *)
       let size = List.length immexprs in
+
+      (* call try_gc *)
+      (* int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top) *)
+      let gc_instr = 
+        [ (* call try_gc *)
+          ILineComment("calling try_gc function");
+          IPush(Sized(DWORD_PTR, Reg(ESP)));
+          IPush(Sized(DWORD_PTR, Reg(EBP)));
+          IPush(Sized(DWORD_PTR, Const(word_size * (size + 1))));
+          IPush(Sized(DWORD_PTR, Reg(ESI)));
+          ICall(Label("try_gc"));
+          IAdd(Reg(ESP), Const(word_size * 4));
+          (* try_gc returns the new heap top, store the value in ESI *)
+          IMov(Reg(ESI), Reg(EAX));
+        ]
+      in
       (* store the size of the tuple *)
       let header_instr = 
       (* Use the last bit of size to indicate whether it is forwarding *)
@@ -1023,16 +1039,17 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         ) (1, []) immexprs
       in
         [ ILineComment(("creating tuple of length " ^ (string_of_int size))) ]
+      @ gc_instr
       @ header_instr
       @ mov_instr
       (* save the position of the tuple to EAX *)
       @ [ IMov(Reg(EAX), Reg(ESI)) ]
       (* tag the tuple *)
       @ [ IAdd(Reg(EAX), HexConst(0x1)) ]
-      (* bump the heap pointer *)
-      @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ]
+      (* bump the heap pointer *) (* no longer needed with try_gc *)
+      (* @ [ IAdd(Reg(ESI), Const(word_size * (size + 1))) ] *)
       (* realign the heap *)
-      @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ]
+      (* @ [ IAdd(Reg(ESI), Const(if ((size + 1) mod 2 == 1) then word_size else 0)) ] *)
 
   | CGetItem(immexpr, i, tag) -> 
       let e_reg = compile_imm immexpr env in

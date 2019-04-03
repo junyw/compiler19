@@ -116,11 +116,11 @@ let pair_tests = [
 
 let oom = [
   tgcerr "oomgc1" (7 + builtins_size) "(1, (3, 4))" "" "Out of memory";
-(*  tgc "oomgc2" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
+  tgc "oomgc2" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
   tvgc "oomgc3" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
   tgc "oomgc4" (4 + builtins_size) "(3, 4)" "" "(3, 4)";
   tgcerr "oomgc5" (3 + builtins_size) "(3, 4, 5, 6, 7, 8, 9)" "" "Allocation";
-*)];;
+];;
 
 let gc = [
   tgc "gc_lam1" (10 + builtins_size)
@@ -139,9 +139,9 @@ let gc = [
 let suite =
 "suite">:::
    []
- (*expr_tests *)
- @ pair_tests 
- (*@ oom *)
+ @ expr_tests 
+ (*@ pair_tests *)
+ @ oom 
  (*@ gc*)
 
 
