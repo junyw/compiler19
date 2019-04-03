@@ -1,10 +1,12 @@
 #include <stdio.h>
+#include "gc.h"
 
-void naive_print_heap(int* heap, int size) {
-  for(int i = 0; i < size; i += 1) {
-    printf("  %d/%p: %p (%d)\n", i, (heap + i), (int*)(*(heap + i)), *(heap + i));
-  }
-}
+// void naive_print_heap(int* heap, int size) {
+//   for(int i = 0; i < size; i += 1) {
+//     printf("  %d/%p: %p (%d)\n", i, (heap + i), (int*)(*(heap + i)), *(heap + i));
+//   }
+// }
+void naive_print_heap(int* heap, int* heap_end) {}
 
 // Implement the functions below
 

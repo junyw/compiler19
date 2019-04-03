@@ -690,8 +690,8 @@ let rec compile_fun
   
   let num_args = List.length args in
   let n = count_vars body in
-  let lambda_label = sprintf "$lambda_%s" name in
-  let lambda_label_end = sprintf "$lambda_end_%s" name in
+  let lambda_label = sprintf "%s" name in
+  let lambda_label_end = sprintf "end_of_%s" name in
 
   (*1. Compute the free-variables of the function, and sort them alphabetically.*)
   let free = List.sort (fun x y -> String.compare x y) (free_vars_E body args) in
@@ -848,7 +848,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let else_label = sprintf "$if_false_%d" tag in
     let done_label = sprintf "$done_%d" tag in
         [ IMov(Reg(EAX), compile_imm immexpr env) ]
-      @ assert_bool (Reg(EAX)) "$err_if_not_boolean"
+      @ assert_bool (Reg(EAX)) "err_if_not_bool"
       @ [ ICmp(Reg(EAX), const_false); 
           IJe(Label(else_label)) ]
       @ compile_aexpr aexpr si env num_args is_tail
@@ -865,14 +865,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         [ IMov(Reg(EAX), e_reg);
           IAdd(Reg(EAX), Const(1 lsl 1)); 
           (* check overflow *) 
-          IJo(Label("$err_arith_overflow"));
+          IJo(Label("$err_overflow"));
         ] 
      | Sub1  -> 
         assert_num e_reg "$err_arith_not_num" @
         [ IMov(Reg(EAX), e_reg); 
           IAdd(Reg(EAX), Const(~-1 lsl 1));
           (* check overflow *) 
-          IJo(Label("$err_arith_overflow"));
+          IJo(Label("$err_overflow"));
         ] 
      | IsBool -> 
         [ IMov(Reg(EAX), e_reg); 
@@ -902,7 +902,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ILabel(done_label);
         ];
      | Not ->
-        assert_bool e_reg "$err_logic_not_boolean" 
+        assert_bool e_reg "err_logic_not_bool" 
         @ [ IMov(Reg(EAX), e_reg);
             IXor(Reg(EAX), Const(0x80000000));
           ]
@@ -932,7 +932,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         [ IMov(Reg(EAX), e1_reg); 
           IAdd(Reg(EAX), e2_reg);
           (* check overflow *) 
-          IJo(Label("err_arith_overflow"));
+          IJo(Label("err_overflow"));
         ]
      | Minus -> 
           assert_num e1_reg "$err_arith_not_num"
@@ -940,7 +940,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         @ [ IMov(Reg(EAX), e1_reg); 
             ISub(Reg(EAX), e2_reg);
             (* check overflow *) 
-            IJo(Label("err_arith_overflow"));
+            IJo(Label("err_overflow"));
           ]
      | Times -> 
           assert_num e1_reg "$err_arith_not_num"
@@ -949,17 +949,17 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
             ISar(Reg(EAX), Const(1));
             IMul(Reg(EAX), e2_reg);
             (* check overflow *) 
-            IJo(Label("err_arith_overflow"));
+            IJo(Label("err_overflow"));
           ]
      | And   -> 
-          assert_bool e1_reg "$err_logic_not_boolean" 
-        @ assert_bool e2_reg "$err_logic_not_boolean" 
+          assert_bool e1_reg "err_logic_not_bool" 
+        @ assert_bool e2_reg "err_logic_not_bool" 
         @ [ IMov(Reg(EAX), e1_reg); 
             IAnd(Reg(EAX), e2_reg); 
           ]
      | Or    -> 
-          assert_bool e1_reg "$err_logic_not_boolean" 
-        @ assert_bool e2_reg "$err_logic_not_boolean" 
+          assert_bool e1_reg "err_logic_not_bool" 
+        @ assert_bool e2_reg "err_logic_not_bool" 
         @ [ IMov(Reg(EAX), e1_reg); 
             IOr(Reg(EAX),  e2_reg);
           ]
@@ -971,8 +971,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
         | LessEq -> IJle(Label(done_label));
         | _ -> failwith "compile_cprim2_compare: not a compare operator"
         in
-          assert_num e1_reg "$err_comparison_not_num"
-        @ assert_num e2_reg "$err_comparison_not_num"
+          assert_num e1_reg "err_comp_not_num"
+        @ assert_num e2_reg "err_comp_not_num"
         @ [ IMov(Reg(EAX), e1_reg);
             ICmp(Reg(EAX), e2_reg);
             IMov(Reg(EAX), const_true);
@@ -1067,7 +1067,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
     let (prologue, comp_main, epilogue) = compile_fun f_name args aexpr env in
     let f_code = prologue @ comp_main @ epilogue in
 
-    let lambda_label = sprintf "$lambda_%s" f_name in (* must be the same as in compile_fun *)
+    let lambda_label = sprintf "%s" f_name in (* must be the same as in compile_fun *)
 
     (* Creat the closure in heap *)
     (* represented as a heap-allocated tuple:

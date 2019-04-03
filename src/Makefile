@@ -21,7 +21,7 @@ test: *.ml parser.mly lexer.mll
 	mv test.native test
 
 output/%.run: output/%.o main.c gc.o
-	clang $(PIE) -mstackrealign -g -m32 -o $@ gc.o main.c $<
+	clang $(PIE) -mstackrealign -g -m32 -o $@ main.c gc.o $<
 
 output/%.o: output/%.s
 	nasm -f $(FORMAT) -o $@ $<
@@ -31,7 +31,7 @@ output/%.s: input/%.garter main
 	./main $< > $@
 
 gc.o: gc.c gc.h
-	gcc gc.c -m32 -c -g -o gc.o
+	clang gc.c -m32 -c -g -o gc.o
 
 clean:
 	rm -rf output/*.o output/*.s output/*.dSYM output/*.run *.log *.o

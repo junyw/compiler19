@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "gc.h"
 
-extern int our_code_starts_here(int* HEAP) asm("our_code_starts_here");
+extern int our_code_starts_here() asm("our_code_starts_here");
 extern void error() asm("error");
 extern int print(int val) asm("print");
 extern int g_PrintStack(int val, int* esp, int* ebp, int args) asm("print_stack");
@@ -39,6 +39,8 @@ const int ERR_SET_LOW_INDEX    = 12;
 const int ERR_SET_HIGH_INDEX   = 13;
 const int ERR_CALL_NOT_CLOSURE = 14;
 const int ERR_CALL_ARITY_ERR   = 15;
+
+typedef unsigned int uint;
 
 size_t HEAP_SIZE;
 int* STACK_BOTTOM;

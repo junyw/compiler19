@@ -9,7 +9,7 @@
     heap: the starting address of the heap
     heap_end: the first address after the heap
  */
-extern int* naive_print_heap(int* heap, int* heap_end) asm("naive_print_heap");
+extern void naive_print_heap(int* heap, int* heap_end) asm("naive_print_heap");
 
 // IMPLEMENT THE FUNCTIONS BELOW
 
@@ -23,7 +23,7 @@ extern int* naive_print_heap(int* heap, int* heap_end) asm("naive_print_heap");
     to_start: the starting address (inclusive) of the to-space of the heap
     to_end: the ending address (exclusive) of the to-space of the heap
  */
-int* smarter_print_heap(int* from_start, int* from_end, int* to_start, int* to_end);
+void smarter_print_heap(int* from_start, int* from_end, int* to_start, int* to_end);
 
 /*
   Copies a Garter value from the given address to the new heap, 
