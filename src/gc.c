@@ -2,24 +2,28 @@
 #include <string.h>
 #include "gc.h"
 
+typedef unsigned int uint;
+
 void naive_print_heap(int* heap, int* heap_end) {
+}
+
+// Implement the functions below
+void print_heap(int* heap, int* heap_end) {
   int size = (int)heap_end - (int)heap;
   for(int* cur = heap; cur <= heap_end; cur++) {
-    printf("  %p: %p ", cur, (int*)(*cur));
+    printf("  %#010x: %#010x\t==>  ", (uint)cur, *cur);
     printHelp(stdout, *cur);
     printf("\n");
   }
 }
 
-// Implement the functions below
-
 void smarter_print_heap(int* from_start, int* from_end, int* to_start, int* to_end) {
   // Print out the entire heap (both semispaces), and
   // try to print values readably when possible
   printf("from-space\n");  
-  naive_print_heap(from_start, from_end);
+  print_heap(from_start, from_end);
   printf("to-space\n");
-  naive_print_heap(to_start, to_end);
+  print_heap(to_start, to_end);
 }
 
 /*
