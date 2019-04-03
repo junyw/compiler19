@@ -4,8 +4,10 @@
 
 void naive_print_heap(int* heap, int* heap_end) {
   int size = (int)heap_end - (int)heap;
-  for(int i = 0; i < size; i += 1) {
-    printf("  %d/%p: %p (%d)\n", i, (heap + i), (int*)(*(heap + i)), *(heap + i));
+  for(int* cur = heap; cur <= heap_end; cur++) {
+    printf("  %p: %p ", cur, (int*)(*cur));
+    printHelp(stdout, *cur);
+    printf("\n");
   }
 }
 
@@ -14,6 +16,10 @@ void naive_print_heap(int* heap, int* heap_end) {
 void smarter_print_heap(int* from_start, int* from_end, int* to_start, int* to_end) {
   // Print out the entire heap (both semispaces), and
   // try to print values readably when possible
+  printf("from-space\n");  
+  naive_print_heap(from_start, from_end);
+  printf("to-space\n");
+  naive_print_heap(to_start, to_end);
 }
 
 /*
@@ -30,8 +36,11 @@ void smarter_print_heap(int* from_start, int* from_end, int* to_start, int* to_e
     The new top of the heap, at which to continue allocations
 
   Side effects:
-    If the data needed to be copied, then this replaces the value at its old location 
-    with a forwarding pointer to its new location
+    If the data needed to be copied, then this replaces the value at 
+    its old location (on the heap) with a forwarding pointer to its new location, 
+    and replace the value at garter_val_addr (on the stack) with the new location in 
+    to-space, with tagging
+
  */
 int* copy_if_needed(int* garter_val_addr, int* heap_top) {
   
@@ -88,11 +97,13 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
     memcpy(memcpy_dest, memcpy_src, heap_thing_size);
 
     // 2. Update the value at garter_val_addr with the value of heap_top.
-    garter_val_addr = heap_top;
+    // needs to be tagged
+    *garter_val_addr = (int)heap_top + 0x1;
     // 3. Replace the value at heap_thing_addr (i.e., the location referred to by garter_val) with a forwarding pointer to heap_top.
-    *heap_thing_addr = (int)garter_val_addr + 0x3;
+    *heap_thing_addr = (int)heap_top + 0x3;
     // 4. Increment heap_top as needed to record the allocation.
-    heap_top += heap_thing_size;
+    heap_top += 1 + len;
+    printf("new heap_top %p\n", heap_top);
     // 5. For each field within heap_thing at the new location, recursively call copy_if_needed. (Be careful about using the return value of those calls correctly!)
     
     // 6. Return the current heap_top.

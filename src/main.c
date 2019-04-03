@@ -105,13 +105,13 @@ void printHelp(FILE *out, int val) {
     /*   } */
     /* } */
   }
-  /* else if ((val & TUPLE_TAG_MASK) == 3) { */
-  /*   fprintf(out, "forwarding to "); */
-  /*   fflush(out); */
-  /*   fprintf(out, "%p", (int*)(val - 3)); */
-  /*   fflush(out); */
-  /*   return; */
-  /* } */
+  else if ((val & TUPLE_TAG_MASK) == 3) { 
+    fprintf(out, "forwarding to "); 
+    fflush(out); 
+    fprintf(out, "%p", (int*)(val - 3)); 
+    fflush(out); 
+    return; 
+  } 
   else if ((val & TUPLE_TAG_MASK) == TUPLE_TAG) {
     int* addr = (int*)(val - 1);
     // Check whether we've visited this tuple already
@@ -303,21 +303,15 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
     exit(ERR_OUT_OF_MEMORY);
   }
 
-  printf("old heap---------------------------------\n");
-  naive_print_heap(old_heap, old_heap_end);
-  printf("old heap end---------------------------------\n");
-  printf("new heap---------------------------------\n");
-  naive_print_heap(new_heap, new_heap_end);
-  printf("new heap end---------------------------------\n");
+  printf("before gc---------------------------------\n");
+  smarter_print_heap(old_heap, old_heap_end, new_heap, new_heap_end);
+  printf("---------------------------------\n");
 
   new_esi = gc(STACK_BOTTOM, cur_frame, cur_stack_top, FROM_S, FROM_E, TO_S);
   
-  printf("old heap after gc---------------------------------\n");
-  naive_print_heap(old_heap, old_heap_end);
-  printf("old heap end after gc---------------------------------\n");
-  printf("new heap after gc---------------------------------\n");
-  naive_print_heap(new_heap, new_heap_end);
-  printf("new heap end after gc---------------------------------\n");
+  printf("after gc---------------------------------\n");
+  smarter_print_heap(old_heap, old_heap_end, new_heap, new_heap_end);
+  printf("---------------------------------\n");
 
 
   HEAP = new_heap;
