@@ -440,9 +440,39 @@ let rec infer_exp
         infer_exp lambda_env b e s1 reasons
 ;;
 
+(* infer_group: inter types for function gourps that may be mutually recursive *)
+let infer_group env (g : sourcespan decl list) (s : 'a typ subst) 
+  : sourcespan scheme envt =
+  (* first pull out the scheme of all functions in the group *)
+    let env = 
+      List.fold_left
+      (fun env decl ->
+        match decl with
+        | DFun(f_name, arg_names, scheme, b, loc) -> 
+            StringMap.add f_name scheme env
+      ) env g
+    in
+  (*  type the body of each function *)
+(*    let f_typs =
+      List.fold_left 
+      (fun f_typs (DFun(f_name, _, _, _, _) as decl) -> 
+        
+        let scheme = match StringMap.find_opt f_name funenv with
+            | Some(scheme') -> scheme' 
+            | None    -> failwith "infer_group: undefined function" 
+        in
+        let f_typ = instantiate scheme in
+
+        let s' = infer_decl funenv env f_typ decl s [] in
+             (f_name, apply_subst_typ s' f_typ)::f_typs
+      ) [] g
+    in
+*)    env
+;;
+
 let infer_prog env (p : sourcespan program) : 'a typ =
   match p with
-  | Program(typedecls, [], body, tag) ->
+  | Program(typedecls, declgroups, body, tag) ->
       (* process typedecls, add type aliases to substitution s *)
       let s =
         List.fold_left
@@ -453,12 +483,19 @@ let infer_prog env (p : sourcespan program) : 'a typ =
               compose_subst [(tyname, b)] s
         ) [] typedecls
       in
-      (* type the body *)
+
+      (* type the declgroups *)
+
+      let env = 
+        List.fold_left 
+        (fun env (g : sourcespan decl list) ->
+                infer_group env g s
+        ) env declgroups
+      in
+      (* 3. type the body *)
       let a = TyVar(gensym "body", tag) in
       let s = infer_exp env a body s [] in 
         apply_subst_typ s a
-
-  | _ -> failwith "infer_prog: case should be desugared away"
 ;;
 
 let type_synth (p : sourcespan program) : sourcespan program fallible =

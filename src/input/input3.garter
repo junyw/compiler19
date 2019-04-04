@@ -1,7 +1,2 @@
-let f = (lambda: (1, 2)) in
-       begin
-         f();
-         f();
-         f();
-         f()
-       end
+let f = (lambda: (1, 2, 3)) in
+      let y = (1,) in y

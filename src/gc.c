@@ -73,11 +73,10 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
   }
   // If garter_val is a (tagged) pointer to a heap-allocated Garter value (tuple or closure): 
   // Call the pointed-to value heap_thing, such that untag(garter_val) = heap_thing_addr, then
-  else if ((garter_val & TUPLE_TAG_MASK) == TUPLE_TAG
-       || (garter_val & CLOSURE_TAG_MASK) == CLOSURE_TAG) {
-    DEBUG_PRINT("value is tuple/closure\n");
+  else if ((garter_val & TUPLE_TAG_MASK) == TUPLE_TAG) {
 
-    bool is_tuple = (garter_val & TUPLE_TAG_MASK) == TUPLE_TAG ? true : false;
+    DEBUG_PRINT("value is tuple\n");
+
     int* heap_thing_addr = (int*)(garter_val - 0x1);
     
 #ifdef DEBUG 
@@ -101,7 +100,7 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
 
     // 2. Update the value at garter_val_addr with the value of heap_top.
     // needs to be tagged
-    *garter_val_addr = (int)heap_top + (is_tuple ? 0x1 : 0x5);
+    *garter_val_addr = (int)heap_top + 0x1;
     // 3. Replace the value at heap_thing_addr (i.e., the location referred to by garter_val) with a forwarding pointer to heap_top.
     *heap_thing_addr = (int)heap_top + 0x3;
     // 4. Increment heap_top as needed to record the allocation.
@@ -114,6 +113,58 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
     int* start_word_addr = old_heap_top;
     DEBUG_PRINT("start>>>>\n");
     for(int i = 1; i <= len; i++) {
+      int* cur_word_addr = start_word_addr + i;
+
+      int* new_heap_top = copy_if_needed(cur_word_addr, heap_top);
+
+      heap_top = (int*)(((int)new_heap_top + 7) & ~0x7);
+    }
+    DEBUG_PRINT("end>>>>\n");
+
+    // 6. Return the current heap_top.
+    return heap_top;
+  }
+
+  else if ((garter_val & CLOSURE_TAG_MASK) == CLOSURE_TAG) {
+    DEBUG_PRINT("value is closure\n");
+
+    int* heap_thing_addr = (int*)(garter_val - 0x1);
+    
+#ifdef DEBUG 
+    printf("heap_thing_addr = %p\n", heap_thing_addr);
+    printf("garter_val = ");
+    printHelp(stdout, garter_val);
+    printf("\n");
+#endif
+
+    // 1. Copy the full contents of heap_thing to heap_top.
+    int arity = heap_thing_addr[0]; // encoded arity
+    if (arity & 0x1) { // actually, it's a forwarding pointer
+      DEBUG_PRINT("forwarding to %p", (int*)(arity - 1));
+      return heap_top;
+    }
+    int len = heap_thing_addr[2];
+    len = len + 3; // real length of the closure 
+    int heap_thing_size = len * 4 /* 4 bytes */;
+    void* memcpy_dest = heap_top;
+    void* memcpy_src = heap_thing_addr;
+    memcpy(memcpy_dest, memcpy_src, heap_thing_size);
+
+    // 2. Update the value at garter_val_addr with the value of heap_top.
+    // needs to be tagged
+    *garter_val_addr = (int)heap_top + 0x1;
+    // 3. Replace the value at heap_thing_addr (i.e., the location referred to by garter_val) with a forwarding pointer to heap_top.
+    *heap_thing_addr = (int)heap_top + 0x3;
+    // 4. Increment heap_top as needed to record the allocation.
+    heap_top += len;
+    heap_top = (int*)(((int)heap_top + 7) & ~0x7);
+
+    DEBUG_PRINT("new heap_top %p\n", heap_top);
+    // 5. For each field within heap_thing at the new location, recursively call copy_if_needed. 
+    // (Be careful about using the return value of those calls correctly!)
+    int* start_word_addr = old_heap_top;
+    DEBUG_PRINT("start>>>>\n");
+    for(int i = 3; i <= len; i++) {
       int* cur_word_addr = start_word_addr + i;
 
       int* new_heap_top = copy_if_needed(cur_word_addr, heap_top);
@@ -164,7 +215,7 @@ int* gc(int* bottom_frame, int* top_frame, int* top_stack, int* from_start, int*
   if (top_frame < bottom_frame)
     to_start = gc(bottom_frame,
                   (int*)(*top_frame), // [top_frame] points to the saved EBP, which is the next stack frame
-                  top_frame + 2 * 4 /* word_size = 4 */,      
+                  top_frame + 2,    
                                       // [top_frame+4] points to the return address
                                       // so [top_frame+8] is the next frame's stack-top
                   from_start,

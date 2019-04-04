@@ -925,6 +925,8 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ICall(Label("print"));
           IAdd(Reg(ESP), Const(word_size * 1));
         ]
+     | PrintB -> 
+        failwith "PrintB not implemented"
      end
   | CPrim2(op, imme1, imme2, tag) -> 
      let e1_reg = compile_imm imme1 env in
@@ -1098,6 +1100,22 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       | arity | code ptr | N | var_1 | var_2 | ... | var_N | (maybe padding) |
       ------------------------------------------------------------------------
     *)
+
+    (* call try_gc *)
+    (* int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top) *)
+    let gc_instr = 
+      [ (* call try_gc *)
+        ILineComment("calling try_gc function");
+        IPush(Sized(DWORD_PTR, Reg(ESP)));
+        IPush(Sized(DWORD_PTR, Reg(EBP)));
+        IPush(Sized(DWORD_PTR, Const(word_size * (3 + num_free_vars))));
+        IPush(Sized(DWORD_PTR, Reg(ESI)));
+        ICall(Label("try_gc"));
+        IAdd(Reg(ESP), Const(word_size * 4));
+        (* try_gc returns the new heap top, store the value in ESI *)
+        IMov(Reg(ESI), Reg(EAX));
+      ]
+    in
     let moveClosureVarToHeap fv i =
       (* move the i^th variable to the i^th slot *)
       (* from the (i+3)^rd slot in the closure *)
@@ -1111,24 +1129,28 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
 
     let closure_setup = 
       [ ILineComment(sprintf "-----start of creating closure %s in heap-----" lambda_label ) ]
+      (* gc *)
+    @ gc_instr
       (* arity *)
-    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 0), ESI)), Const(num_of_args)) ]
+    @ [ IMov(RegOffset((word_size * 0), ESI), Sized(DWORD_PTR, Const(num_of_args lsl 1))) ]
       (* code-pointer *)
-    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 1), ESI)), Label(lambda_label)) ]
+    @ [ IMov(RegOffset((word_size * 1), ESI), Sized(DWORD_PTR, Label(lambda_label))) ]
       (* number of free variables *)
-    @ [ IMov(Sized(DWORD_PTR, RegOffset((word_size * 2), ESI)), Const(num_free_vars)) ]
+    @ [ IMov(RegOffset((word_size * 2), ESI), Sized(DWORD_PTR, Const(num_free_vars))) ]
       (* copy free variabels *)
     @ save_closure_variables
       (* creates the closure value *)
     @ [ ILineComment(sprintf "closure %s create at heap" lambda_label);
+      (* save the position of the closure to EAX *)
         IMov(Reg(EAX), Reg(ESI));
+      (* tag the closure *)
         IAdd(Reg(EAX), HexConst(0x5)); ]
       
       (* update the heap pointer, keeping 8-byte alignment *)
       (* bump the heap pointer *)
-    @ [ IAdd(Reg(ESI), Const(word_size * (3 + num_free_vars))) ]
+    (* @ [ IAdd(Reg(ESI), Const(word_size * (3 + num_free_vars))) ] *)
       (* realign the heap *)
-    @ [ IAdd(Reg(ESI), Const(if ((3 + num_free_vars) mod 2 == 1) then word_size else 0)) ]
+    (* @ [ IAdd(Reg(ESI), Const(if ((3 + num_free_vars) mod 2 == 1) then word_size else 0)) ] *)
 
     @ [ ILineComment(sprintf "-----end of creating closure %s in heap-----" lambda_label ) ]
 

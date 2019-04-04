@@ -1,10 +1,10 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#define DEBUG 1
+// #define DEBUG 1
 
 #ifdef DEBUG
-  #define DEBUG_PRINT(fmt, args...) fprintf(stderr, fmt, ## args)
+  #define DEBUG_PRINT(fmt, args...) fprintf(stderr, fmt, ## args); fflush(stderr)
 #else
   #define DEBUG_PRINT(fmt, args...) /* Don't do anything */
 #endif

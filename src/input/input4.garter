@@ -1,0 +1,5 @@
+    def typed_q(x: Int) -> Int:
+      let a = 1, b = -1, c = -2 in
+        (a * x * x) + (b * x) + c
+
+    (typed_q(0) == -2) && (typed_q(-1) == 0) && (typed_q(2) == 0)

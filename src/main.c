@@ -277,7 +277,7 @@ void error(int i, int val) {
     Also updates HEAP_END to point to the new end of the heap, if it's changed
 */
 int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top) {
-  DEBUG_PRINT("%s\n", "try_gc");
+  DEBUG_PRINT("try_gc - bytes_needed = %d\n", bytes_needed);
   fflush(stderr);
 
   int* new_heap = (int*)calloc(HEAP_SIZE + 7, sizeof(int));
