@@ -912,11 +912,12 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
           ]
      | PrintStack -> 
         [ ILineComment("calling c function");
-          IPush(Sized(DWORD_PTR, Reg(ESP))); 
+          IPush(Sized(DWORD_PTR, Const(num_args))); 
           IPush(Sized(DWORD_PTR, Reg(EBP)));
+          IPush(Sized(DWORD_PTR, Reg(ESP))); 
           IPush(Sized(DWORD_PTR, e_reg)); 
-          ICall(Label("printstack"));
-          IAdd(Reg(ESP), Const(word_size * 3));
+          ICall(Label("print_stack"));
+          IAdd(Reg(ESP), Const(word_size * 4));
         ]
      | Print -> 
         [ ILineComment("calling c function");

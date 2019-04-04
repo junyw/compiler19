@@ -1,2 +1,2 @@
-let x = (10, 11, 12) in 
-	let y = (1,) in x
+let x = (10, (11, (12, 13))) in 
+	let y = (1,) in printStack(x)

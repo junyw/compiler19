@@ -52,6 +52,7 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
   printf("copy_if_needed\n");
   printf("garter_val_addr = %p, heap_top = %p\n", garter_val_addr, heap_top);
   
+  int* old_heap_top = heap_top;
   int garter_val = *garter_val_addr;
 
   printf("the value being examined = ");  
@@ -80,12 +81,13 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
   // If garter_val is a (tagged) pointer to a heap-allocated Garter value (tuple or closure): 
   // Call the pointed-to value heap_thing, such that untag(garter_val) = heap_thing_addr, then
   else if ((garter_val & TUPLE_TAG_MASK) == TUPLE_TAG) {
-    int* heap_thing_addr = (int*)(garter_val - 1);
-    int  heap_thing = garter_val;
+    printf("value is tuple\n");
+
+    int* heap_thing_addr = (int*)(garter_val - 0x1);
     
     printf("heap_thing_addr = %p\n", heap_thing_addr);
-    printf("heap_thing = ");
-    printHelp(stdout, heap_thing);
+    printf("garter_val = ");
+    printHelp(stdout, garter_val);
     printf("\n");
     
     // 1. Copy the full contents of heap_thing to heap_top.
@@ -96,8 +98,8 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
     }
     len = len / 2; // real length of the tuple 
     int heap_thing_size = (1 + len) * 4 /* 4 bytes */;
-    int* memcpy_dest = heap_top;
-    int* memcpy_src = heap_thing_addr;
+    void* memcpy_dest = heap_top;
+    void* memcpy_src = heap_thing_addr;
     memcpy(memcpy_dest, memcpy_src, heap_thing_size);
 
     // 2. Update the value at garter_val_addr with the value of heap_top.
@@ -107,20 +109,41 @@ int* copy_if_needed(int* garter_val_addr, int* heap_top) {
     *heap_thing_addr = (int)heap_top + 0x3;
     // 4. Increment heap_top as needed to record the allocation.
     heap_top += 1 + len;
+    heap_top = (int*)(((int)heap_top + 7) & ~0x7);
+
     printf("new heap_top %p\n", heap_top);
-    // 5. For each field within heap_thing at the new location, recursively call copy_if_needed. (Be careful about using the return value of those calls correctly!)
-    
+    // 5. For each field within heap_thing at the new location, recursively call copy_if_needed. 
+    // (Be careful about using the return value of those calls correctly!)
+    int* start_word_addr = old_heap_top;
+    printf("start>>>>\n");
+    for(int i = 1; i <= len; i++) {
+      int* cur_word_addr = start_word_addr + i;
+
+      int* new_heap_top = copy_if_needed(cur_word_addr, heap_top);
+
+      heap_top = (int*)(((int)new_heap_top + 7) & ~0x7);
+    }
+    printf("end>>>>\n");
+
     // 6. Return the current heap_top.
     return heap_top;
-
   }
   else if ((garter_val & CLOSURE_TAG_MASK) == CLOSURE_TAG) {
+    printf("value is closure\n");
     //TODO
     return heap_top;
   }
+  else if ((garter_val & FORWARD_TAG_MASK) == FORWARD_TAG) {
   // If garter_val is a (tagged) pointer to a heap_thing that is now a forwarding pointer, 
   // replace the value at  garter_val_addr with the appropriately tagged version of 
   // that forwarding pointer. Return the unchanged heap_top.
+    printf("value is forwarding pointer\n");
+    int* heap_thing_addr = (int*)(garter_val - 0x3);
+    *garter_val_addr = *heap_thing_addr;
+
+
+    return heap_top;
+  }
 
 
   // no-op for now

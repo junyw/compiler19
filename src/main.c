@@ -25,9 +25,11 @@ const int NUM_TAG_MASK     = 0x00000001;
 const int BOOL_TAG_MASK    = 0x00000007;
 const int TUPLE_TAG_MASK   = 0x00000007;
 const int CLOSURE_TAG_MASK = 0x00000007;
+const int FORWARD_TAG_MASK = 0x00000007;
 const int NUM_TAG          = 0x00000000;
 const int BOOL_TAG         = 0x00000007;
 const int TUPLE_TAG        = 0x00000001;
+const int FORWARD_TAG      = 0x00000003;
 const int CLOSURE_TAG      = 0x00000005;
 const int BOOL_TRUE        = 0xFFFFFFFF;
 const int BOOL_FALSE       = 0x7FFFFFFF;
@@ -341,7 +343,7 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
 }
 
 int main(int argc, char** argv) {
-  HEAP_SIZE = 10;
+  HEAP_SIZE = 100000;
   if (argc > 1) { HEAP_SIZE = atoi(argv[1]); }
   if (HEAP_SIZE < 0 || HEAP_SIZE > 1000000) { HEAP_SIZE = 0; }
   HEAP = (int*)calloc(HEAP_SIZE + 7, sizeof (int));
