@@ -1,0 +1,7 @@
+let f = (lambda: (1, 2)) in
+       begin
+         f();
+         f();
+         f();
+         f()
+       end

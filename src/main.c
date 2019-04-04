@@ -277,7 +277,7 @@ void error(int i, int val) {
     Also updates HEAP_END to point to the new end of the heap, if it's changed
 */
 int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top) {
-  fprintf(stderr, "%s\n", "try_gc");
+  DEBUG_PRINT("%s\n", "try_gc");
   fflush(stderr);
 
   int* new_heap = (int*)calloc(HEAP_SIZE + 7, sizeof(int));
@@ -292,10 +292,11 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
   TO_S = new_esi;
   TO_E = new_heap_end;
 
+#ifdef DEBUG
   printf("cur_frame = %p, cur_stack_top = %p\n", cur_frame, cur_stack_top);
   printf("FROM_S = %p, FROM_E = %p, TO_S = %p, TO_E = %p\n", FROM_S, FROM_E, TO_S, TO_E); 
-  // naive_print_heap(FROM_S, FROM_E); 
   g_PrintStack(BOOL_TRUE, cur_stack_top, cur_frame, 0); 
+#endif
 
   // Abort early, if we can't allocate a new to-space
   if (new_heap == NULL) {
@@ -305,16 +306,19 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
     exit(ERR_OUT_OF_MEMORY);
   }
 
+#ifdef DEBUG
   printf("before gc---------------------------------\n");
   smarter_print_heap(old_heap, old_heap_end, new_heap, new_heap_end);
   printf("---------------------------------\n");
+#endif
 
   new_esi = gc(STACK_BOTTOM, cur_frame, cur_stack_top, FROM_S, FROM_E, TO_S);
   
+#ifdef DEBUG
   printf("after gc---------------------------------\n");
   smarter_print_heap(old_heap, old_heap_end, new_heap, new_heap_end);
   printf("---------------------------------\n");
-
+#endif
 
   HEAP = new_heap;
   HEAP_END = new_heap_end;
@@ -324,7 +328,7 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
   // that does not mean we're *using* the byte at HEAP_END, but rather that it would be the
   // next free byte, which is still ok and not a heap-overflow.
   if (bytes_needed / 4 > HEAP_SIZE) {
-    fprintf(stderr, "Allocation error: needed %d words, but the heap is only %d words\n",
+    fprintf(stderr, "Allocation error: needed %d words, but the heap is only %lu words\n",
             bytes_needed / 4, HEAP_SIZE);
     fflush(stderr);
     if (new_heap != NULL) free(new_heap);
@@ -343,7 +347,7 @@ int* try_gc(int* alloc_ptr, int bytes_needed, int* cur_frame, int* cur_stack_top
 }
 
 int main(int argc, char** argv) {
-  HEAP_SIZE = 100000;
+  HEAP_SIZE = 20;
   if (argc > 1) { HEAP_SIZE = atoi(argv[1]); }
   if (HEAP_SIZE < 0 || HEAP_SIZE > 1000000) { HEAP_SIZE = 0; }
   HEAP = (int*)calloc(HEAP_SIZE + 7, sizeof (int));

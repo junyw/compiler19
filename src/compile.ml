@@ -138,10 +138,10 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
             (env', errs @ errs_e @ errs') in
        let (env2, errs) = process_bindings bindings env in
        dupeIds @ errs @ wf_E body env2 tyenv
-    | ELetRec(binds, body, loc) -> raise (NotYetImplemented "Finish well-formedness for ELetRec")
+    | ELetRec(binds, body, loc) -> [(* TODO *)] (* raise (NotYetImplemented "Finish well-formedness for ELetRec") *)
     | EApp(fn, args, loc) ->
        wf_E fn env tyenv @ List.concat (List.map (fun e -> wf_E e env tyenv) args)
-    | ELambda(binds, body, loc) -> raise (NotYetImplemented "Finish well-formedness for ELambda")
+    | ELambda(binds, body, loc) -> [(* TODO *)] (* raise (NotYetImplemented "Finish well-formedness for ELambda") *)
   and wf_D d (env : sourcespan envt) (tyenv : StringSet.t) =
     match d with
     | DFun(fn, args, typ, body, loc) ->
@@ -1083,7 +1083,7 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
   
   | CLambda(args, aexpr, tag) ->  
     let num_of_args = List.length args in
-    let f_name = string_of_int tag in
+    let f_name = sprintf "f_%d" tag in
     let free = free_vars_E aexpr args in
     let num_free_vars = List.length free in
 

@@ -1,6 +1,14 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+#define DEBUG 1
+
+#ifdef DEBUG
+  #define DEBUG_PRINT(fmt, args...) fprintf(stderr, fmt, ## args)
+#else
+  #define DEBUG_PRINT(fmt, args...) /* Don't do anything */
+#endif
+
 extern const int NUM_TAG_MASK;
 extern const int BOOL_TAG_MASK;
 extern const int TUPLE_TAG_MASK;
