@@ -1,6 +1,8 @@
 class Bar:
-	field x : Bool = true
-	field y = 10
-	field z : Int
+	field x: Int
+	field y: Bool
+	field z = 10
+	method f(self):
+		self
 end
 1
