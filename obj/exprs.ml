@@ -36,6 +36,7 @@ type 'a typ =
   | TyArr of 'a typ list * 'a typ * 'a
   | TyApp of 'a typ * 'a typ list * 'a
   | TyTup of 'a typ list * 'a
+  | TyRecord of (string * 'a typ) list * 'a
 
 type 'a scheme =
   | SForall of string list * 'a typ * 'a
@@ -64,9 +65,9 @@ and 'a expr =
   | EApp of 'a expr * 'a expr list * 'a
   | ELambda of 'a bind list * 'a expr * 'a
   | EAnnot of 'a expr * 'a typ * 'a
+  | ENew of string * 'a
   | EDot of 'a expr * string * 'a
   | EDotSet of 'a expr * string * 'a expr * 'a
-  | ENew of string * 'a
 
 
 type 'a decl =
@@ -75,8 +76,11 @@ type 'a decl =
 type 'a tydecl =
   | TyDecl of string * 'a typ list * 'a
 
+type 'a field = 
+  | Field of 'a bind * 'a expr option * 'a
+  
 type 'a classdecl = 
-  | Class of string * string option *  'a bind list * 'a decl list * 'a
+  | Class of string * string option *  'a field list * 'a decl list * 'a
                                                           
 type 'a program =
   | Program of 'a tydecl list * 'a classdecl list * 'a decl list list * 'a expr * 'a

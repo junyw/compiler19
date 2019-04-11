@@ -197,7 +197,6 @@ tupletyp :
   | LPARENNOSPACE RPAREN { TyTup([], full_span()) }
   | LPARENSPACE RPAREN { TyTup([], full_span()) }
 
-
 typs :
   | typ { [$1] }
   | typ COMMA typs { $1::$3 }
@@ -219,8 +218,9 @@ tydecl :
   | TYPE ID EQUAL LPARENSPACE startyps RPAREN { TyDecl($2, $5, full_span()) }
 
 classfield :
-  | FIELD ID { BName($2, TyBlank(full_span()), full_span()) }
-  
+  | FIELD namebind { Field($2, None, full_span()) }
+  | FIELD namebind EQUAL expr { Field($2, Some($4), full_span()) }
+
 classmethod :
   | METHOD ID LPARENNOSPACE RPAREN COLON expr
     { let arg_pos = Parsing.rhs_start_pos 3, Parsing.rhs_end_pos 4 in

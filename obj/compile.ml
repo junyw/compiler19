@@ -315,7 +315,11 @@ let desugar_bindings (p : sourcespan program) : sourcespan program =
       sprintf "%s_%d" name (!next)) in
   let rec helpP (p : sourcespan program) =
     match p with
-    | Program(tydecls, classdecls(*TODO*), decls, body, tag) -> Program(tydecls, [], List.map helpG decls, helpE body, tag)
+    | Program(tydecls, classdecls, decls, body, tag) -> Program(tydecls, List.map helpC classdecls, List.map helpG decls, helpE body, tag)
+  and helpC c = 
+    match c with
+    | Class(name, base, fields, decls, a) ->
+      Class(name, base, fields, helpG decls, a)
   and helpG g =
     List.map helpD g
   and helpD d =
@@ -395,6 +399,9 @@ let desugar_bindings (p : sourcespan program) : sourcespan program =
        let (newargs, argbinds) = List.split (List.map helpArg args) in
        let newbody = ELet(List.flatten argbinds, body, tag) in
        ELambda(newargs, helpE newbody, tag)
+    | ENew _ -> e 
+    | EDot(expr, str, a) -> EDot(helpE expr, str, a)
+    | EDotSet(expr1, str, expr2, a) -> EDotSet(helpE expr1, str, helpE expr2, a)
 
   in helpP p
 ;;
@@ -1315,7 +1322,7 @@ err_nil_deref:%s
   
 let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   prog
-  |> (add_err_phase well_formed is_well_formed)
+  (*|> (add_err_phase well_formed is_well_formed)*)
   |> (add_phase desugared_bindings desugar_bindings)
   |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked type_synth))
   |> (add_phase tagged tag)

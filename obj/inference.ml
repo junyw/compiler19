@@ -109,6 +109,7 @@ let rec ftv_type (t : 'a typ) : StringSet.t =
     List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
                     typs
                     StringSet.empty
+  | TyRecord _ -> failwith "ftv_type: TyRecord shouldn't be used here"
 ;;
 (* ftv_scheme: 
   The set of free type variables of a type scheme is the set of free type variables of its type component, 
@@ -262,6 +263,7 @@ let rec unblank (t : 'a typ) : 'a typ =
     let args = List.map unblank args in TyApp(t, args, tag)
   | TyTup(typs, tag) -> 
     let typs = List.map unblank typs in TyTup(typs, tag)
+  | TyRecord _ -> failwith "unblank: tyrecord shouldn't be unblanked"
 ;;
 
 let instantiate (s : 'a scheme) : 'a typ =
@@ -287,6 +289,13 @@ let loc_of_typ t =
   | TyArr(_, _, loc) -> loc 
   | TyApp(_, _, loc) -> loc 
   | TyTup(_, loc) -> loc
+  | TyRecord(_, loc) -> loc
+;;
+
+let nameof_bind (bind : 'a bind) : string = 
+    match bind with 
+    | BName(name, _, _) -> name
+    | _ -> failwith "infer_class: impossible case - can't find name of the field"
 ;;
 (* generalize: turns a given type into a type scheme, quantifying over all type
    variables that are free in the type, but not in the environment.*)
@@ -295,11 +304,20 @@ let generalize (e : 'a scheme envt) (t : 'a typ) : 'a scheme =
     SForall((StringSet.elements @@  StringSet.diff (ftv_type t) (ftv_env e)), t, loc)
 
 
-let rec bind_to_typs (bind : 'a bind) : 'a typ list = 
+let generalize_class (t : 'a typ) : 'a scheme =
+    let loc = loc_of_typ t in
+    SForall([], t, loc)
+
+
+let rec typeof_bind (bind : 'a bind) : 'a typ = 
     match bind with
-    | BBlank(typ, loc) -> [typ]
-    | BName(arg_name, typ, loc) -> [typ]
-    | BTuple(binds, loc) -> [TyTup(List.concat @@ List.map bind_to_typs binds, loc)]
+    | BBlank(typ, loc) -> typ
+    | BName(arg_name, typ, loc) -> typ
+    | BTuple(binds, loc) -> TyTup(List.map typeof_bind binds, loc)
+;;
+
+let rec bind_to_typs (bind : 'a bind) : 'a typ list = 
+    [(typeof_bind bind)]
 and binds_to_typs (binds : 'a bind list) : 'a typ list = 
     List.concat @@ List.map bind_to_typs binds
 ;;
@@ -316,11 +334,65 @@ and binds_to_env (binds : 'a bind list) s (env : 'a scheme envt) : 'a scheme env
     env binds
 ;;
 
+let rec tyeqv env tyS tyT =
+  match (tyS, tyT) with
+  | (TyBlank(_), TyBlank(_)) -> failwith "tyeqv: blank type"
+  | (TyCon(str1, _), TyCon(str2, _)) -> String.equal str1 str2
+  | (TyVar(x1, pos), _) ->
+      tyeqv env (instantiate (find_pos env x1 pos)) tyT
+  | (_, TyVar(x2, pos)) ->
+      tyeqv env tyS (instantiate (find_pos env x2 pos))
+  | (TyArr(tys1, ty1, _), TyArr(tys2, ty2, _)) ->
+    List.for_all2
+      (fun ty1 ty2 -> tyeqv env ty1 ty2) tys1 tys2
+    &&
+    tyeqv env ty1 ty2
+  | (TyTup(tys1, _), TyTup(tys2, _)) ->
+    List.for_all2
+      (fun ty1 ty2 -> tyeqv env ty1 ty2) tys1 tys2
+  | (TyRecord(records1, _), TyRecord(records2, _)) ->
+      (List.length records1 = List.length records2)
+      &&
+      List.for_all 
+        (fun (r2, ty2) ->
+            try let ty1 = List.assoc r2 records1 in
+                tyeqv env ty1 ty2
+            with Not_found -> false)
+        records2
+  | (TyApp(ty1, tys1, _), TyApp(ty2, tys2, _)) -> failwith "tyeqv: needs to be implemented"
+  | _ -> false
+;;
+
+let typeof_literal (lit : 'a expr) : 'a typ = 
+  match lit with 
+  | ENumber _ -> tInt
+  | EBool _ -> tBool
+  | _ -> failwith "typeof_literal: not a literal (number of bool)"
+;;
+
+let is_blanktyp (typ : 'a typ) : bool = 
+  match typ with
+  | TyBlank _ -> true
+  | _ -> false
+;;
+
+let typeof_field env (field : 'a field) : 'a typ =
+  match field with
+  | Field(bind, Some(ini), loc) ->
+    let inityp = typeof_literal ini in
+    let bindtyp = typeof_bind bind in
+    if is_blanktyp bindtyp then inityp
+    else
+      if tyeqv env inityp bindtyp then inityp
+      else failwith (sprintf "typeof_field %s: type annot (%s) and initial value (%s) have different type" (nameof_bind bind) (string_of_typ bindtyp) (string_of_expr ini))
+  | Field(bind, None, loc) ->
+    typeof_bind bind
+;;
+
 (* infer_exp
    env: environment that associate variable names with their type scheme
    t: a proto-type
    e: expression
-   funenv: environment that associate function names with type schemes
    s: pre-existing substitution
   
    returns: a new substitution s' that extends s
@@ -332,7 +404,7 @@ let rec infer_exp
           (s  : 'a typ subst) 
           reasons
         : sourcespan typ subst =
-  (*let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in*)
+  let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in
   (*let () = print_subst s in*)
   match e with
   | ENil(typ, loc)  -> unify typ t s loc reasons
@@ -429,18 +501,41 @@ let rec infer_exp
           infer_exp env (TyTup(a, loc)) (ETuple(args, loc)) s1 reasons
 
   | ELambda(arg_binds, e, loc) -> 
-        (* type the lambda *)
-        let arg_typs = binds_to_typs arg_binds in
-        let arg_typs = List.map unblank arg_typs in
-        let b = newTyVar "lambda_ret" loc in
-        let s1 = unify (TyArr(arg_typs, b, loc)) t s loc reasons in
+      (* type the lambda *)
+      let arg_typs = binds_to_typs arg_binds in
+      let arg_typs = List.map unblank arg_typs in
+      let b = newTyVar "lambda_ret" loc in
+      let s1 = unify (TyArr(arg_typs, b, loc)) t s loc reasons in
 
-        let lambda_env = binds_to_env arg_binds s env in
-        let lambda_env = apply_subst_env s1 lambda_env in
-        infer_exp lambda_env b e s1 reasons
+      let lambda_env = binds_to_env arg_binds s env in
+      let lambda_env = apply_subst_env s1 lambda_env in
+      infer_exp lambda_env b e s1 reasons
+ 
+  | ENew(str, loc) -> 
+      let a = find_pos env str loc in
+      let a = instantiate a in
+      unify a t s loc reasons
+
+  | EDot(expr, str, loc) -> 
+      let a = newTyVar "object" loc in
+      let s = infer_exp env a expr s reasons in
+      let a = apply_subst_typ s a in
+      begin match a with
+            | TyRecord(records, _) -> 
+                unify (List.assoc str records) t s loc reasons
+            | _ -> failwith ("infer_exp: EDot impossible type - not a object " ^ (string_of_typ a) ^ " " ^ (string_of_sourcespan loc))
+      end
+
+  | EDotSet(expr1, str, expr2, loc) -> 
+      let s = infer_exp env t expr1 s reasons in
+      let a = apply_subst_typ s t in
+      let b = newTyVar "blank" loc in
+      let s1 = infer_exp env b expr2 s reasons in
+      let b = apply_subst_typ s1 b in
+        unify a b s1 loc reasons
 ;;
 
-(* infer_group: inter types for function gourps that may be mutually recursive *)
+(* infer_group: inter types for function groups that may be mutually recursive *)
 let infer_group env (g : sourcespan decl list) (s : 'a typ subst) 
   : sourcespan scheme envt =
   (* first pull out the scheme of all functions in the group *)
@@ -470,6 +565,40 @@ let infer_group env (g : sourcespan decl list) (s : 'a typ subst)
 *)    env
 ;;
 
+let nameof_class (c : 'a classdecl) : string = 
+  match c with
+  | Class(str, _, _, _, _) -> str
+;;
+
+(* infer_class: inter types for classes 
+  We use rules similar to https://crystal-lang.org/reference/syntax_and_semantics/type_inference.html
+*)
+let infer_class env (classdecl : sourcespan classdecl) (s : 'a typ subst) 
+  : sourcespan scheme envt = 
+  let nameof_field (Field(bind, _, _) : 'a field) : string =
+    nameof_bind bind
+  in
+  match classdecl with
+  | Class(c_name, None, fields, classmethods, pos) ->
+    let fieldtys =
+      List.map (fun field -> (nameof_field field,typeof_field env field)) fields 
+    in
+    let typ = TyRecord(fieldtys, pos) in
+    let () = Printf.printf ";infer_class %s: %s\n" (nameof_class classdecl) (string_of_typ typ) in
+
+    StringMap.add c_name (generalize_class typ) env 
+
+  | Class(c_name, Some(basename), fields, classmethods, pos) ->
+    (*TODO: consider baseclass *)
+    let fieldtys =
+      List.map (fun field -> (nameof_field field,typeof_field env field)) fields 
+    in
+    let typ = TyRecord(fieldtys, pos) in
+    let () = Printf.printf ";infer_class %s: %s\n" (string_of_classdecl classdecl) (string_of_typ typ) in
+
+    StringMap.add c_name (generalize_class typ) env 
+;;
+
 let infer_prog env (p : sourcespan program) : 'a typ =
   match p with
   | Program(typedecls, classdecls, declgroups, body, tag) ->
@@ -483,9 +612,14 @@ let infer_prog env (p : sourcespan program) : 'a typ =
               compose_subst [(tyname, b)] s
         ) [] typedecls
       in
-
+      (* type the classes *)
+      let env = 
+        List.fold_left 
+        (fun env (c : sourcespan classdecl) ->
+          infer_class env c s
+        ) env classdecls
+      in
       (* type the declgroups *)
-
       let env = 
         List.fold_left 
         (fun env (g : sourcespan decl list) ->
