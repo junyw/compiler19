@@ -1,0 +1,2 @@
+let f = (lambda: (1, 2, 3)) in
+      let y = (1,) in y

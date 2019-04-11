@@ -1,0 +1,9 @@
+class Foo extends Bar:
+	field x
+	field y
+	method f(self):
+		print(self)
+	method b(self, a, b, c): 
+		a + b * c
+end
+let x = new Foo() in x.y := 10

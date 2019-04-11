@@ -1,13 +1,5 @@
 # compiler-sp19
 
-- [x] neonate
-- [x] adder
-- [x] boa
-- [x] cobra
-- [x] diamondback
-- [x] taipan
-- [ ] egg-eater
-
 To run all tests
 ```bash
 $ make test
