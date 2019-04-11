@@ -1,8 +1,3 @@
-class Bar:
-	field x: Int
-	field y: Bool
-	field z = 10
-	method f(self):
-		self
-end
+def f(x):
+	x + 1
 1

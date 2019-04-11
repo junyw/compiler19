@@ -139,7 +139,7 @@ let string_of_expr (e : 'a expr) : string =
 let string_of_decl_with (print_a : 'a -> string) (d : 'a decl) : string =
   match d with
   | DFun(name, args, _, body, a) ->
-     sprintf "(def %s(%s):\n  %s)%s"
+     sprintf "(def %s(%s):  %s)%s"
        name
        (ExtString.String.join ", " (List.map string_of_bind args))
        (string_of_expr_with print_a body) (print_a a)
