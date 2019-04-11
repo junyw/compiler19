@@ -321,14 +321,6 @@ let nameof_bind (bind : 'a bind) : string =
 let rec generalize (e : 'a scheme envt) (t : 'a typ) : 'a scheme =
     match t with
     | TyRecord _ -> generalize_class t
-    (* ? Don't generalize TyVar, only generalize functions *)
-    (*
-      the problem is a tyvar 'blank would be generalized to (forall 'blank, tyvar('blank))
-      and next time the generalized tyvar is instantiated, a fresh tyvar would be allocated like
-      'blank2
-      The extra tyvars would make it impossible to unify
-    *)
-    | TyVar(_, loc) -> SForall([], t, loc) 
     | _ -> 
       let loc = loc_of_typ t in
       SForall((StringSet.elements @@  StringSet.diff (ftv_type t) (ftv_env e)), t, loc)
@@ -622,7 +614,7 @@ let infer_decl env (t : 'a typ) (decl : sourcespan decl)  (s : 'a typ subst) rea
             (fun env arg_bind arg_ty ->
               let arg_name = nameof_bind arg_bind in
               if arg_name != "self"
-              then StringMap.add arg_name (generalize env arg_ty) env 
+              then StringMap.add arg_name (SForall([], arg_ty, loc)) env 
               else env)
             env arg_binds a
         in
