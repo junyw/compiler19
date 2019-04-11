@@ -144,11 +144,16 @@ let occurs (name : string) (t : 'a typ) =
 
 
 (* find_pos: find type of vairable from environment, or find type scheme of function from funenv *)
-let rec find_pos (ls : 'a envt) x pos : 'a =
-  try
-    StringMap.find x ls
-  with
-  | Not_found -> failwith (sprintf "inference.ml: type of variable %s not found at %s" x (string_of_sourcespan pos))
+let rec find_pos (ls : 'scheme envt) x pos : 'scheme =
+  let () = Printf.printf ";find_pos: looked up %s\n" x in
+  let res = 
+    try
+      StringMap.find x ls
+    with
+    | Not_found -> failwith (sprintf "inference.ml: type of variable %s not found at %s" x (string_of_sourcespan pos))
+  in
+  let () = Printf.printf ";find_pos: looked up %s - %s\n" x (string_of_scheme res) in
+    res
 ;;
 
 
@@ -290,7 +295,9 @@ let instantiate (s : 'a scheme) : 'a typ =
           (var, tyvar)::subst
       ) [] vars
     in
-    apply_subst_typ subst typ
+    let typ = apply_subst_typ subst typ in
+    let () = Printf.printf ";instantiate %s to %s" (string_of_scheme s) (string_of_typ typ) in
+    typ
 ;;
 
 let loc_of_typ t = 
@@ -314,6 +321,14 @@ let nameof_bind (bind : 'a bind) : string =
 let rec generalize (e : 'a scheme envt) (t : 'a typ) : 'a scheme =
     match t with
     | TyRecord _ -> generalize_class t
+    (* ? Don't generalize TyVar, only generalize functions *)
+    (*
+      the problem is a tyvar 'blank would be generalized to (forall 'blank, tyvar('blank))
+      and next time the generalized tyvar is instantiated, a fresh tyvar would be allocated like
+      'blank2
+      The extra tyvars would make it impossible to unify
+    *)
+    | TyVar(_, loc) -> SForall([], t, loc) 
     | _ -> 
       let loc = loc_of_typ t in
       SForall((StringSet.elements @@  StringSet.diff (ftv_type t) (ftv_env e)), t, loc)
@@ -436,20 +451,16 @@ let rec infer_exp
           reasons
         : sourcespan typ subst =
   let () = Printf.printf ";infer_exp of %s -  %s\n" (string_of_expr e) (string_of_typ t) in
-  let () = print_env env in
+  (*let () = print_env env in*)
   (*let () = print_subst s in*)
+  let result = 
   match e with
   | ENil(typ, loc)  -> unify typ t s loc reasons
   | ENumber(v, loc) -> unify tInt t s loc reasons
   | EBool(v, loc)   -> unify tBool t s loc reasons
   | EId(x, loc)     -> 
-      let () = Printf.printf ";infer_exp EID %s" x in
       let a = find_pos env x loc in
-      let () = Printf.printf ";infer_exp EID %s ->" (string_of_scheme a) in
-
       let a = instantiate a in
-      let () = Printf.printf ";infer_exp EID %s ->" (string_of_typ a) in
-
       unify a t s loc reasons
   
   | ELet([], e2, loc) -> infer_exp env t e2 s reasons
@@ -535,8 +546,22 @@ let rec infer_exp
       infer_exp env t (EApp(EId(name_of_op2 op, loc), [expr1; expr2], loc)) s reasons
   | EApp(f, args, loc) -> 
       let a = List.map (fun _ -> newTyVar "app_arg" loc) args in
-      let s1 = infer_exp env (TyArr(a, t, loc)) f s reasons in
-          infer_exp env (TyTup(a, loc)) (ETuple(args, loc)) s1 reasons
+      let s = infer_exp env (TyArr(a, t, loc)) f s reasons in
+      let f_ty = apply_subst_typ s (TyArr(a, t, loc)) in
+      begin
+        match f_ty with
+        | TyArr(typs, typ, _) -> 
+          (* type the arguments *)
+          let s = 
+             List.fold_left2 
+             (fun s typ arg -> 
+                infer_exp env typ arg s reasons 
+             ) s typs args 
+          in
+          (* unify the return type *)
+          (unify typ t s loc reasons)
+        | _ -> failwith "infer_app: EApp impossible type"
+      end
 
   | ELambda(arg_binds, e, loc) -> 
       (* type the lambda *)
@@ -573,6 +598,11 @@ let rec infer_exp
       let s1 = infer_exp env b expr2 s reasons in
       let b = apply_subst_typ s1 b in
         unify a b s1 loc reasons
+  in
+  let () = Printf.printf ";infer_exp generated substitution: \n" in
+  let () = print_subst result in
+  let () = Printf.printf ";>>infer_exp of %s result - %s\n" (string_of_expr e) (string_of_typ (apply_subst_typ result t)) in
+    result
 ;;
 
 (* infer_decl: similar to infer_exp *)
@@ -581,27 +611,25 @@ let infer_decl env (t : 'a typ) (decl : sourcespan decl)  (s : 'a typ subst) rea
       extracts all the variables from binds and add them to the environment, creates new type variable if necessary
       returns the extended environment. *)
   let () = Printf.printf ";infer_decl of %s -  %s\n" (string_of_decl decl) (string_of_typ t) in
-  let () = print_env env in
+  (*let () = print_env env in*)
   match t with
     | TyArr(a, b, _) ->
       begin
       match decl with
       | DFun(f_name, arg_binds, scheme, e, loc) ->
-        let (s, env_with_args) = 
+        let env_with_args = 
             List.fold_left2
-            (fun (s, env) arg_bind arg_ty ->
-              let s = unify (unblank (typeof_bind arg_bind)) arg_ty s loc reasons in
+            (fun env arg_bind arg_ty ->
               let arg_name = nameof_bind arg_bind in
               if arg_name != "self"
-              then 
-              let env = StringMap.add arg_name (generalize env (apply_subst_typ s arg_ty)) env in
-                  (s, env)
-              else (s, env))
-            (s, env) arg_binds a
+              then StringMap.add arg_name (generalize env arg_ty) env 
+              else env)
+            env arg_binds a
         in
         let s = infer_exp env_with_args b e s reasons in
-        (*let () =  List.iter (fun (name, typ) -> Printf.printf ";\t%s => %s\n" name (string_of_typ typ)) s in*)
-        (*let () = Printf.printf ";type of %s (after typed): %s\n" f_name (string_of_typ (apply_subst_typ s t)) in*)
+        let () = Printf.printf ";infer_decl type of %s (after typed): %s\n" f_name (string_of_typ (apply_subst_typ s t)) in
+        let () = Printf.printf ";infer_decl generated substitution: \n" in
+        let () = print_subst s in
         s
       end   
     | _ -> failwith "infer_decl: unexpected type"
@@ -637,7 +665,7 @@ let infer_group env (g : sourcespan decl list) (s : 'a typ subst)
         let f_typ = instantiate scheme in
 
         let s' = infer_decl env f_typ decl s [] in
-            (apply_subst_env [(f_name, apply_subst_typ s' f_typ)] env, s')
+            (StringMap.add f_name (generalize env (apply_subst_typ s' f_typ)) env, s')
       ) (env, s) g
     in
       (env, s)  
@@ -664,7 +692,7 @@ let infer_class env (classdecl : sourcespan classdecl) (s : 'a typ subst)
     let tyenv = 
       List.fold_left (fun tyenv (key, ty) -> 
         if key != "self" then
-          StringMap.add key (generalize StringMap.empty ty) tyenv
+          StringMap.add key (generalize env ty) tyenv
         else tyenv)
       env fieldtys 
     in
