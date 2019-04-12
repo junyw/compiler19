@@ -26,6 +26,8 @@ let print_env env =
   StringMap.iter (fun name scheme -> printf ";\t%s => %s\n" name (string_of_scheme scheme)) env;;
 let print_subst subst =
   List.iter (fun (name, typ) -> printf ";\t%s => %s\n" name (string_of_typ typ)) subst;;
+let print_set ftv_set =
+  StringSet.iter (fun name -> printf ";\t%s \n" name) ftv_set;;
 
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 let mk_tyarr left right : 'a typ = 
@@ -100,7 +102,7 @@ let gensym =
 let rec ftv_type (t : 'a typ) : StringSet.t =
   match t with
   | TyBlank _ -> StringSet.empty
-  | TyCon(name, _) -> StringSet.singleton name
+  | TyCon(name, _) -> StringSet.empty
   | TyVar(name, _) -> StringSet.singleton name
   | TyArr(args, ret, _) ->
     List.fold_right (fun t ftvs -> StringSet.union (ftv_type t) ftvs)
@@ -280,7 +282,7 @@ let rec unblank (t : 'a typ) : 'a typ =
     let args = List.map unblank args in TyApp(t, args, tag)
   | TyTup(typs, tag) -> 
     let typs = List.map unblank typs in TyTup(typs, tag)
-  | TyRecord _ -> failwith "unblank: tyrecord shouldn't be unblanked"
+  | TyRecord _ -> t
 ;;
 
 let instantiate (s : 'a scheme) : 'a typ =
@@ -296,7 +298,7 @@ let instantiate (s : 'a scheme) : 'a typ =
       ) [] vars
     in
     let typ = apply_subst_typ subst typ in
-    let () = Printf.printf ";instantiate %s to %s" (string_of_scheme s) (string_of_typ typ) in
+    let () = Printf.printf ";instantiate %s to %s\n" (string_of_scheme s) (string_of_typ typ) in
     typ
 ;;
 
@@ -310,6 +312,10 @@ let loc_of_typ t =
   | TyTup(_, loc) -> loc
   | TyRecord(_, loc) -> loc
 ;;
+let loc_of_scheme sch =
+  match sch with
+  | SForall(_, _, loc) -> loc
+;;
 
 let nameof_bind (bind : 'a bind) : string = 
     match bind with 
@@ -320,11 +326,11 @@ let nameof_bind (bind : 'a bind) : string =
    variables that are free in the type, but not in the environment.*)
 let rec generalize (e : 'a scheme envt) (t : 'a typ) : 'a scheme =
     match t with
-    | TyRecord _ -> generalize_class t
     | _ -> 
       let loc = loc_of_typ t in
       SForall((StringSet.elements @@  StringSet.diff (ftv_type t) (ftv_env e)), t, loc)
-and generalize_class (t : 'a typ) : 'a scheme =
+
+let mk_scheme (t : 'a typ) : 'a scheme =
     let loc = loc_of_typ t in
     SForall([], t, loc)
 
@@ -397,12 +403,12 @@ let typeof_field (field : 'a field) : 'a typ =
   | Field(bind, None, loc) ->
     typeof_bind bind
 ;;
-let typeof_decls (g : sourcespan decl list) : (string * 'a typ) list =
+let schemeof_decls (g : sourcespan decl list) : (string * 'a scheme) list =
     List.fold_left
     (fun assoc decl ->
       match decl with
       | DFun(f_name, arg_names, scheme, b, loc) -> 
-          assoc @ [(f_name, (instantiate scheme))]
+          assoc @ [(f_name, scheme)]
     ) [] g
 ;;
 
@@ -613,9 +619,8 @@ let infer_decl env (t : 'a typ) (decl : sourcespan decl)  (s : 'a typ subst) rea
             List.fold_left2
             (fun env arg_bind arg_ty ->
               let arg_name = nameof_bind arg_bind in
-              if arg_name != "self"
-              then StringMap.add arg_name (SForall([], arg_ty, loc)) env 
-              else env)
+              if String.equal arg_name "self" then env
+              else StringMap.add arg_name (SForall([], arg_ty, loc)) env)
             env arg_binds a
         in
         let s = infer_exp env_with_args b e s reasons in
@@ -657,9 +662,13 @@ let infer_group env (g : sourcespan decl list) (s : 'a typ subst)
         let f_typ = instantiate scheme in
 
         let s' = infer_decl env f_typ decl s [] in
-            (StringMap.add f_name (generalize env (apply_subst_typ s' f_typ)) env, s')
+        let env' = apply_subst_env s' env in
+            (StringMap.add f_name (generalize env' (apply_subst_typ s' f_typ)) env', s')
       ) (env, s) g
     in
+    let () = Printf.printf ";infer_group: after typing: \n" in
+    let () = print_env env in
+    let () = print_subst s in
       (env, s)  
 ;;
 
@@ -681,34 +690,89 @@ let infer_class env (classdecl : sourcespan classdecl) (s : 'a typ subst)
     let fieldtys =
       List.map (fun field -> (nameof_field field, typeof_field field)) fields 
     in
-    let tyenv = 
-      List.fold_left (fun tyenv (key, ty) -> 
-        if key != "self" then
-          StringMap.add key (generalize env ty) tyenv
-        else tyenv)
-      env fieldtys 
+    let methodschemes = schemeof_decls classmethods in
+    let methodtyps = List.map (fun (key, sch) -> (key, (instantiate sch))) methodschemes in
+    let self = TyRecord(fieldtys @ methodtyps, pos) in
+    let env = StringMap.add "self" (SForall([], self, loc_of_typ self)) env in
+
+    let (env, s) = 
+      List.fold_left 
+      (fun (env, s) (DFun(f_name, _, _, _, loc') as decl) -> 
+        let f_typ = match self with
+          | TyRecord(records, _) -> 
+            begin match List.assoc_opt f_name records with
+            | Some(scheme') -> scheme' 
+            | None    -> failwith "infer_class: undefined function" 
+            end
+          | _ -> failwith "infer_class: impossible case"
+        in
+        let s' = infer_decl env f_typ decl s [] in
+        let env' = apply_subst_env s' env in
+            (apply_subst_env s' env', s')
+      ) (env, s) classmethods
     in
-    let methodtys = typeof_decls classmethods in
-    let typ = TyRecord(fieldtys @ methodtys, pos) in
-    let tyenv = StringMap.add "self" (generalize_class typ) tyenv in
-    let (tyenv, s) = infer_group tyenv classmethods s in
-    let typ = apply_subst_typ s typ in
-    let ftv = ftv_type typ in
+    let env = apply_subst_env s env in
+    let () = Printf.printf ";infer_class: after typing the methods\n" in
+    let () = print_subst s in
+    let self = apply_subst_typ s self in
+    let () = Printf.printf ";infer_class: the type of the class is %s\n" (string_of_typ self) in
+
+    let ftv = ftv_type self in
+    let () = Printf.printf ";infer_class: free type vars \n" in
+    let () = print_set ftv in
     if not (StringSet.is_empty ftv) then
-      failwith (sprintf "infer_class: can not decide the type of the class - %s" (string_of_typ typ))
+      failwith (sprintf "infer_class: can not fully type the class - %s" (string_of_typ self))
     else
-    let () = Printf.printf ";infer_class %s: %s\n" (nameof_class classdecl) (string_of_typ typ) in
-    StringMap.add c_name (generalize_class typ) (apply_subst_env s env) 
+    let () = Printf.printf ";infer_class %s: %s\n" (nameof_class classdecl) (string_of_typ self) in
+    StringMap.add c_name (SForall([], self, loc_of_typ self)) (apply_subst_env s env) 
 
   | Class(c_name, Some(basename), fields, classmethods, pos) ->
-    (*TODO: consider baseclass *)
+    
+    let base_scheme = find_pos env basename pos in
+    let base_fields = 
+      match instantiate base_scheme with
+      | TyRecord(records, _) ->  records
+      | _ -> failwith "infer_class: base class impossible type"
+    in
     let fieldtys =
       List.map (fun field -> (nameof_field field, typeof_field field)) fields 
     in
-    let typ = TyRecord(fieldtys, pos) in
-    let () = Printf.printf ";infer_class %s: %s\n" (string_of_classdecl classdecl) (string_of_typ typ) in
+    let methodschemes = schemeof_decls classmethods in
+    let methodtyps = List.map (fun (key, sch) -> (key, (instantiate sch))) methodschemes in
+    (* TODO: handle overriding *)
+    let self = TyRecord(base_fields @ fieldtys @ methodtyps, pos) in
+    let env = StringMap.add "self" (SForall([], self, loc_of_typ self)) env in
 
-    StringMap.add c_name (generalize_class typ) env 
+    let (env, s) = 
+      List.fold_left 
+      (fun (env, s) (DFun(f_name, _, _, _, loc') as decl) -> 
+        let f_typ = match self with
+          | TyRecord(records, _) -> 
+            begin match List.assoc_opt f_name records with
+            | Some(scheme') -> scheme' 
+            | None    -> failwith "infer_class: undefined function" 
+            end
+          | _ -> failwith "infer_class: impossible case"
+        in
+        let s' = infer_decl env f_typ decl s [] in
+        let env' = apply_subst_env s' env in
+            (apply_subst_env s' env', s')
+      ) (env, s) classmethods
+    in
+    let env = apply_subst_env s env in
+    let () = Printf.printf ";infer_class: after typing the methods\n" in
+    let () = print_subst s in
+    let self = apply_subst_typ s self in
+    let () = Printf.printf ";infer_class: the type of the class is %s\n" (string_of_typ self) in
+
+    let ftv = ftv_type self in
+    let () = Printf.printf ";infer_class: free type vars \n" in
+    let () = print_set ftv in
+    if not (StringSet.is_empty ftv) then
+      failwith (sprintf "infer_class: can not fully type the class - %s" (string_of_typ self))
+    else
+    let () = Printf.printf ";infer_class %s: %s\n" (nameof_class classdecl) (string_of_typ self) in
+    StringMap.add c_name (SForall([], self, loc_of_typ self)) (apply_subst_env s env) 
 ;;
 
 let infer_prog env (p : sourcespan program) : 'a typ =

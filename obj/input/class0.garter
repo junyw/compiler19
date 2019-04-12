@@ -1,3 +1,12 @@
-def f(x):
-	x + 1
+class Bar:
+	field x: Int
+	field y: Bool
+	field z = 10
+	method f(x):
+		x + self.x
+end
+class Foo extends Bar:
+	field a: Int
+end
+
 1
