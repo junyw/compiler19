@@ -263,7 +263,7 @@ and string_of_immexpr_with (print_a : 'a -> string) (i : 'a immexpr) : string =
   | ImmId(x, a) -> x ^ (print_a a)
 and string_of_aprogram_with (print_a : 'a -> string) (p : 'a aprogram) : string =
   match p with
-  | AProgram(decls, body, a) ->
+  | AProgram(_, decls, body, a) ->
      (ExtString.String.join "\n" (List.map (string_of_adecl_with print_a) decls)) ^ "\n"
      ^ (string_of_aexpr_with 1000 print_a body) ^ "\n" ^ (print_a a)
 and string_of_adecl_with (print_a : 'a -> string) (d : 'a adecl) : string =

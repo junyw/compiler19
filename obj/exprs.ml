@@ -107,9 +107,13 @@ and 'a aexpr = (* anf expressions *)
   | ACExpr of 'a cexpr
 and 'a adecl =
   | ADFun of string * string list * 'a aexpr * 'a
+type 'a afield = 
+  | AField of string * 'a immexpr option * 'a
+and 'a aclassdecl =
+  | AClass of string * string option * 'a afield list * 'a adecl list * 'a
 
 and 'a aprogram =
-  | AProgram of 'a adecl list * 'a aexpr * 'a
+  | AProgram of 'a aclassdecl list * 'a adecl list * 'a aexpr * 'a
 ;;
                                              
 let rec bind_to_typ bind =
@@ -354,8 +358,16 @@ let atag (p : 'a aprogram) : tag aprogram =
     | ADFun(name, args, body, _) ->
        let fun_tag = tag() in
        ADFun(name, args, helpA body, fun_tag)
+  and helpF f =
+    match f with
+    | AField(name, Some(aexpr), _) -> AField(name, Some(helpI aexpr), tag())
+    | AField(name, None, _) -> AField(name, None, tag())
+  and helpK c =
+    match c with
+    | AClass(name, basename, fields, methods, _) ->
+       AClass(name, basename, List.map helpF fields, List.map helpD methods, tag())
   and helpP p =
     match p with
-    | AProgram(decls, body, _) ->
-       AProgram(List.map helpD decls, helpA body, 0)
+    | AProgram(classdecls, decls, body, _) ->
+       AProgram(List.map helpK classdecls, List.map helpD decls, helpA body, 0)
   in helpP p

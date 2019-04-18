@@ -420,7 +420,21 @@ type 'a anf_bind =
 let anf (p : tag program) : unit aprogram =
   let rec helpP (p : tag program) : unit aprogram =
     match p with
-    | Program(_, classdecls(*TODO*), decls, body, _) -> AProgram(List.concat(List.map helpG decls), helpA body, ())
+    | Program(_, classdecls, decls, body, _) ->
+      AProgram(List.map helpClass classdecls, List.concat(List.map helpG decls), helpA body, ())
+  and helpClass (cls : tag classdecl) : unit aclassdecl =
+      match cls with
+      | Class (name, basename, fields, methods, tag) ->
+        AClass(name, basename, List.map helpF fields, List.map helpD methods, ())
+  and helpF (f : tag field) : unit afield =
+      match f with
+        | Field(bind, Some(expr), _) ->
+          let (immexpr, _) = helpI expr in (* TODO: handle the case that expr is not number/bool *)
+          AField(nameof_bind bind, Some(immexpr), ()) 
+        | Field(bind, None, _) ->
+          AField(nameof_bind bind, None, ()) 
+
+
   and helpG (g : tag decl list) : unit adecl list =
     List.map helpD g
   and helpD (d : tag decl) : unit adecl =
@@ -628,7 +642,7 @@ let free_vars_E (e : 'a aexpr) (rec_binds : string list) : string list =
 ;;
 let free_vars_P (p : 'a aprogram) rec_binds : string list =
   match p with
-  | AProgram(_, body, _) -> free_vars_E body rec_binds
+  | AProgram(_, _, body, _) -> free_vars_E body rec_binds
 ;;
 
 
@@ -1301,7 +1315,7 @@ err_nil_deref:%s
                        (to_asm (native_call (Label "error") [Const(err_NIL_DEREF); Reg EAX]))
   in
   match anfed with
-  | AProgram(decls, body, _) ->
+  | AProgram(_, decls, body, _) ->
      let native_lambdas = List.mapi native_to_lambda initial_env in
      let initial_env = List.map (fun (name, slot, _) -> (name, slot)) native_lambdas in
      let comp_decls = List.map (fun (_, _, code) -> code) native_lambdas in
