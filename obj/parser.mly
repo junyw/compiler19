@@ -98,8 +98,8 @@ simple_expr :
   | binop_expr LPARENNOSPACE RPAREN { EApp($1, [], full_span()) }
   // object cases
   | NEW ID LPARENNOSPACE RPAREN { ENew($2, full_span()) }
-  | binop_expr DOT ID %prec COLON { EDot($1, $3, full_span()) }
-  | binop_expr DOT ID COLONEQ expr %prec DOT { EDotSet($1, $3, $5, full_span()) }
+  | binop_expr DOT ID %prec COLON { EDot($1, $3, None, full_span()) }
+  | binop_expr DOT ID COLONEQ expr %prec DOT { EDotSet($1, $3, None, $5, full_span()) }
   // Simple cases
   | const { $1 }
   | LPARENNOSPACE expr COLON typ RPAREN { EAnnot($2, $4, full_span()) }

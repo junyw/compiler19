@@ -8,5 +8,12 @@ end
 class Foo extends Bar:
 	field a: Int
 end
+class Baz extends Bar:
+	field b: Bool
+	method g(x, y):
+		let foo = x + self.x in foo * y
+end
 
+def get_x(bar : Bar) -> Int:
+	bar.x
 1

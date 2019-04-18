@@ -66,8 +66,8 @@ and 'a expr =
   | ELambda of 'a bind list * 'a expr * 'a
   | EAnnot of 'a expr * 'a typ * 'a
   | ENew of string * 'a
-  | EDot of 'a expr * string * 'a
-  | EDotSet of 'a expr * string * 'a expr * 'a
+  | EDot of 'a expr * string * int option * 'a
+  | EDotSet of 'a expr * string * int option * 'a expr * 'a
 
 
 type 'a decl =

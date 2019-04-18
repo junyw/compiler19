@@ -64,7 +64,7 @@ let name_of_op2 op =
 let rec string_of_typ (t : 'a typ) : string =
   match t with
   | TyBlank _ -> "<BLANK>"
-  | TyCon(name, _) -> name
+  | TyCon(name, _) -> sprintf "TyCon(%s)" name
   | TyArr(args, ret, _) -> sprintf "(%s -> %s)"
                               (ExtString.String.join ", " (List.map string_of_typ args))
                               (string_of_typ ret)
@@ -129,8 +129,8 @@ and string_of_expr_with (print_a : 'a -> string) (e : 'a expr) : string =
      let binds_str = List.fold_left (^) "" (intersperse binds_strs ", ") in
      sprintf "(lam(%s) %s)%s" binds_str (string_of_expr body) (print_a a)
   | ENew(classname, a) -> sprintf "new %s()" classname
-  | EDot(expr, fieldname, a) -> sprintf "%s.%s" (string_of_expr expr) fieldname
-  | EDotSet(expr1, fieldname, expr2, a) ->
+  | EDot(expr, fieldname, offset, a) -> sprintf "%s.%s" (string_of_expr expr) fieldname
+  | EDotSet(expr1, fieldname, offset, expr2, a) ->
       sprintf "%s.%s := %s" (string_of_expr expr1) fieldname (string_of_expr expr2)
 
 let string_of_expr (e : 'a expr) : string =
@@ -316,6 +316,7 @@ let quote x = "\"" ^ x ^ "\"";;
 
 let rec format_typ (fmt : Format.formatter) (print_a : 'a -> string) (t : 'a typ) : unit =
   let help fmt = format_typ fmt print_a in
+  let help2 fmt (key, typ) = pp_print_string fmt key; format_typ fmt print_a typ in
   match t with
   | TyBlank a -> pp_print_string fmt "<BLANK>"; pp_print_string fmt (maybe_angle (print_a a))
   | TyCon(name, a) -> pp_print_string fmt name; pp_print_string fmt (maybe_angle (print_a a))
@@ -332,6 +333,8 @@ let rec format_typ (fmt : Format.formatter) (print_a : 'a -> string) (t : 'a typ
      close_angle fmt; pp_print_string fmt (maybe_angle (print_a a)); pp_print_string fmt " "
   | TyTup(tys, a) ->
      open_paren fmt; print_list fmt help tys print_star_sep; close_paren fmt
+  | TyRecord(records, a) ->
+     open_paren fmt; print_list fmt help2 records print_star_sep; close_paren fmt
 ;;
 let rec format_bind (fmt : Format.formatter) (print_a : 'a -> string) (b : 'a bind) : unit =
   match b with
@@ -437,6 +440,18 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
      open_paren fmt; print_list fmt (fun fmt -> format_bind fmt print_a) binds print_comma_sep; close_paren fmt;
      pp_print_string fmt ":"; pp_print_space fmt ();
      help body;
+     close_paren fmt
+  | ENew(x, a) ->  
+     open_label fmt "ENew" (print_a a);
+     pp_print_string fmt (quote x);
+     close_paren fmt
+  | EDot(e, idx, offset, a) -> 
+     open_label fmt "EDot" (print_a a);
+     help e; print_comma_sep fmt; pp_print_string fmt idx;
+     close_paren fmt
+  | EDotSet(e, idx, offset, newval, a) ->
+     open_label fmt "EDotSet" (print_a a);
+     help e; print_comma_sep fmt; pp_print_string fmt idx; pp_print_string fmt " := "; help newval;
      close_paren fmt
 ;;
 let format_scheme (fmt : Format.formatter) (print_a : 'a -> string) (s : 'a scheme) : unit =

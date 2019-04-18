@@ -221,6 +221,11 @@ let is_well_formed (p : sourcespan program) : (sourcespan program) fallible =
         | _ -> Error exns
 ;;
 
+(* obj_lookup: convert object operations to offsets *)
+let obj_lookup (p : 'a program) : 'a program =
+  p
+;;
+
 
 let rename_and_tag (p : tag program) : tag program =
   let rec rename env p =
@@ -400,8 +405,8 @@ let desugar_bindings (p : sourcespan program) : sourcespan program =
        let newbody = ELet(List.flatten argbinds, body, tag) in
        ELambda(newargs, helpE newbody, tag)
     | ENew _ -> e 
-    | EDot(expr, str, a) -> EDot(helpE expr, str, a)
-    | EDotSet(expr1, str, expr2, a) -> EDotSet(helpE expr1, str, helpE expr2, a)
+    | EDot(expr, str, offset, a) -> EDot(helpE expr, str, offset, a)
+    | EDotSet(expr1, str, offset, expr2, a) -> EDotSet(helpE expr1, str, offset, helpE expr2, a)
 
   in helpP p
 ;;
@@ -1325,6 +1330,7 @@ let compile_to_string (prog : sourcespan program pipeline) : string pipeline =
   (*|> (add_err_phase well_formed is_well_formed)*)
   |> (add_phase desugared_bindings desugar_bindings)
   |> (if !skip_typechecking then no_op_phase else (add_err_phase type_checked type_synth))
+  |> (add_phase desugared_objects obj_lookup)
   |> (add_phase tagged tag)
   |> (add_phase renamed rename_and_tag)
   |> (add_phase desugared_decls defn_to_letrec)

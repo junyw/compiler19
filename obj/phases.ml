@@ -17,6 +17,7 @@ type phase =
   | Source of string
   | Parsed of sourcespan program
   | WellFormed of sourcespan program
+  | DesugaredObjs of sourcespan program
   | DesugaredBindings of sourcespan program
   | TypeChecked of sourcespan program
   | Renamed of tag program
@@ -30,6 +31,7 @@ type phase =
 let source s = Source s
 let parsed p = Parsed p
 let well_formed p = WellFormed p
+let desugared_objects p = DesugaredObjs p 
 let desugared_bindings p = DesugaredBindings p
 let renamed p = Renamed p
 let tagged p = Tagged p

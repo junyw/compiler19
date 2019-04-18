@@ -577,19 +577,19 @@ let rec infer_exp
       let a = instantiate a in
       unify a t s loc reasons
 
-  | EDot(expr, str, loc) -> 
+  | EDot(expr, str, _, loc) -> 
       let a = newTyVar "object" loc in
       let s = infer_exp env a expr s reasons in
-      let () = Printf.printf "infer_exp EDot %s" (string_of_expr expr) in 
-      let () = print_subst s in
       let a = apply_subst_typ s a in
+      let () = Printf.printf ";infer_exp EDot %s = type: %s\n" (string_of_expr expr) (string_of_typ a) in 
+      let () = print_subst s in
       begin match a with
             | TyRecord(records, _) -> 
                 unify (List.assoc str records) t s loc reasons
             | _ -> failwith ("infer_exp: EDot impossible type - not a object " ^ (string_of_expr expr) ^ " " ^ (string_of_typ a) ^ " " ^ (string_of_sourcespan loc))
       end
 
-  | EDotSet(expr1, str, expr2, loc) -> 
+  | EDotSet(expr1, str, _, expr2, loc) -> 
       let s = infer_exp env t expr1 s reasons in
       let a = apply_subst_typ s t in
       let b = newTyVar "blank" loc in
@@ -812,6 +812,28 @@ let infer_prog env (p : sourcespan program) : 'a typ =
 
       ret_typ
 ;;
+
+(* subtype:
+   given two types, returns true if tyS <: tyT
+*)
+let rec subtype env tyS tyT =
+  tyeqv env tyS tyT ||
+  match (tyS,tyT) with
+  | (TyRecord(records1, _), TyRecord(records2, _)) ->
+      List.for_all
+        (fun (key2, ty2) ->
+          try 
+            let ty1 = List.assoc key2 records1 in
+                subtype env ty1 ty2 
+          with Not_found -> false)
+      records2
+  | (TyArr(tys1, ty1, _), TyArr(tys2, ty2, _)) ->
+        List.length tys1 == List.length tys2 &&
+        List.for_all2 (fun ty1 ty2 -> subtype env ty1 ty2) 
+          tys1 tys2
+        && 
+        subtype env ty2 ty1
+  | (_, _) -> false
 
 let type_synth (p : sourcespan program) : sourcespan program fallible =
   try
