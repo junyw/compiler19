@@ -18,6 +18,11 @@ type size =
   | WORD_PTR
   | BYTE_PTR
 
+type directive = 
+  | DB
+  | DW
+  | DD
+
 type arg =
   | Const of int
   | HexConst of int
@@ -62,6 +67,8 @@ type instruction =
   | IJmp of arg
   | IJz of arg
   | IJnz of arg
+
+  | IVar of string * directive * int
 
   | ILineComment of string
   | IInstrComment of instruction * string
@@ -156,6 +163,9 @@ let rec i_to_asm (i : instruction) : string =
      "  ret"
   | ITest(arg, comp) ->
      sprintf "  test %s, %s" (arg_to_asm arg) (arg_to_asm comp)
+  | IVar(name, directive, value) ->
+     let size = match directive with DB -> "DB" | DW -> "DW" | DD -> "DD" in
+     sprintf "%s    %s %d" name size value
   | ILineComment(str) ->
      sprintf "  ;; %s" str
   | IInstrComment(instr, str) ->

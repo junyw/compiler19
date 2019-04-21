@@ -175,6 +175,12 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
   | ELambda(binds, body, a) ->
      let tag_lam = f a in
      ELambda(List.map (map_tag_B f) binds, map_tag_E f body, tag_lam)
+  | ENew(x, a) -> ENew(x, f a) 
+  | EDot(expr, id, op, a) ->
+     EDot(map_tag_E f expr, id, op, f a)
+  | EDotSet(expr, id, op, new_value, a) ->
+     EDotSet(map_tag_E f expr, id, op, map_tag_E f new_value, f a)
+
 and map_tag_B (f : 'a -> 'b) b =
   match b with
   | BBlank(t, tag) -> BBlank(map_tag_T f t, f tag)
@@ -278,6 +284,13 @@ and untagE e =
      EApp(untagE name, List.map untagE args, ())
   | ELambda(binds, body, _) ->
      ELambda(List.map untagB binds, untagE body, ())
+  | EDot(expr, id, op, _) ->
+      EDot(untagE expr, id, op, ())
+  | EDotSet(expr, id, op, new_value, _) ->
+      EDotSet(untagE expr, id, op, untagE new_value, ())
+  | ENew(class_name, _) ->
+      ENew(class_name, ())
+
 and untagB b =
   match b with
   | BBlank(typ, _) -> BBlank(untagT typ, ())

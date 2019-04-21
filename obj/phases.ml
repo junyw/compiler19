@@ -105,6 +105,7 @@ let print_trace (trace : phase list) : string list =
     | Source _ -> "Source"
     | Parsed _ -> "Parsed"
     | DesugaredBindings _ -> "Desugared bindings"
+    | DesugaredObjs _ -> "Obj-lookup"
     | WellFormed _ -> "Well-formed"
     | Renamed  _ -> "Renamed"
     | Tagged _ -> "Tagged"
@@ -116,6 +117,7 @@ let print_trace (trace : phase list) : string list =
     | Source s -> s
     | Parsed p
     | DesugaredBindings p
+    | DesugaredObjs p
     | WellFormed p -> string_of_program p
     | Renamed p -> string_of_program p
     | TypeChecked p -> ast_of_program p

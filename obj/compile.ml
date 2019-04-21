@@ -10,7 +10,7 @@ type 'a envt = (string * 'a) list
 module StringSet = Set.Make(String);;
 module StringMap = Map.Make(String);;
 
-let skip_typechecking = ref false
+let skip_typechecking = ref true
 
 let print_env env how =
   debug_printf "Env is\n";
@@ -293,6 +293,13 @@ let rename_and_tag (p : tag program) : tag program =
        let (binds', env') = helpBS env binds in
        let body' = helpE env' body in
        ELambda(binds', body', tag)
+    | EDot(expr, id, op, tag) ->
+       EDot(helpE env expr, id, op, tag)
+    | EDotSet(expr, id, op, new_value, tag) ->
+       EDotSet(helpE env expr, id, op, helpE env new_value, tag)
+    | ENew(class_name, tag) ->
+       ENew(class_name, tag)
+
   in (rename [] p)
 ;;
 
@@ -507,7 +514,6 @@ let anf (p : tag program) : unit aprogram =
        let (new_binds, new_setup) = List.split new_binds_setup in
        let (body_ans, body_setup) = helpC body in
        (body_ans, (BLetRec (List.combine names new_binds)) :: body_setup)
-
     | _ -> let (imm, setup) = helpI e in (CImmExpr imm, setup)
 
   and helpI (e : tag expr) : (unit immexpr * unit anf_bind list) =
@@ -589,6 +595,11 @@ let anf (p : tag program) : unit aprogram =
                         @ [BLetRec (List.combine names new_binds)]
                         @ body_setup
                         @ [BLet(tmp, body_ans)])
+   
+    | ENew(class_name, tag) -> (ImmId("new", ()), []) (* TODO: should fail *)
+    | EDot(expr, id, op, tag) -> (ImmId("dot", ()), []) (* TODO: should fail *)
+    | EDotSet(expr, id, op, new_val, tag) -> (ImmId("dotset", ()), []) (* TODO: should fail *)
+
   and helpA e : unit aexpr = 
     let (ans, ans_setup) = helpC e in
     List.fold_right
@@ -1211,31 +1222,14 @@ and compile_cexpr (e : tag cexpr) si env num_args is_tail =
       (*5. Pop the arguments and the closure.*)
       @ [ IAdd(Reg(ESP), Const((num_args + 1) * word_size)) ]
 
+;;
 
-      (* check if it is built-in function *)
-  (*    let tmp = 
-        match find_opt built_in fun_name with
-        | Some(arity) -> sprintf "%s" fun_name
-        | None -> sprintf "$fun_dec_%s" fun_name 
-      in
-      let imm_regs = List.map (fun expr -> compile_imm expr env) immexprs in
-  *)    (* the label of the function declaration *)
-  (*    let num_of_args = List.length immexprs in
-      let push_args = List.fold_left 
-          (fun instrs imm_reg -> 
-            [ IPush(Sized(DWORD_PTR, imm_reg)) ] @ instrs)
-          [] imm_regs
-      in
-        [ ILineComment(sprintf "calling %s(%s) of %d arguments" fun_name tmp num_of_args);
-          ILineComment(sprintf "caller has %d arguments" num_args);
-          ILineComment(("tail call: " ^ (string_of_bool is_tail)));
-        ] 
-        @ push_args @
-        [
-          ICall(tmp);
-          IAdd(Reg(ESP), Const(num_of_args * word_size));
-        ]
-  *)     
+
+(* compile_classdecls: takes a list of class decls
+   returns v-table initiations
+ *)
+let compile_classdecls (classdecls : 'a aclassdecl list) : instruction list = 
+  []
 ;;
 
 let native_call (label : arg) args =
@@ -1315,9 +1309,18 @@ err_nil_deref:%s
                        (to_asm (native_call (Label "error") [Const(err_NIL_DEREF); Reg EAX]))
   in
   match anfed with
-  | AProgram(_, decls, body, _) ->
+  | AProgram(classdecls, decls, body, _) ->
      let native_lambdas = List.mapi native_to_lambda initial_env in
      let initial_env = List.map (fun (name, slot, _) -> (name, slot)) native_lambdas in
+     
+     let static_data = 
+        List.concat @@ List.map 
+          (fun c ->  match c with AClass( class_name, base, field_names, methods, tag) -> 
+                     let var = sprintf "$class_%s" class_name in 
+                     [ IVar(var, DD, 0); ]) classdecls
+     in
+        
+     let v_tables = compile_classdecls classdecls in
      let comp_decls = List.map (fun (_, _, code) -> code) native_lambdas in
   (* $heap is a mock parameter name, just so that compile_fun knows our_code_starts_here takes in 1 parameter *)
      let (prologue, comp_main, epilogue) = compile_fun "our_code_starts_here" ["$heap"] body initial_env in
@@ -1333,8 +1336,9 @@ err_nil_deref:%s
         (* Then round back down *)
         IInstrComment(IAnd(Reg(ESI), HexConst(0xFFFFFFF8)), "by adding no more than 7 to it")
        ] in
-     let main = (prologue @ heap_start @ List.flatten comp_decls @ comp_main @ epilogue) in
-     sprintf "%s%s%s\n" prelude (to_asm main) suffix
+     let static_data_region = sprintf ".data\ %s" (to_asm static_data) in
+     let main = (v_tables @ prologue @ heap_start @ List.flatten comp_decls @ comp_main @ epilogue) in
+     sprintf "%s%s%s%s\n" static_data_region prelude (to_asm main) suffix
 
 
 ;;
