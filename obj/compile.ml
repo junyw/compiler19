@@ -231,7 +231,11 @@ let rename_and_tag (p : tag program) : tag program =
   let rec rename env p =
     match p with
     | Program(tydecls, classdecls(*TODO*), decls, body, tag) ->
-       Program(tydecls, [], List.map (fun g -> List.map (helpD env) g) decls, helpE env body, tag)
+       Program(tydecls, List.map (helpK env) classdecls, List.map (fun g -> List.map (helpD env) g) decls, helpE env body, tag)
+  and helpK env c =
+    match c with
+    | Class(name, base, fields, methods, tag) ->
+      Class(name, base, fields, List.map (helpD env) methods, tag)
   and helpD env decl =
     match decl with
     | DFun(name, args, scheme, body, tag) ->
@@ -317,7 +321,7 @@ let defn_to_letrec (p : 'a program) : 'a program =
     ELetRec(List.map decl_to_binding decls, body, tag) in
   match p with
   | Program(tydecls, classdecls(*TODO*), declgroups, body, tag) ->
-     Program(tydecls, [], [], wrap declgroups body tag, tag)
+     Program(tydecls, classdecls, [], wrap declgroups body tag, tag)
 
 let desugar_bindings (p : sourcespan program) : sourcespan program =
   let gensym =
@@ -428,8 +432,8 @@ let anf (p : tag program) : unit aprogram =
   let rec helpP (p : tag program) : unit aprogram =
     match p with
     | Program(_, classdecls, decls, body, _) ->
-      AProgram(List.map helpClass classdecls, List.concat(List.map helpG decls), helpA body, ())
-  and helpClass (cls : tag classdecl) : unit aclassdecl =
+      AProgram(List.map helpK classdecls, List.concat(List.map helpG decls), helpA body, ())
+  and helpK (cls : tag classdecl) : unit aclassdecl =
       match cls with
       | Class (name, basename, fields, methods, tag) ->
         AClass(name, basename, List.map helpF fields, List.map helpD methods, ())
@@ -1336,7 +1340,7 @@ err_nil_deref:%s
         (* Then round back down *)
         IInstrComment(IAnd(Reg(ESI), HexConst(0xFFFFFFF8)), "by adding no more than 7 to it")
        ] in
-     let static_data_region = sprintf ".data\ %s" (to_asm static_data) in
+     let static_data_region = sprintf "\nsection .data\n%s\n" (to_asm static_data) in
      let main = (v_tables @ prologue @ heap_start @ List.flatten comp_decls @ comp_main @ epilogue) in
      sprintf "%s%s%s%s\n" static_data_region prelude (to_asm main) suffix
 
